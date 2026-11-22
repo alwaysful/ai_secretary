@@ -1,0 +1,70 @@
+/* 모바일 화면 대응 (styles.css 이후 로드) */
+html { -webkit-text-size-adjust: 100%; }
+.app { height: 100dvh; }
+.subpage, .lobby-page { min-height: 100dvh; }
+img, video, canvas { max-width: 100%; }
+.bubble, .card p, .md { overflow-wrap: anywhere; }
+
+@media (max-width: 720px) {
+  body { font-size: 15px; }
+  /* iOS 입력 시 자동 확대 방지 */
+  input, textarea, select, .search, .rename, .field select, .field textarea, .composer textarea { font-size: 16px; }
+
+  /* 상단 바: 고정 + 노치 영역 */
+  .bar { position: sticky; top: 0; z-index: 5; padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top)); gap: 8px; }
+  .bar h1 { flex: 1; min-width: 0; }
+  .ghost, .primary, .chip, .tool, .icon, .theme-btn, .btn { min-height: 40px; }
+  .tool, .icon { min-width: 36px; }
+
+  /* 채팅 */
+  .side { inset: 0 15% 0 0; padding-top: max(16px, env(safe-area-inset-top)); padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  .side.open { box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.4); }
+  .conv { padding: 11px 10px; }
+  .log { padding: 16px 12px; }
+  .bubble { max-width: 92%; }
+  .editbox { width: 100%; }
+  .msg-acts { opacity: 1; flex-wrap: wrap; }
+  .composer { padding: 8px 12px; padding-bottom: max(12px, env(safe-area-inset-bottom)); gap: 8px; }
+  .notice, .banner, .actions { padding-left: 12px; padding-right: 12px; }
+
+  /* 로비 */
+  .lobby-in { padding: 20px 16px calc(48px + env(safe-area-inset-bottom)); }
+  .logo { width: 64px; height: 64px; font-size: 28px; }
+  .meta { gap: 10px 14px; margin: 12px 0 6px; font-size: 13px; }
+  .title { font-size: 28px; margin-bottom: 20px; }
+  .widgets { gap: 12px; margin-bottom: 24px; }
+  .widget { padding: 14px 16px; }
+  .widget .big { font-size: 32px; }
+  .widget li time { min-width: 76px; }
+  .cols h2 { font-size: 20px; }
+  .box { padding: 16px 18px; gap: 4px; }
+  .link { font-size: 16px; padding: 8px 0; }
+
+  /* 일정·메일·브리핑·기억·설정 */
+  .subbody { padding: 12px 12px calc(24px + env(safe-area-inset-bottom)); }
+  .card { padding: 12px; }
+  .row { gap: 10px; }
+  .row time { min-width: 72px; font-size: 13px; }
+  .search.narrow { flex: 1; width: auto; min-width: 0; }
+  .mem-row { flex-wrap: wrap; }
+  .mem-meta { flex-wrap: wrap; }
+  .mail p { word-break: break-word; }
+  .dialog { padding: 16px; }
+
+  /* 공부 (지연 로드 CSS보다 우선) */
+  :root .study { min-height: 60vh; padding: 28px 12px; gap: 16px; border-radius: 12px; }
+  :root .study h2 { font-size: 1.6rem; }
+  :root .study-time { font-size: 3.2rem; }
+  :root .study-main { padding: 16px; }
+  :root .study-chip { padding: 10px 14px; font-size: 14px; }
+  :root .study-link { min-height: 40px; }
+  :root .analysis-layout { padding: 12px; gap: 16px; }
+  :root .analysis-layout .row > * { flex: 1 1 auto; }
+  :root .quit-banner { padding-top: max(10px, env(safe-area-inset-top)); }
+}
+
+@media (max-width: 380px) {
+  .row { flex-direction: column; gap: 2px; }
+  .row time { min-width: 0; }
+  :root .study-time { font-size: 2.6rem; }
+}
