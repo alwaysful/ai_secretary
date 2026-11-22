@@ -27,10 +27,12 @@ export interface EventDraft {
 /** 사용자 확인을 기다리는 작업 (일정 등록·변경) */
 export interface PendingAction {
   id: string;
-  kind: 'calendar.create' | 'calendar.update' | 'memory.create' | 'memory.delete';
+  kind: 'calendar.create' | 'calendar.update' | 'tasks.create' | 'memory.create' | 'memory.delete';
   conversationId: string | null;
   summary: string;
   draft?: EventDraft;
+  target?: 'outlook' | 'google';
+  task?: { title: string; due: string | null };
   memory?: { id?: string; content: string; category?: string | null };
   eventId?: string;
   before?: CalendarEvent;
@@ -57,7 +59,8 @@ export interface BriefingData {
   date: string;
   events: CalendarEvent[];
   mails: MailSummary[];
-  errors: { calendar?: string; mail?: string };
+  tasks?: TaskItem[];
+  errors: { calendar?: string; mail?: string; tasks?: string };
 }
 
 export interface Health {
@@ -110,6 +113,17 @@ export interface CalendarEvent {
   end: string;
   isAllDay: boolean;
   location: string;
+  source?: 'outlook' | 'google';
+}
+
+/** Google Tasks 할 일 */
+export interface TaskItem {
+  id: string;
+  title: string;
+  notes: string;
+  /** `YYYY-MM-DD` */
+  due: string | null;
+  completed: boolean;
 }
 
 export interface MailSummary {
@@ -204,6 +218,11 @@ export const api = {
   today: () => req<CalendarEvent[]>('/calendar/today'),
   unreadCount: () => req<{ count: number }>('/mail/unread-count'),
   events: (days: number) => req<CalendarEvent[]>(`/calendar/events?days=${days}`),
+  googleStatus: () => req<MailStatus>('/google/auth/status'),
+  googleStart: () => req<{ url: string }>('/google/auth/start', { method: 'POST' }),
+  googleDisconnect: () => req<void>('/google/auth', { method: 'DELETE' }),
+  tasks: () => req<TaskItem[]>('/google/tasks'),
+  completeTask: (id: string) => req<TaskItem>(`/google/tasks/${encodeURIComponent(id)}/complete`, { method: 'POST' }),
 };
 
 export interface StreamHandlers {

@@ -4,6 +4,7 @@ import { ModelsModule } from './ai/models/models.module';
 import { ActionsModule } from './actions/actions.module';
 import { BriefingModule } from './briefing/briefing.module';
 import { CalendarModule } from './calendar/calendar.module';
+import { GoogleModule } from './google/google.module';
 import { MemoryModule } from './memory/memory.module';
 import { StudyModule } from './study/study.module';
 import { SettingsModule } from './settings/settings.module';
@@ -19,6 +20,7 @@ import { PrismaModule } from './prisma/prisma.module';
     ModelsModule,
     ConversationModule,
     CalendarModule,
+    GoogleModule,
     SettingsModule,
     ActionsModule,
     BriefingModule,

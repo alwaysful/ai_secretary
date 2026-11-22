@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, CalendarEvent } from '../../shared/api';
+import { api, ApiError, CalendarEvent, TaskItem } from '../../shared/api';
 
 const RANGES = [1, 7, 14, 31];
 const DAY = ['일', '월', '화', '수', '목', '금', '토'];
@@ -13,6 +13,25 @@ export function Schedule(props: { onBack: () => void }) {
   const [days, setDays] = useState(7);
   const [events, setEvents] = useState<CalendarEvent[] | null>(null);
   const [error, setError] = useState('');
+  const [tasks, setTasks] = useState<TaskItem[] | null>(null);
+  const [taskError, setTaskError] = useState('');
+
+  useEffect(() => {
+    api.tasks().then(setTasks, (e: unknown) => {
+      // Google 미설정(503)이면 섹션 숨김
+      if (e instanceof ApiError && e.status === 503) return;
+      setTaskError(e instanceof ApiError && e.status === 401 ? 'Google 미연결. 채팅 사이드바에서 연결.' : e instanceof Error ? e.message : String(e));
+    });
+  }, []);
+
+  const complete = async (t: TaskItem) => {
+    try {
+      await api.completeTask(t.id);
+      setTasks((prev) => prev?.filter((x) => x.id !== t.id) ?? null);
+    } catch (e) {
+      setTaskError(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   useEffect(() => {
     let live = true;
@@ -61,11 +80,30 @@ export function Schedule(props: { onBack: () => void }) {
                 <div>
                   <strong>{e.subject}</strong>
                   {e.location && <small>📍 {e.location}</small>}
+                  {e.source && <small>{e.source === 'google' ? 'Google' : 'Outlook'}</small>}
                 </div>
               </div>
             ))}
           </section>
         ))}
+        {(tasks || taskError) && (
+          <section className="card">
+            <h2>할 일 (Google Tasks) {tasks ? `(${tasks.length})` : ''}</h2>
+            {taskError && <p className="muted">{taskError}</p>}
+            {tasks?.length === 0 && <p className="muted">할 일 없음.</p>}
+            {tasks?.map((t) => (
+              <div key={t.id} className="row">
+                <time>{t.due ? dayLabel(t.due) : '기한 없음'}</time>
+                <div>
+                  <label>
+                    <input type="checkbox" onChange={() => void complete(t)} /> <strong>{t.title}</strong>
+                  </label>
+                  {t.notes && <small>{t.notes}</small>}
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
       </div>
     </div>
   );

@@ -3,18 +3,18 @@ import { Query } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 import { MailErrorFilter } from '../mail/mail.errors';
-import { CalendarService } from './calendar.service';
+import { CalendarHub } from './calendar-hub.service';
 
 export class UpcomingQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(31)
   days: number = 7;
 }
 
-/** 읽기 전용 일정 API. 인증 없음: HOST=127.0.0.1 유지. */
+/** 읽기 전용 일정 API (Outlook + Google). 인증 없음: HOST=127.0.0.1 유지. */
 @Controller('calendar')
 @UseFilters(MailErrorFilter)
 export class CalendarController {
-  constructor(private readonly calendar: CalendarService) {}
+  constructor(private readonly calendar: CalendarHub) {}
 
   @Get('today')
   today() {

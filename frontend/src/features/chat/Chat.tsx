@@ -14,6 +14,7 @@ import {
 } from '../../shared/api';
 import { CopyButton } from '../../shared/CopyButton';
 import { MailPanel } from '../mail/MailPanel';
+import { GooglePanel } from '../google/GooglePanel';
 import { isTyping } from '../../app/Shortcuts';
 import { ThemeButton } from '../../shared/theme';
 import { Markdown } from '../../shared/Markdown';
@@ -27,12 +28,14 @@ type Retry = () => Promise<void>;
 const ACTION_TITLE: Record<PendingAction['kind'], string> = {
   'calendar.create': '📅 일정 등록 확인',
   'calendar.update': '📅 일정 변경 확인',
+  'tasks.create': '✅ 할 일 등록 확인',
   'memory.create': '🧠 기억 추가 확인',
   'memory.delete': '🧠 기억 삭제 확인',
 };
 const ACTION_OK: Record<PendingAction['kind'], string> = {
-  'calendar.create': 'Outlook에 저장',
-  'calendar.update': 'Outlook에 저장',
+  'calendar.create': '캘린더에 저장',
+  'calendar.update': '캘린더에 저장',
+  'tasks.create': 'Google Tasks에 저장',
   'memory.create': '기억하기',
   'memory.delete': '삭제',
 };
@@ -415,6 +418,7 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
           {convs.length === 0 && <p className="muted">{query ? '검색 결과 없음' : '대화 없음'}</p>}
         </nav>
         <MailPanel />
+        <GooglePanel />
         <div className="side-links">
           <button className="ghost" onClick={props.onMemory}>
             🧠 기억

@@ -6,4 +6,8 @@ export interface CalendarEvent {
   end: string;
   isAllDay: boolean;
   location: string;
+  /** 출처. 수정 시 해당 서비스로 보낸다 */
+  source?: CalendarSource;
 }
+
+export type CalendarSource = 'outlook' | 'google';

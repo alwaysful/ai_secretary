@@ -3,10 +3,9 @@ import { ToolError } from '../../src/ai/tools/tool';
 import { MailError } from '../../src/mail/mail.errors';
 
 function make(configured = true) {
-  const calendar: any = { between: jest.fn().mockResolvedValue([]) };
-  const auth: any = { configured };
+  const calendar: any = { configured, between: jest.fn().mockResolvedValue([]) };
   const config: any = { get: (k: string) => ({ TIMEZONE: 'Asia/Seoul' })[k] };
-  return { calendar, tool: new CalendarTool(calendar, auth, config) };
+  return { calendar, tool: new CalendarTool(calendar, config) };
 }
 
 // 2026-11-22(일) 21:00 UTC = 2026-11-23(월) 06:00 KST
@@ -62,6 +61,6 @@ describe('CalendarTool', () => {
     await expect(make(false).tool.run('일정')).rejects.toBeInstanceOf(ToolError);
     const { tool, calendar } = make();
     calendar.between.mockRejectedValue(new MailError('NOT_CONNECTED', 'x'));
-    await expect(tool.run('일정', undefined, NOW)).rejects.toThrow('Calendars.Read');
+    await expect(tool.run('일정', undefined, NOW)).rejects.toThrow('캘린더 미연결');
   });
 });

@@ -1,12 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { CalendarService } from '../../calendar/calendar.service';
+import { CalendarHub } from '../../calendar/calendar-hub.service';
 import { CalendarEvent } from '../../calendar/calendar.types';
 import { escapeTags } from '../../common/text';
 import { EnvVars } from '../../config/env';
-import { MailAuthService } from '../../mail/mail-auth.service';
 import { MailError } from '../../mail/mail.errors';
 import { isWriteIntent } from '../../calendar/event-parser';
+import { isTaskWriteIntent } from '../../calendar/task-parser';
 import { localParts, startOfLocalDay } from '../../calendar/tz';
 
 export { startOfLocalDay };
@@ -46,26 +46,25 @@ export function parseRange(text: string, todayDow: number): DayRange {
   return { label: '앞으로 7일', from: 0, days: 7 };
 }
 
-/** 채팅에서 일정 관련 질문이 오면 Outlook 일정을 읽어 프롬프트에 주입한다. 읽기 전용. */
+/** 채팅에서 일정 관련 질문이 오면 Outlook·Google 일정을 읽어 프롬프트에 주입한다. 읽기 전용. */
 @Injectable()
 export class CalendarTool implements ContextTool {
-  readonly name = 'outlook-calendar';
+  readonly name = 'calendar';
   readonly readOnly = true as const;
 
   constructor(
-    private readonly calendar: CalendarService,
-    private readonly auth: MailAuthService,
+    private readonly calendar: CalendarHub,
     private readonly config: ConfigService<EnvVars, true>,
   ) {}
 
   /** 생성·수정 요청은 CalendarActionService가 처리 */
   matches(text: string): boolean {
-    return CAL_INTENT.test(text) && !isWriteIntent(text);
+    return CAL_INTENT.test(text) && !isWriteIntent(text) && !isTaskWriteIntent(text);
   }
 
   async run(text: string, signal?: AbortSignal, now: Date = new Date()): Promise<string> {
-    if (!this.auth.configured) {
-      throw new ToolError('Outlook 설정 없음 (MS_CLIENT_ID, TOKEN_ENC_KEY). 사용자에게 backend/README.md 설정을 안내한다.');
+    if (!this.calendar.configured) {
+      throw new ToolError('캘린더 설정 없음 (Outlook: MS_CLIENT_ID / Google: GOOGLE_CLIENT_ID). 사용자에게 backend/README.md 설정을 안내한다.');
     }
     const tz = this.config.get('TIMEZONE', { infer: true });
     const t = localParts(now, tz);
@@ -88,7 +87,7 @@ export class CalendarTool implements ContextTool {
     } catch (e) {
       if (e instanceof MailError) {
         if (e.code === 'NOT_CONNECTED') {
-          throw new ToolError('Outlook 미연결 또는 일정 권한(Calendars.Read) 없음. 사용자에게 Outlook 재로그인을 안내한다.', e);
+          throw new ToolError('캘린더 미연결 또는 권한 없음. 사용자에게 Outlook/Google 연결(재로그인)을 안내한다.', e);
         }
         throw new ToolError(`일정 조회 실패: ${e.message}`, e);
       }
@@ -105,14 +104,15 @@ export class CalendarTool implements ContextTool {
     const flat = (s: string) => escapeTags(s).replace(/\s*\n\s*/g, ' ');
     const last = new Date(end.getTime() - 1);
     const span = r.days === 1 ? day(start) : `${day(start)} ~ ${day(last)}`;
-    const head = `Outlook 일정 ${r.label} (${span}) ${list.length}건. 시각은 ${tz} 기준.`;
+    const head = `일정 ${r.label} (${span}) ${list.length}건. 시각은 ${tz} 기준.`;
     if (list.length === 0) return `${head}\n일정 없음.`;
 
     const rows = list.slice(0, MAX_IN_CONTEXT).map((e, i) => {
       const date = e.start.slice(0, 10);
       const time = e.isAllDay ? '종일' : `${e.start.slice(11, 16)}~${e.end.slice(11, 16)}`;
       const loc = e.location ? ` | 장소: ${flat(e.location)}` : '';
-      return `${i + 1}. ${date} ${time} | ${flat(e.subject)}${loc}`;
+      const src = e.source ? ` [${e.source === 'google' ? 'Google' : 'Outlook'}]` : '';
+      return `${i + 1}. ${date} ${time} | ${flat(e.subject)}${loc}${src}`;
     });
     if (list.length > MAX_IN_CONTEXT) rows.push(`… 외 ${list.length - MAX_IN_CONTEXT}건 생략`);
     return [head, ...rows].join('\n');
