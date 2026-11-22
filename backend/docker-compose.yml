@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aura
+      POSTGRES_PASSWORD: aura
+      POSTGRES_DB: aura
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - aura_pg:/var/lib/postgresql/data
+
+volumes:
+  aura_pg:
