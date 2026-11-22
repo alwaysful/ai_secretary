@@ -106,3 +106,98 @@
 .tone-switch.human i {
   left: 27px;
 }
+
+/* 뽀모도로 */
+.pomo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.pomo-phase {
+  font-weight: 700;
+}
+
+.pomo label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+/* 공부 통계 */
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 640px;
+  padding: 16px;
+}
+
+.stats > .row {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stats h2 {
+  margin: 0 auto 0 0;
+}
+
+.stats-unit {
+  display: flex;
+  gap: 6px;
+}
+
+.stats-chart {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.stats-chart figcaption {
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.stats-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.stats-chart .axis {
+  stroke: var(--line);
+}
+
+.stats-chart .tick,
+.stats-chart .val {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.stats-chart .val {
+  fill: currentColor;
+}
+
+.stats-legend {
+  display: flex;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.stats-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  border-radius: 2px;
+}
