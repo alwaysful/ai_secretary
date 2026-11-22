@@ -8,7 +8,7 @@ import { DeviceLogin, MailAuthStatus } from './mail.types';
 
 const PROVIDER = 'outlook';
 /** 읽기 전용 권한만 요청한다. 전송·삭제·수정 권한은 요청하지 않는다. */
-const SCOPES = 'offline_access User.Read Mail.Read';
+const SCOPES = 'offline_access User.Read Mail.Read Calendars.Read';
 const DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code';
 const HTTP_TIMEOUT_MS = 15_000;
 const EXPIRY_SKEW_MS = 60_000;

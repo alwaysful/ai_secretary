@@ -33,6 +33,25 @@ export interface DeviceLogin {
   expiresIn: number;
 }
 
+export interface CalendarEvent {
+  id: string;
+  subject: string;
+  /** 로컬 시각 `YYYY-MM-DDTHH:mm:ss` */
+  start: string;
+  end: string;
+  isAllDay: boolean;
+  location: string;
+}
+
+export interface MailSummary {
+  id: string;
+  subject: string;
+  from: string;
+  receivedAt: string;
+  isRead: boolean;
+  preview: string;
+}
+
 const BASE = '/api';
 
 export class ApiError extends Error {
@@ -69,6 +88,8 @@ export const api = {
   mailStatus: () => req<MailStatus>('/mail/auth/status'),
   mailStart: () => req<DeviceLogin>('/mail/auth/start', { method: 'POST' }),
   mailDisconnect: () => req<void>('/mail/auth', { method: 'DELETE' }),
+  mailList: (unreadOnly: boolean) => req<MailSummary[]>(`/mail/messages?top=15&unreadOnly=${unreadOnly}`),
+  events: (days: number) => req<CalendarEvent[]>(`/calendar/events?days=${days}`),
 };
 
 /** SSE(POST)를 fetch로 읽는다. data:{"token"} → onToken, event:error → throw. */
