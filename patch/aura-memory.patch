@@ -1,0 +1,1158 @@
+From bcc59a3ad2e1cf8d6749a0b2385c277ee1dada73 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 22:09:02 +0000
+Subject: [PATCH] =?UTF-8?q?feat:=20=EC=9E=A5=EA=B8=B0=20=EA=B8=B0=EC=96=B5?=
+ =?UTF-8?q?=20=EC=A0=80=EC=9E=A5=C2=B7=EC=88=98=EC=A0=95=C2=B7=EC=82=AD?=
+ =?UTF-8?q?=EC=A0=9C=20(=EC=82=AC=EC=9A=A9=EC=9E=90=20=ED=86=B5=EC=A0=9C)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Memory 테이블, /memories CRUD (+ 전체 삭제 confirm=all)
+- 켜진 기억만 대화·브리핑 system 프롬프트에 주입 (2000자 상한)
+- 채팅 '기억해: …' / '… 잊어줘' → 확인 카드, 눌러야 반영
+- 기억 관리 화면: 추가·수정·끄기·삭제·검색
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01GJ1batpDGs9b3kpkRfZj3Z
+---
+ .../20261122221000_memory_store/migration.sql |  15 ++
+ backend/prisma/schema.prisma                  |  14 ++
+ backend/src/actions/actions.controller.ts     |  15 +-
+ backend/src/actions/actions.module.ts         |   3 +-
+ .../src/actions/calendar-action.service.ts    |  31 +--
+ backend/src/actions/pending-action.ts         |  24 +++
+ backend/src/app.module.ts                     |   2 +
+ backend/src/briefing/briefing.module.ts       |   3 +-
+ backend/src/briefing/briefing.service.ts      |   7 +-
+ .../src/conversation/conversation.module.ts   |   3 +-
+ .../src/conversation/conversation.service.ts  |  14 +-
+ backend/src/memory/memory.controller.ts       |  71 +++++++
+ backend/src/memory/memory.module.ts           |  10 +
+ backend/src/memory/memory.service.ts          | 174 ++++++++++++++++
+ .../test/unit/conversation.service.spec.ts    |  12 +-
+ backend/test/unit/memory.service.spec.ts      |  62 ++++++
+ frontend/src/App.tsx                          |   7 +-
+ frontend/src/Chat.tsx                         |  36 +++-
+ frontend/src/Lobby.tsx                        |   2 +-
+ frontend/src/MemoryPage.tsx                   | 194 ++++++++++++++++++
+ frontend/src/api.ts                           |  24 ++-
+ frontend/src/styles.css                       |  14 ++
+ 22 files changed, 687 insertions(+), 50 deletions(-)
+ create mode 100644 backend/prisma/migrations/20261122221000_memory_store/migration.sql
+ create mode 100644 backend/src/actions/pending-action.ts
+ create mode 100644 backend/src/memory/memory.controller.ts
+ create mode 100644 backend/src/memory/memory.module.ts
+ create mode 100644 backend/src/memory/memory.service.ts
+ create mode 100644 backend/test/unit/memory.service.spec.ts
+ create mode 100644 frontend/src/MemoryPage.tsx
+
+diff --git a/backend/prisma/migrations/20261122221000_memory_store/migration.sql b/backend/prisma/migrations/20261122221000_memory_store/migration.sql
+new file mode 100644
+index 0000000..270f2a5
+--- /dev/null
++++ b/backend/prisma/migrations/20261122221000_memory_store/migration.sql
+@@ -0,0 +1,15 @@
++-- CreateTable
++CREATE TABLE "Memory" (
++    "id" UUID NOT NULL,
++    "content" TEXT NOT NULL,
++    "category" TEXT,
++    "enabled" BOOLEAN NOT NULL DEFAULT true,
++    "source" TEXT NOT NULL DEFAULT 'manual',
++    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    "updatedAt" TIMESTAMP(3) NOT NULL,
++
++    CONSTRAINT "Memory_pkey" PRIMARY KEY ("id")
++);
++
++-- CreateIndex
++CREATE INDEX "Memory_enabled_updatedAt_idx" ON "Memory"("enabled", "updatedAt");
+diff --git a/backend/prisma/schema.prisma b/backend/prisma/schema.prisma
+index eeaaa4c..5c73065 100644
+--- a/backend/prisma/schema.prisma
++++ b/backend/prisma/schema.prisma
+@@ -55,3 +55,17 @@ model AppSettings {
+   systemPrompt String?
+   updatedAt    DateTime @updatedAt
+ }
++
++/// 사용자가 직접 저장·관리하는 장기 기억. 켜진 항목만 대화 프롬프트에 들어간다.
++model Memory {
++  id        String   @id @default(uuid()) @db.Uuid
++  content   String
++  category  String?
++  enabled   Boolean  @default(true)
++  /// manual: 기억 화면, chat: 채팅 "기억해" (사용자 확인 후)
++  source    String   @default("manual")
++  createdAt DateTime @default(now())
++  updatedAt DateTime @updatedAt
++
++  @@index([enabled, updatedAt])
++}
+diff --git a/backend/src/actions/actions.controller.ts b/backend/src/actions/actions.controller.ts
+index 5ded3eb..bfc8b5c 100644
+--- a/backend/src/actions/actions.controller.ts
++++ b/backend/src/actions/actions.controller.ts
+@@ -1,26 +1,31 @@
+ import { Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, UseFilters } from '@nestjs/common';
+ import { MailErrorFilter } from '../mail/mail.errors';
++import { MemoryService } from '../memory/memory.service';
+ import { CalendarActionService } from './calendar-action.service';
+ 
+-/** 확인 대기 작업. 쓰기는 여기 confirm 으로만 실행된다. */
++/** 확인 대기 작업 (일정·기억). 쓰기는 여기 confirm 으로만 실행된다. */
+ @Controller('actions')
+ @UseFilters(MailErrorFilter)
+ export class ActionsController {
+-  constructor(private readonly actions: CalendarActionService) {}
++  constructor(
++    private readonly calendar: CalendarActionService,
++    private readonly memory: MemoryService,
++  ) {}
+ 
+   @Get()
+   list(@Query('conversationId') conversationId?: string) {
+-    return this.actions.list(conversationId);
++    return [...this.calendar.list(conversationId), ...this.memory.listPending(conversationId)];
+   }
+ 
+   @Post(':id/confirm')
+   confirm(@Param('id', ParseUUIDPipe) id: string) {
+-    return this.actions.confirm(id);
++    return this.memory.has(id) ? this.memory.confirm(id) : this.calendar.confirm(id);
+   }
+ 
+   @Delete(':id')
+   @HttpCode(204)
+   cancel(@Param('id', ParseUUIDPipe) id: string) {
+-    this.actions.cancel(id);
++    if (this.memory.has(id)) this.memory.cancel(id);
++    else this.calendar.cancel(id);
+   }
+ }
+diff --git a/backend/src/actions/actions.module.ts b/backend/src/actions/actions.module.ts
+index 00675fc..e38aac9 100644
+--- a/backend/src/actions/actions.module.ts
++++ b/backend/src/actions/actions.module.ts
+@@ -1,11 +1,12 @@
+ import { Module } from '@nestjs/common';
+ import { CalendarModule } from '../calendar/calendar.module';
+ import { MailModule } from '../mail/mail.module';
++import { MemoryModule } from '../memory/memory.module';
+ import { ActionsController } from './actions.controller';
+ import { CalendarActionService } from './calendar-action.service';
+ 
+ @Module({
+-  imports: [CalendarModule, MailModule],
++  imports: [CalendarModule, MailModule, MemoryModule],
+   controllers: [ActionsController],
+   providers: [CalendarActionService],
+   exports: [CalendarActionService],
+diff --git a/backend/src/actions/calendar-action.service.ts b/backend/src/actions/calendar-action.service.ts
+index 245f069..8e697c3 100644
+--- a/backend/src/actions/calendar-action.service.ts
++++ b/backend/src/actions/calendar-action.service.ts
+@@ -9,30 +9,13 @@ import { escapeTags } from '../common/text';
+ import { EnvVars } from '../config/env';
+ import { MailAuthService } from '../mail/mail-auth.service';
+ import { MailError } from '../mail/mail.errors';
++import { ActionPlan, PendingAction } from './pending-action';
++
++export type { ActionPlan, PendingAction };
+ 
+ const TTL_MS = 30 * 60_000;
+ const DAY = 86_400_000;
+ 
+-/** 사용자 확인을 기다리는 일정 쓰기 작업 */
+-export interface PendingAction {
+-  id: string;
+-  kind: 'calendar.create' | 'calendar.update';
+-  conversationId: string | null;
+-  /** 화면 표시용 한 줄 요약 */
+-  summary: string;
+-  draft: EventDraft;
+-  /** 수정 대상 (update) */
+-  eventId?: string;
+-  before?: CalendarEvent;
+-  expiresAt: string;
+-}
+-
+-export interface ActionPlan {
+-  /** 모델 프롬프트에 넣을 설명 */
+-  context: string;
+-  action?: PendingAction;
+-}
+-
+ const describe = (d: EventDraft) => {
+   const when = d.isAllDay
+     ? `${shortLabel(d.start, false)} 종일`
+@@ -113,12 +96,16 @@ export class CalendarActionService {
+     return [...this.pending.values()].filter((a) => !conversationId || a.conversationId === conversationId);
+   }
+ 
++  has(id: string): boolean {
++    return this.pending.has(id);
++  }
++
+   async confirm(id: string, signal?: AbortSignal): Promise<CalendarEvent> {
+     const a = this.take(id);
+     try {
+       return a.kind === 'calendar.create'
+-        ? await this.calendar.create(a.draft, signal)
+-        : await this.calendar.update(a.eventId!, a.draft, signal);
++        ? await this.calendar.create(a.draft!, signal)
++        : await this.calendar.update(a.eventId!, a.draft!, signal);
+     } catch (e) {
+       // 실패하면 다시 시도할 수 있게 되돌려 놓는다
+       this.pending.set(a.id, a);
+diff --git a/backend/src/actions/pending-action.ts b/backend/src/actions/pending-action.ts
+new file mode 100644
+index 0000000..039def3
+--- /dev/null
++++ b/backend/src/actions/pending-action.ts
+@@ -0,0 +1,24 @@
++import type { CalendarEvent } from '../calendar/calendar.types';
++import type { EventDraft } from '../calendar/event-parser';
++
++/** 사용자 확인을 기다리는 쓰기 작업. 확인 버튼(POST /actions/:id/confirm)으로만 실행된다. */
++export interface PendingAction {
++  id: string;
++  kind: 'calendar.create' | 'calendar.update' | 'memory.create' | 'memory.delete';
++  conversationId: string | null;
++  /** 화면 표시용 한 줄 요약 */
++  summary: string;
++  /** 일정 (calendar.*) */
++  draft?: EventDraft;
++  eventId?: string;
++  before?: CalendarEvent;
++  /** 기억 (memory.*) */
++  memory?: { id?: string; content: string; category?: string | null };
++  expiresAt: string;
++}
++
++export interface ActionPlan {
++  /** 모델 프롬프트에 넣을 설명 */
++  context: string;
++  action?: PendingAction;
++}
+diff --git a/backend/src/app.module.ts b/backend/src/app.module.ts
+index 85aa445..6ff4444 100644
+--- a/backend/src/app.module.ts
++++ b/backend/src/app.module.ts
+@@ -4,6 +4,7 @@ import { ModelsModule } from './ai/models/models.module';
+ import { ActionsModule } from './actions/actions.module';
+ import { BriefingModule } from './briefing/briefing.module';
+ import { CalendarModule } from './calendar/calendar.module';
++import { MemoryModule } from './memory/memory.module';
+ import { SettingsModule } from './settings/settings.module';
+ import { validateEnv } from './config/env';
+ import { ConversationModule } from './conversation/conversation.module';
+@@ -20,6 +21,7 @@ import { PrismaModule } from './prisma/prisma.module';
+     SettingsModule,
+     ActionsModule,
+     BriefingModule,
++    MemoryModule,
+   ],
+   controllers: [HealthController],
+ })
+diff --git a/backend/src/briefing/briefing.module.ts b/backend/src/briefing/briefing.module.ts
+index b3d49f2..6d35508 100644
+--- a/backend/src/briefing/briefing.module.ts
++++ b/backend/src/briefing/briefing.module.ts
+@@ -2,12 +2,13 @@ import { Module } from '@nestjs/common';
+ import { ModelsModule } from '../ai/models/models.module';
+ import { CalendarModule } from '../calendar/calendar.module';
+ import { MailModule } from '../mail/mail.module';
++import { MemoryModule } from '../memory/memory.module';
+ import { SettingsModule } from '../settings/settings.module';
+ import { BriefingController } from './briefing.controller';
+ import { BriefingService } from './briefing.service';
+ 
+ @Module({
+-  imports: [ModelsModule, CalendarModule, MailModule, SettingsModule],
++  imports: [ModelsModule, CalendarModule, MailModule, SettingsModule, MemoryModule],
+   controllers: [BriefingController],
+   providers: [BriefingService],
+ })
+diff --git a/backend/src/briefing/briefing.service.ts b/backend/src/briefing/briefing.service.ts
+index 3f5f6bc..9da7abd 100644
+--- a/backend/src/briefing/briefing.service.ts
++++ b/backend/src/briefing/briefing.service.ts
+@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
+ import { BaseModel } from '../ai/models/base-model';
+ import { CalendarService } from '../calendar/calendar.service';
+ import { CalendarEvent } from '../calendar/calendar.types';
++import { MemoryService } from '../memory/memory.service';
+ import { localNow, shortLabel, startOfLocalDay } from '../calendar/tz';
+ import { inferenceMutex } from '../common/mutex';
+ import { escapeTags } from '../common/text';
+@@ -44,6 +45,7 @@ export class BriefingService {
+     private readonly model: BaseModel,
+     private readonly settings: SettingsService,
+     private readonly config: ConfigService<EnvVars, true>,
++    private readonly memory: MemoryService,
+   ) {}
+ 
+   async collect(signal?: AbortSignal, now: Date = new Date()): Promise<BriefingData> {
+@@ -80,7 +82,10 @@ export class BriefingService {
+     try {
+       if (onLoading && (this.model.state !== 'ready' || (await this.model.probe()).loaded === false)) onLoading();
+       const messages = [
+-        { role: 'system' as const, content: `${this.settings.systemPrompt()}\n\n${BRIEF_INSTRUCTION}` },
++        {
++          role: 'system' as const,
++          content: [this.settings.systemPrompt(), await this.memory.context(), BRIEF_INSTRUCTION].filter(Boolean).join('\n\n'),
++        },
+         { role: 'user' as const, content: formatData(data) },
+       ];
+       yield* this.model.stream({ messages, signal });
+diff --git a/backend/src/conversation/conversation.module.ts b/backend/src/conversation/conversation.module.ts
+index 5ee93b9..ce09320 100644
+--- a/backend/src/conversation/conversation.module.ts
++++ b/backend/src/conversation/conversation.module.ts
+@@ -2,12 +2,13 @@ import { Module } from '@nestjs/common';
+ import { ModelsModule } from '../ai/models/models.module';
+ import { ToolsModule } from '../ai/tools/tools.module';
+ import { ActionsModule } from '../actions/actions.module';
++import { MemoryModule } from '../memory/memory.module';
+ import { SettingsModule } from '../settings/settings.module';
+ import { ConversationController } from './conversation.controller';
+ import { ConversationService } from './conversation.service';
+ 
+ @Module({
+-  imports: [ModelsModule, ToolsModule, SettingsModule, ActionsModule],
++  imports: [ModelsModule, ToolsModule, SettingsModule, ActionsModule, MemoryModule],
+   controllers: [ConversationController],
+   providers: [ConversationService],
+ })
+diff --git a/backend/src/conversation/conversation.service.ts b/backend/src/conversation/conversation.service.ts
+index fb2b401..228a6e8 100644
+--- a/backend/src/conversation/conversation.service.ts
++++ b/backend/src/conversation/conversation.service.ts
+@@ -14,6 +14,7 @@ import { ToolContextProvider } from '../ai/tools/tool';
+ import { describeError } from '../common/errors';
+ import { inferenceMutex } from '../common/mutex';
+ import { CalendarActionService, PendingAction } from '../actions/calendar-action.service';
++import { MemoryService } from '../memory/memory.service';
+ import { SettingsService } from '../settings/settings.service';
+ import { EnvVars } from '../config/env';
+ import { PrismaService } from '../prisma/prisma.service';
+@@ -39,6 +40,7 @@ export class ConversationService {
+     private readonly tools: ToolContextProvider,
+     private readonly settings: SettingsService,
+     private readonly actions: CalendarActionService,
++    private readonly memory: MemoryService,
+   ) {}
+ 
+   create(title?: string) {
+@@ -83,7 +85,7 @@ export class ConversationService {
+   async postMessage(id: string, content: string) {
+     await this.assertExists(id);
+     // 모델 슬롯을 잡기 전에 외부 I/O 수행
+-    const [read, plan] = await Promise.all([this.tools.contextFor(content), this.actions.plan(content, id)]);
++    const [read, plan] = await Promise.all([this.tools.contextFor(content), this.planAction(content, id)]);
+     const extra = [read, plan?.context].filter(Boolean).join('\n') || null;
+     const release = await this.mutex.acquire();
+     try {
+@@ -134,6 +136,11 @@ export class ConversationService {
+     });
+   }
+ 
++  /** 기억 명령이 우선, 아니면 일정 쓰기 */
++  private async planAction(text: string, id: string, signal?: AbortSignal) {
++    return (await this.memory.plan(text, id)) ?? this.actions.plan(text, id, signal);
++  }
++
+   private async lastUserMessage(id: string) {
+     await this.assertExists(id);
+     const last = await this.prisma.message.findFirst({
+@@ -160,7 +167,7 @@ export class ConversationService {
+     onStatus?.('tools');
+     const [read, plan] = await Promise.all([
+       this.tools.contextFor(userText, signal),
+-      this.actions.plan(userText, id, signal),
++      this.planAction(userText, id, signal),
+     ]);
+     if (plan?.action) hooks.onAction?.(plan.action);
+     const extra = [read, plan?.context].filter(Boolean).join('\n') || null;
+@@ -221,7 +228,8 @@ export class ConversationService {
+     const history: ChatMessage[] = recent
+       .reverse()
+       .map((m) => ({ role: m.role.toLowerCase() as ChatMessage['role'], content: m.content }));
+-    const system = [this.settings.systemPrompt(), extra].filter(Boolean).join('\n\n');
++    const memory = await this.memory.context();
++    const system = [this.settings.systemPrompt(), memory, extra].filter(Boolean).join('\n\n');
+     return system ? [{ role: 'system', content: system }, ...history] : history;
+   }
+ 
+diff --git a/backend/src/memory/memory.controller.ts b/backend/src/memory/memory.controller.ts
+new file mode 100644
+index 0000000..35199a8
+--- /dev/null
++++ b/backend/src/memory/memory.controller.ts
+@@ -0,0 +1,71 @@
++import {
++  BadRequestException,
++  Body,
++  Controller,
++  Delete,
++  Get,
++  HttpCode,
++  Param,
++  ParseUUIDPipe,
++  Patch,
++  Post,
++  Query,
++} from '@nestjs/common';
++import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
++import { MemoryService } from './memory.service';
++
++export class CreateMemoryDto {
++  @IsString() @IsNotEmpty() @MaxLength(1000)
++  content!: string;
++
++  @IsOptional() @IsString() @MaxLength(50)
++  category?: string;
++
++  @IsOptional() @IsBoolean()
++  enabled?: boolean;
++}
++
++export class UpdateMemoryDto {
++  @IsOptional() @IsString() @IsNotEmpty() @MaxLength(1000)
++  content?: string;
++
++  @IsOptional() @IsString() @MaxLength(50)
++  category?: string;
++
++  @IsOptional() @IsBoolean()
++  enabled?: boolean;
++}
++
++/** 장기 기억 CRUD. 인증 없음: HOST=127.0.0.1 유지. */
++@Controller('memories')
++export class MemoryController {
++  constructor(private readonly memory: MemoryService) {}
++
++  @Get()
++  list(@Query('q') q?: string) {
++    return this.memory.list(q);
++  }
++
++  @Post()
++  create(@Body() dto: CreateMemoryDto) {
++    return this.memory.create(dto);
++  }
++
++  @Patch(':id')
++  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateMemoryDto) {
++    return this.memory.update(id, dto);
++  }
++
++  @Delete(':id')
++  @HttpCode(204)
++  remove(@Param('id', ParseUUIDPipe) id: string) {
++    return this.memory.remove(id);
++  }
++
++  /** 전체 삭제. 실수 방지로 ?confirm=all 필요 */
++  @Delete()
++  async removeAll(@Query('confirm') confirm?: string) {
++    if (confirm !== 'all') throw new BadRequestException('confirm=all required');
++    return { deleted: await this.memory.removeAll() };
++  }
++}
+diff --git a/backend/src/memory/memory.module.ts b/backend/src/memory/memory.module.ts
+new file mode 100644
+index 0000000..1a2a11c
+--- /dev/null
++++ b/backend/src/memory/memory.module.ts
+@@ -0,0 +1,10 @@
++import { Module } from '@nestjs/common';
++import { MemoryController } from './memory.controller';
++import { MemoryService } from './memory.service';
++
++@Module({
++  controllers: [MemoryController],
++  providers: [MemoryService],
++  exports: [MemoryService],
++})
++export class MemoryModule {}
+diff --git a/backend/src/memory/memory.service.ts b/backend/src/memory/memory.service.ts
+new file mode 100644
+index 0000000..a650973
+--- /dev/null
++++ b/backend/src/memory/memory.service.ts
+@@ -0,0 +1,174 @@
++import { randomUUID } from 'node:crypto';
++import { Injectable, NotFoundException } from '@nestjs/common';
++import { Memory } from '@prisma/client';
++import { ActionPlan, PendingAction } from '../actions/pending-action';
++import { escapeTags } from '../common/text';
++import { PrismaService } from '../prisma/prisma.service';
++
++/** 프롬프트에 넣을 기억 총 글자 수 상한 (작은 모델 컨텍스트 보호) */
++const CONTEXT_CHARS = 2000;
++const TTL_MS = 30 * 60_000;
++
++/** "기억해: X", "X 기억해줘", "X 잊어줘", "X 기억 지워" */
++const REMEMBER = /^\s*(?:(?:이거|이것)?\s*기억해\s*(?:줘|둬|두세요|주세요)?\s*[:：]\s*(.+)|(.+?)\s*(?:라고|이라고|고)?\s*기억해\s*(?:줘|둬|둬줘|두세요|주세요)?\s*[.!]?\s*)$/s;
++const FORGET = /^\s*(.+?)\s*(?:(?:에\s*대한|관련)\s*)?(?:기억\s*(?:을|를)?\s*(?:지워|삭제해)|(?:을|를)?\s*잊어)\s*(?:줘|주세요|버려|버려줘)?\s*[.!]?\s*$/s;
++
++export interface MemoryInput {
++  content: string;
++  category?: string | null;
++  enabled?: boolean;
++}
++
++/** 장기 기억. 쓰기는 모두 사용자 조작(화면 또는 채팅 확인 카드)으로만 일어난다. */
++@Injectable()
++export class MemoryService {
++  private readonly pending = new Map<string, PendingAction>();
++
++  constructor(private readonly prisma: PrismaService) {}
++
++  list(q?: string) {
++    const term = q?.trim();
++    return this.prisma.memory.findMany({
++      where: term
++        ? {
++            OR: [
++              { content: { contains: term, mode: 'insensitive' } },
++              { category: { contains: term, mode: 'insensitive' } },
++            ],
++          }
++        : undefined,
++      orderBy: { updatedAt: 'desc' },
++      take: 500,
++    });
++  }
++
++  create(input: MemoryInput, source: 'manual' | 'chat' = 'manual') {
++    return this.prisma.memory.create({
++      data: { content: input.content.trim(), category: input.category?.trim() || null, enabled: input.enabled ?? true, source },
++    });
++  }
++
++  async update(id: string, input: Partial<MemoryInput>) {
++    await this.mustExist(id);
++    return this.prisma.memory.update({
++      where: { id },
++      data: {
++        ...(input.content !== undefined ? { content: input.content.trim() } : {}),
++        ...(input.category !== undefined ? { category: input.category?.trim() || null } : {}),
++        ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
++      },
++    });
++  }
++
++  async remove(id: string): Promise<void> {
++    await this.mustExist(id);
++    await this.prisma.memory.delete({ where: { id } });
++  }
++
++  async removeAll(): Promise<number> {
++    const r = await this.prisma.memory.deleteMany({});
++    return r.count;
++  }
++
++  /** 켜진 기억을 시스템 프롬프트 블록으로. 없으면 null */
++  async context(): Promise<string | null> {
++    const rows = await this.prisma.memory.findMany({ where: { enabled: true }, orderBy: { updatedAt: 'desc' }, take: 200 });
++    if (rows.length === 0) return null;
++    const lines: string[] = [];
++    let used = 0;
++    for (const m of rows) {
++      const line = `- ${m.category ? `[${escapeTags(m.category)}] ` : ''}${escapeTags(m.content).replace(/\s*\n\s*/g, ' ')}`;
++      if (used + line.length > CONTEXT_CHARS) break;
++      lines.push(line);
++      used += line.length;
++    }
++    return [
++      '[사용자 장기 기억] 사용자가 직접 저장한 정보다. 답변에 자연스럽게 반영하되, 묻지 않으면 굳이 나열하지 않는다.',
++      '기억을 추가·삭제하려면 사용자가 "기억해: ...", "... 잊어줘"라고 말하거나 기억 화면을 쓰면 된다.',
++      `<memory>\n${lines.join('\n')}\n</memory>`,
++    ].join('\n');
++  }
++
++  /** 채팅의 "기억해"/"잊어줘" → 확인 대기 작업 */
++  async plan(text: string, conversationId: string | null, now: Date = new Date()): Promise<ActionPlan | null> {
++    const wrap = (b: string) => `<memory-action>\n${b}\n</memory-action>`;
++    const rem = REMEMBER.exec(text);
++    if (rem) {
++      const content = (rem[1] ?? rem[2] ?? '').trim();
++      if (!content) return null;
++      const action = this.store({ kind: 'memory.create', conversationId, summary: `기억 추가: ${content}`, memory: { content } }, now);
++      return { action, context: wrap(this.pendingText(action)) };
++    }
++    const fg = FORGET.exec(text);
++    if (fg && !/(일정|회의|미팅|약속)/.test(text)) {
++      const term = fg[1].replace(/^(내가|나는|내)\s*/, '').trim();
++      const hits = await this.prisma.memory.findMany({
++        where: { content: { contains: term, mode: 'insensitive' } },
++        orderBy: { updatedAt: 'desc' },
++        take: 5,
++      });
++      if (hits.length === 0) return { context: wrap(`"${escapeTags(term)}"에 해당하는 기억 없음. 기억 화면에서 확인하라고 안내한다.`) };
++      const m = hits[0];
++      const action = this.store(
++        { kind: 'memory.delete', conversationId, summary: `기억 삭제: ${m.content}`, memory: { id: m.id, content: m.content } },
++        now,
++      );
++      const more = hits.length > 1 ? `\n비슷한 기억이 ${hits.length - 1}개 더 있다. 기억 화면에서 고를 수 있다고 안내한다.` : '';
++      return { action, context: wrap(this.pendingText(action) + more) };
++    }
++    return null;
++  }
++
++  has(id: string): boolean {
++    return this.pending.has(id);
++  }
++
++  listPending(conversationId?: string): PendingAction[] {
++    this.prune();
++    return [...this.pending.values()].filter((a) => !conversationId || a.conversationId === conversationId);
++  }
++
++  async confirm(id: string): Promise<Memory | { deleted: string }> {
++    const a = this.take(id);
++    if (a.kind === 'memory.create') return this.create({ content: a.memory!.content }, 'chat');
++    await this.prisma.memory.delete({ where: { id: a.memory!.id! } }).catch(() => undefined);
++    return { deleted: a.memory!.id! };
++  }
++
++  cancel(id: string): void {
++    this.take(id);
++  }
++
++  private pendingText(a: PendingAction): string {
++    return [
++      `[확인 대기] ${escapeTags(a.summary)}`,
++      '아직 반영되지 않았다. 사용자가 화면의 확인 버튼을 눌러야 저장·삭제된다. 이미 기억했다고 말하지 않는다. 짧게 확인을 요청한다.',
++    ].join('\n');
++  }
++
++  private store(a: Omit<PendingAction, 'id' | 'expiresAt'>, now: Date): PendingAction {
++    this.prune(now);
++    const dup = [...this.pending.values()].find((x) => x.conversationId === a.conversationId && x.summary === a.summary);
++    if (dup) return dup;
++    const action: PendingAction = { ...a, id: randomUUID(), expiresAt: new Date(now.getTime() + TTL_MS).toISOString() };
++    this.pending.set(action.id, action);
++    return action;
++  }
++
++  private take(id: string): PendingAction {
++    this.prune();
++    const a = this.pending.get(id);
++    if (!a) throw new NotFoundException({ code: 'NOT_FOUND', message: '확인 대기 작업이 없음 (만료 또는 처리됨)' });
++    this.pending.delete(id);
++    return a;
++  }
++
++  private prune(now = new Date()): void {
++    for (const [id, a] of this.pending) if (Date.parse(a.expiresAt) < now.getTime()) this.pending.delete(id);
++  }
++
++  private async mustExist(id: string): Promise<void> {
++    const found = await this.prisma.memory.findUnique({ where: { id }, select: { id: true } });
++    if (!found) throw new NotFoundException({ code: 'NOT_FOUND', message: '기억 없음' });
++  }
++}
+diff --git a/backend/test/unit/conversation.service.spec.ts b/backend/test/unit/conversation.service.spec.ts
+index 1c9eab0..dc9ad64 100644
+--- a/backend/test/unit/conversation.service.spec.ts
++++ b/backend/test/unit/conversation.service.spec.ts
+@@ -37,13 +37,15 @@ function setup() {
+   const tools = { contextFor: jest.fn().mockResolvedValue(null) };
+   const settings: any = { systemPrompt: () => 'sys' };
+   const actions: any = { plan: jest.fn().mockResolvedValue(null) };
++  const memory: any = { plan: jest.fn().mockResolvedValue(null), context: jest.fn().mockResolvedValue(null) };
+   return {
+     prisma,
+     model,
+     stored,
+     tools,
+     actions,
+-    service: new ConversationService(prisma, model, config, tools, settings, actions),
++    memory,
++    service: new ConversationService(prisma, model, config, tools, settings, actions, memory),
+   };
+ }
+ 
+@@ -195,4 +197,12 @@ describe('ConversationService', () => {
+     ).rejects.toBeTruthy();
+     expect(stored[1]).toMatchObject({ role: 'ASSISTANT', content: 'part', stopped: true });
+   });
++
++  it('켜진 기억은 system 프롬프트에 포함', async () => {
++    const { service, model, memory } = setup();
++    memory.context.mockResolvedValue('MEM');
++    model.generate.mockResolvedValue({ content: 'ok', model: 'fake', durationMs: 1 });
++    await service.postMessage('c1', 'hi');
++    expect(model.generate.mock.calls[0][0].messages[0].content).toBe('sys\n\nMEM');
++  });
+ });
+diff --git a/backend/test/unit/memory.service.spec.ts b/backend/test/unit/memory.service.spec.ts
+new file mode 100644
+index 0000000..0c98004
+--- /dev/null
++++ b/backend/test/unit/memory.service.spec.ts
+@@ -0,0 +1,62 @@
++import { MemoryService } from '../../src/memory/memory.service';
++
++function make(rows: any[] = []) {
++  const prisma: any = {
++    memory: {
++      findMany: jest.fn(async ({ where }: any) =>
++        rows.filter((r) => (where?.enabled ? r.enabled : true) && (!where?.content || r.content.includes(where.content.contains))),
++      ),
++      create: jest.fn(async ({ data }: any) => ({ id: 'n1', ...data })),
++      delete: jest.fn(async () => undefined),
++    },
++  };
++  return { prisma, svc: new MemoryService(prisma) };
++}
++
++describe('MemoryService', () => {
++  it('context: 켜진 기억만, 태그 이스케이프', async () => {
++    const { svc } = make([
++      { content: '커피 싫어함', category: '취향', enabled: true },
++      { content: '끈 기억', category: null, enabled: false },
++      { content: '<b>x</b>', category: null, enabled: true },
++    ]);
++    const out = await svc.context();
++    expect(out).toContain('- [취향] 커피 싫어함');
++    expect(out).not.toContain('끈 기억');
++    expect(out).toContain('＜b＞');
++  });
++
++  it('context: 기억 없으면 null', async () => {
++    expect(await make().svc.context()).toBeNull();
++  });
++
++  it('"기억해" → 확인 대기, 확인 전엔 저장 안 함', async () => {
++    const { svc, prisma } = make();
++    for (const t of ['기억해: 나는 커피를 싫어해', '나는 커피를 싫어한다고 기억해줘']) {
++      const plan = await svc.plan(t, 'c1');
++      expect(plan!.action).toMatchObject({ kind: 'memory.create' });
++      expect(plan!.action!.memory!.content).toMatch(/커피를 싫어/);
++    }
++    expect(prisma.memory.create).not.toHaveBeenCalled();
++    const [a] = svc.listPending('c1');
++    await svc.confirm(a.id);
++    expect(prisma.memory.create).toHaveBeenCalledWith({
++      data: expect.objectContaining({ source: 'chat', content: expect.stringContaining('커피') }),
++    });
++  });
++
++  it('"잊어줘" → 일치 기억 삭제 확인 대기', async () => {
++    const { svc, prisma } = make([{ id: 'm1', content: '커피 싫어함', enabled: true }]);
++    const plan = await svc.plan('커피 잊어줘', 'c1');
++    expect(plan!.action).toMatchObject({ kind: 'memory.delete', memory: { id: 'm1' } });
++    await svc.confirm(plan!.action!.id);
++    expect(prisma.memory.delete).toHaveBeenCalledWith({ where: { id: 'm1' } });
++  });
++
++  it('일반 문장·질문은 무시', async () => {
++    const { svc } = make();
++    for (const t of ['내 이름 기억해?', '메일 지워줘', '내일 3시 회의 잡아', '안녕']) {
++      expect(await svc.plan(t, 'c1')).toBeNull();
++    }
++  });
++});
+diff --git a/frontend/src/App.tsx b/frontend/src/App.tsx
+index 3e39a45..37b26de 100644
+--- a/frontend/src/App.tsx
++++ b/frontend/src/App.tsx
+@@ -2,11 +2,12 @@ import { useState } from 'react';
+ import { Briefing } from './Briefing';
+ import { Chat } from './Chat';
+ import { Lobby } from './Lobby';
++import { MemoryPage } from './MemoryPage';
+ import { MailPage } from './MailPage';
+ import { Schedule } from './Schedule';
+ import { SettingsPage } from './SettingsPage';
+ 
+-export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing';
++export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory';
+ 
+ export function App() {
+   const [page, setPage] = useState<PageId>('lobby');
+@@ -14,7 +15,9 @@ export function App() {
+ 
+   switch (page) {
+     case 'chat':
+-      return <Chat onBack={back} onSettings={() => setPage('settings')} />;
++      return <Chat onBack={back} onSettings={() => setPage('settings')} onMemory={() => setPage('memory')} />;
++    case 'memory':
++      return <MemoryPage onBack={back} />;
+     case 'settings':
+       return <SettingsPage onBack={back} />;
+     case 'briefing':
+diff --git a/frontend/src/Chat.tsx b/frontend/src/Chat.tsx
+index 3c189c8..b79a768 100644
+--- a/frontend/src/Chat.tsx
++++ b/frontend/src/Chat.tsx
+@@ -22,7 +22,20 @@ const label = (c: Conversation) => c.title || '새 대화';
+ 
+ type Retry = () => Promise<void>;
+ 
+-export function Chat(props: { onBack: () => void; onSettings: () => void }) {
++const ACTION_TITLE: Record<PendingAction['kind'], string> = {
++  'calendar.create': '📅 일정 등록 확인',
++  'calendar.update': '📅 일정 변경 확인',
++  'memory.create': '🧠 기억 추가 확인',
++  'memory.delete': '🧠 기억 삭제 확인',
++};
++const ACTION_OK: Record<PendingAction['kind'], string> = {
++  'calendar.create': 'Outlook에 저장',
++  'calendar.update': 'Outlook에 저장',
++  'memory.create': '기억하기',
++  'memory.delete': '삭제',
++};
++
++export function Chat(props: { onBack: () => void; onSettings: () => void; onMemory: () => void }) {
+   const [convs, setConvs] = useState<Conversation[]>([]);
+   const [query, setQuery] = useState('');
+   const [activeId, setActiveId] = useState<string | null>(null);
+@@ -276,8 +289,8 @@ export function Chat(props: { onBack: () => void; onSettings: () => void }) {
+     setActionBusy(a.id);
+     try {
+       if (ok) {
+-        const ev = await api.confirmAction(a.id);
+-        setInfo(`${a.kind === 'calendar.create' ? '등록' : '변경'} 완료: ${ev.subject}`);
++        await api.confirmAction(a.id);
++        setInfo(`${ACTION_TITLE[a.kind].replace(' 확인', '')} 완료: ${a.summary.replace(/^[^:]+: /, '')}`);
+       } else {
+         await api.cancelAction(a.id);
+       }
+@@ -362,9 +375,14 @@ export function Chat(props: { onBack: () => void; onSettings: () => void }) {
+           {convs.length === 0 && <p className="muted">{query ? '검색 결과 없음' : '대화 없음'}</p>}
+         </nav>
+         <MailPanel />
+-        <button className="ghost" onClick={props.onSettings}>
+-          ⚙ 설정 (모델·프롬프트)
+-        </button>
++        <div className="side-links">
++          <button className="ghost" onClick={props.onMemory}>
++            🧠 기억
++          </button>
++          <button className="ghost" onClick={props.onSettings}>
++            ⚙ 설정
++          </button>
++        </div>
+         <div className="status" role="status" title={status.hint}>
+           <span className={`dot ${status.level === 'ok' ? 'ok' : status.level === 'down' ? 'down' : 'warn'}`} />
+           {healthLoaded ? status.title : '상태 확인 중…'}
+@@ -452,14 +470,14 @@ export function Chat(props: { onBack: () => void; onSettings: () => void }) {
+             {actions.map((a) => (
+               <div key={a.id} className="action-card">
+                 <div className="action-body">
+-                  <strong>{a.kind === 'calendar.create' ? '📅 일정 등록 확인' : '📅 일정 변경 확인'}</strong>
+-                  <span>{a.summary.replace(/^(등록|변경): /, '')}</span>
++                  <strong>{ACTION_TITLE[a.kind]}</strong>
++                  <span>{a.summary.replace(/^[^:]+: /, '')}</span>
+                 </div>
+                 <button className="ghost" disabled={actionBusy === a.id} onClick={() => void decide(a, false)}>
+                   취소
+                 </button>
+                 <button className="primary" disabled={actionBusy === a.id} onClick={() => void decide(a, true)}>
+-                  {actionBusy === a.id ? '처리 중…' : 'Outlook에 저장'}
++                  {actionBusy === a.id ? '처리 중…' : ACTION_OK[a.kind]}
+                 </button>
+               </div>
+             ))}
+diff --git a/frontend/src/Lobby.tsx b/frontend/src/Lobby.tsx
+index 3d29fc3..7a4c2a8 100644
+--- a/frontend/src/Lobby.tsx
++++ b/frontend/src/Lobby.tsx
+@@ -14,13 +14,13 @@ const MAIN: Item[] = [
+   { id: 'schedule', icon: '📅', label: '내 일정 보기' },
+   { id: 'chat', icon: '💬', label: 'AI 채팅하기' },
+   { id: 'mail', icon: '✉️', label: '메일 확인', hint: '읽기 전용' },
++  { id: 'memory', icon: '🧠', label: '기억 관리', hint: 'AI가 기억할 내용' },
+   { id: 'settings', icon: '⚙️', label: '설정', hint: '모델·시스템 프롬프트' },
+ ];
+ 
+ const SOON: Item[] = [
+   { id: null, icon: '🎙️', label: '음성', hint: '준비 중' },
+   { id: null, icon: '🛠️', label: '도구', hint: '준비 중' },
+-  { id: null, icon: '🧠', label: '기억', hint: '준비 중' },
+ ];
+ 
+ function Links(props: { items: Item[]; onNavigate: (p: PageId) => void }) {
+diff --git a/frontend/src/MemoryPage.tsx b/frontend/src/MemoryPage.tsx
+new file mode 100644
+index 0000000..1879b3c
+--- /dev/null
++++ b/frontend/src/MemoryPage.tsx
+@@ -0,0 +1,194 @@
++import { useCallback, useEffect, useState } from 'react';
++import { api, Memory } from './api';
++
++const fmt = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'short', timeStyle: 'short' });
++
++/** 장기 기억: 사용자가 직접 추가·수정·끄기·삭제. 켜진 항목만 AI 대화에 들어간다. */
++export function MemoryPage(props: { onBack: () => void }) {
++  const [items, setItems] = useState<Memory[] | null>(null);
++  const [q, setQ] = useState('');
++  const [content, setContent] = useState('');
++  const [category, setCategory] = useState('');
++  const [editing, setEditing] = useState<{ id: string; content: string; category: string } | null>(null);
++  const [error, setError] = useState('');
++  const [busy, setBusy] = useState(false);
++
++  const load = useCallback(
++    (term = q) =>
++      api.memories(term.trim() || undefined).then(
++        (m) => {
++          setItems(m);
++          setError('');
++        },
++        (e: unknown) => setError(e instanceof Error ? e.message : String(e)),
++      ),
++    [q],
++  );
++
++  useEffect(() => {
++    const t = setTimeout(() => void load(q), 250);
++    return () => clearTimeout(t);
++  }, [q, load]);
++
++  const act = async (fn: () => Promise<unknown>) => {
++    setBusy(true);
++    try {
++      await fn();
++      await load();
++    } catch (e) {
++      setError(e instanceof Error ? e.message : String(e));
++    } finally {
++      setBusy(false);
++    }
++  };
++
++  const add = () =>
++    act(async () => {
++      await api.createMemory({ content: content.trim(), ...(category.trim() ? { category: category.trim() } : {}) });
++      setContent('');
++    });
++
++  const save = () =>
++    editing &&
++    act(async () => {
++      await api.updateMemory(editing.id, { content: editing.content.trim(), category: editing.category.trim() });
++      setEditing(null);
++    });
++
++  const remove = (m: Memory) => {
++    if (window.confirm(`삭제할까요?\n\n${m.content}`)) void act(() => api.deleteMemory(m.id));
++  };
++
++  const removeAll = () => {
++    if (window.confirm('모든 기억을 삭제할까요? 되돌릴 수 없습니다.')) void act(() => api.deleteAllMemories());
++  };
++
++  const on = items?.filter((m) => m.enabled).length ?? 0;
++
++  return (
++    <div className="subpage">
++      <header className="bar">
++        <button className="ghost" onClick={props.onBack}>
++          ← 로비
++        </button>
++        <h1>기억 관리</h1>
++      </header>
++      <div className="subbody">
++        <p className="muted">
++          켜진 기억만 AI 대화와 브리핑에 들어갑니다. 채팅에서 &quot;기억해: …&quot;, &quot;… 잊어줘&quot;라고 해도 확인 버튼을 눌러야
++          반영됩니다.
++        </p>
++
++        <section className="card">
++          <h2>새 기억</h2>
++          <label className="field">
++            <span>내용</span>
++            <textarea
++              value={content}
++              onChange={(e) => setContent(e.target.value)}
++              rows={2}
++              maxLength={1000}
++              placeholder="예: 나는 오전 회의를 선호한다"
++            />
++          </label>
++          <div className="chips">
++            <input
++              className="search narrow"
++              value={category}
++              onChange={(e) => setCategory(e.target.value)}
++              maxLength={50}
++              placeholder="분류 (선택, 예: 취향)"
++              aria-label="분류"
++            />
++            <button className="primary" disabled={!content.trim() || busy} onClick={() => void add()}>
++              추가
++            </button>
++          </div>
++        </section>
++
++        <div className="chips">
++          <input
++            className="search grow"
++            type="search"
++            value={q}
++            onChange={(e) => setQ(e.target.value)}
++            placeholder="기억 검색"
++            aria-label="기억 검색"
++          />
++          {items && items.length > 0 && !q && (
++            <button className="ghost danger-text" onClick={removeAll} disabled={busy}>
++              전체 삭제
++            </button>
++          )}
++        </div>
++        {error && <p className="error">{error}</p>}
++        {items === null && !error && <p className="muted">불러오는 중…</p>}
++        {items?.length === 0 && <p className="muted">{q ? '검색 결과 없음.' : '저장된 기억 없음.'}</p>}
++        {items && items.length > 0 && <p className="muted">총 {items.length}개 · 사용 중 {on}개</p>}
++
++        {items?.map((m) =>
++          editing?.id === m.id ? (
++            <section key={m.id} className="card">
++              <textarea
++                className="mem-edit"
++                value={editing.content}
++                autoFocus
++                rows={3}
++                maxLength={1000}
++                onChange={(e) => setEditing({ ...editing, content: e.target.value })}
++                aria-label="기억 내용"
++              />
++              <div className="chips">
++                <input
++                  className="search narrow"
++                  value={editing.category}
++                  maxLength={50}
++                  onChange={(e) => setEditing({ ...editing, category: e.target.value })}
++                  placeholder="분류"
++                  aria-label="분류"
++                />
++                <button className="ghost" onClick={() => setEditing(null)}>
++                  취소
++                </button>
++                <button className="primary" disabled={!editing.content.trim() || busy} onClick={() => void save()}>
++                  저장
++                </button>
++              </div>
++            </section>
++          ) : (
++            <section key={m.id} className={m.enabled ? 'card mem' : 'card mem off'}>
++              <div className="mem-row">
++                <label className="toggle" title={m.enabled ? '사용 중 (AI에 전달)' : '꺼짐 (AI에 전달 안 함)'}>
++                  <input
++                    type="checkbox"
++                    checked={m.enabled}
++                    disabled={busy}
++                    onChange={(e) => void act(() => api.updateMemory(m.id, { enabled: e.target.checked }))}
++                  />
++                  <span>{m.enabled ? '사용' : '끔'}</span>
++                </label>
++                <p className="mem-text">
++                  {m.category && <span className="tag">{m.category}</span>}
++                  {m.content}
++                </p>
++              </div>
++              <div className="mem-meta">
++                <small>
++                  {m.source === 'chat' ? '채팅에서 추가' : '직접 추가'} · {fmt.format(new Date(m.updatedAt))}
++                </small>
++                <span>
++                  <button className="tool" onClick={() => setEditing({ id: m.id, content: m.content, category: m.category ?? '' })}>
++                    수정
++                  </button>
++                  <button className="tool" onClick={() => remove(m)}>
++                    삭제
++                  </button>
++                </span>
++              </div>
++            </section>
++          ),
++        )}
++      </div>
++    </div>
++  );
++}
+diff --git a/frontend/src/api.ts b/frontend/src/api.ts
+index 8c3de6d..4960c17 100644
+--- a/frontend/src/api.ts
++++ b/frontend/src/api.ts
+@@ -27,15 +27,26 @@ export interface EventDraft {
+ /** 사용자 확인을 기다리는 작업 (일정 등록·변경) */
+ export interface PendingAction {
+   id: string;
+-  kind: 'calendar.create' | 'calendar.update';
++  kind: 'calendar.create' | 'calendar.update' | 'memory.create' | 'memory.delete';
+   conversationId: string | null;
+   summary: string;
+-  draft: EventDraft;
++  draft?: EventDraft;
++  memory?: { id?: string; content: string; category?: string | null };
+   eventId?: string;
+   before?: CalendarEvent;
+   expiresAt: string;
+ }
+ 
++export interface Memory {
++  id: string;
++  content: string;
++  category: string | null;
++  enabled: boolean;
++  source: 'manual' | 'chat';
++  createdAt: string;
++  updatedAt: string;
++}
++
+ export interface Settings {
+   model: string;
+   systemPrompt: string;
+@@ -181,7 +192,14 @@ export const api = {
+     req<Settings>('/settings', { method: 'PUT', body: JSON.stringify(s) }),
+   models: () => req<string[]>('/settings/models'),
+   actions: (conversationId: string) => req<PendingAction[]>(`/actions?conversationId=${conversationId}`),
+-  confirmAction: (id: string) => req<CalendarEvent>(`/actions/${id}/confirm`, { method: 'POST' }),
++  memories: (q?: string) => req<Memory[]>(q ? `/memories?q=${encodeURIComponent(q)}` : '/memories'),
++  createMemory: (m: { content: string; category?: string }) =>
++    req<Memory>('/memories', { method: 'POST', body: JSON.stringify(m) }),
++  updateMemory: (id: string, m: { content?: string; category?: string; enabled?: boolean }) =>
++    req<Memory>(`/memories/${id}`, { method: 'PATCH', body: JSON.stringify(m) }),
++  deleteMemory: (id: string) => req<void>(`/memories/${id}`, { method: 'DELETE' }),
++  deleteAllMemories: () => req<{ deleted: number }>('/memories?confirm=all', { method: 'DELETE' }),
++  confirmAction: (id: string) => req<{ subject?: string; content?: string; deleted?: string }>(`/actions/${id}/confirm`, { method: 'POST' }),
+   cancelAction: (id: string) => req<void>(`/actions/${id}`, { method: 'DELETE' }),
+   events: (days: number) => req<CalendarEvent[]>(`/calendar/events?days=${days}`),
+ };
+diff --git a/frontend/src/styles.css b/frontend/src/styles.css
+index 62ca806..7aa1b09 100644
+--- a/frontend/src/styles.css
++++ b/frontend/src/styles.css
+@@ -205,3 +205,17 @@ code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-weight:
+ .ok-text { color: var(--ok); margin: 0; }
+ .chips .muted { align-self: center; }
+ @media (max-width: 720px) { .action-card { flex-wrap: wrap; } }
++
++/* 기억 관리 */
++.side-links { display: flex; gap: 6px; }
++.side-links .ghost { flex: 1; }
++.search.narrow { width: 220px; max-width: 100%; }
++.search.grow { flex: 1; min-width: 0; }
++.danger-text { color: var(--err); }
++.mem.off { opacity: 0.6; }
++.mem-row { display: flex; gap: 12px; align-items: flex-start; }
++.mem-text { flex: 1; margin: 0; white-space: pre-wrap; word-break: break-word; }
++.mem-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); }
++.mem-edit { width: 100%; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--accent); border-radius: 6px; padding: 8px 10px; resize: vertical; }
++.tag { display: inline-block; font-size: 12px; background: var(--user); border-radius: 4px; padding: 0 6px; margin-right: 6px; }
++.toggle { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; cursor: pointer; }
+-- 
+2.43.0
+
