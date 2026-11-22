@@ -2,20 +2,20 @@ import { useState } from 'react';
 import { Briefing } from './Briefing';
 import { Chat } from './Chat';
 import { Lobby } from './Lobby';
-import { MemoryPage } from './MemoryPage';
 import { MailPage } from './MailPage';
+import { MemoryPage } from './MemoryPage';
 import { Schedule } from './Schedule';
 import { SettingsPage } from './SettingsPage';
+import { ShortcutHelp, useGlobalShortcuts } from './Shortcuts';
 
 export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory';
 
-export function App() {
-  const [page, setPage] = useState<PageId>('lobby');
-  const back = () => setPage('lobby');
-
+function Page(props: { page: PageId; go: (p: PageId) => void }) {
+  const { page, go } = props;
+  const back = () => go('lobby');
   switch (page) {
     case 'chat':
-      return <Chat onBack={back} onSettings={() => setPage('settings')} onMemory={() => setPage('memory')} />;
+      return <Chat onBack={back} onSettings={() => go('settings')} onMemory={() => go('memory')} />;
     case 'memory':
       return <MemoryPage onBack={back} />;
     case 'settings':
@@ -27,6 +27,17 @@ export function App() {
     case 'mail':
       return <MailPage onBack={back} />;
     default:
-      return <Lobby onNavigate={setPage} />;
+      return <Lobby onNavigate={go} />;
   }
+}
+
+export function App() {
+  const [page, setPage] = useState<PageId>('lobby');
+  const { help, closeHelp } = useGlobalShortcuts(setPage);
+  return (
+    <>
+      <Page page={page} go={setPage} />
+      {help && <ShortcutHelp onClose={closeHelp} />}
+    </>
+  );
 }

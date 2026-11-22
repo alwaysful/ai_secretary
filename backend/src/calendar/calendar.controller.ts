@@ -16,6 +16,11 @@ export class UpcomingQueryDto {
 export class CalendarController {
   constructor(private readonly calendar: CalendarService) {}
 
+  @Get('today')
+  today() {
+    return this.calendar.today();
+  }
+
   @Get('events')
   events(@Query() q: UpcomingQueryDto) {
     return this.calendar.upcoming(q.days);

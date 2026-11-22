@@ -6,6 +6,7 @@ import { MailAuthService } from '../mail/mail-auth.service';
 import { MailError } from '../mail/mail.errors';
 import { CalendarEvent } from './calendar.types';
 import { EventDraft } from './event-parser';
+import { localNow, startOfLocalDay } from './tz';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const HTTP_TIMEOUT_MS = 15_000;
@@ -41,6 +42,13 @@ export class CalendarService {
 
   upcoming(days: number, signal?: AbortSignal, now: Date = new Date()): Promise<CalendarEvent[]> {
     return this.between(now, new Date(now.getTime() + days * 86_400_000), signal);
+  }
+
+  /** TIMEZONE 기준 오늘 하루 일정 */
+  today(signal?: AbortSignal, now: Date = new Date()): Promise<CalendarEvent[]> {
+    const tz = this.config.get('TIMEZONE', { infer: true });
+    const t = localNow(now, tz);
+    return this.between(startOfLocalDay(t.y, t.m, t.d, tz), startOfLocalDay(t.y, t.m, t.d + 1, tz), signal);
   }
 
   /** [start, end) 구간 일정 */

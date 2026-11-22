@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { PageId } from './App';
-import { api, Health } from './api';
+import { api, ApiError, CalendarEvent, Health } from './api';
+import { ThemeButton } from './theme';
 
 interface Item {
   id: PageId | null;
@@ -10,11 +11,11 @@ interface Item {
 }
 
 const MAIN: Item[] = [
-  { id: 'briefing', icon: '☀️', label: '아침 브리핑', hint: '오늘 일정·중요 메일' },
+  { id: 'briefing', icon: '☀️', label: '아침 브리핑', hint: '요약' },
   { id: 'schedule', icon: '📅', label: '내 일정 보기' },
   { id: 'chat', icon: '💬', label: 'AI 채팅하기' },
   { id: 'mail', icon: '✉️', label: '메일 확인', hint: '읽기 전용' },
-  { id: 'memory', icon: '🧠', label: '기억 관리', hint: 'AI가 기억할 내용' },
+  { id: 'memory', icon: '🧠', label: '기억 관리', hint: '장기 기억' },
   { id: 'settings', icon: '⚙️', label: '설정', hint: '모델·시스템 프롬프트' },
 ];
 
@@ -33,6 +34,85 @@ function Links(props: { items: Item[]; onNavigate: (p: PageId) => void }) {
           {it.hint && <small>{it.hint}</small>}
         </button>
       ))}
+    </div>
+  );
+}
+
+type Load<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'error'; message: string };
+
+const errText = (e: unknown) =>
+  e instanceof ApiError && e.code === 'BACKEND_DOWN' ? '백엔드 연결 안 됨' : e instanceof Error ? e.message : String(e);
+
+const nowLocal = () => {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
+/** 오늘 일정·안 읽은 메일 수. 5분마다 갱신 */
+function Widgets(props: { onNavigate: (p: PageId) => void }) {
+  const [events, setEvents] = useState<Load<CalendarEvent[]>>({ state: 'loading' });
+  const [unread, setUnread] = useState<Load<number>>({ state: 'loading' });
+
+  useEffect(() => {
+    const load = () => {
+      api.today().then(
+        (v) => setEvents({ state: 'ok', value: v }),
+        (e: unknown) => setEvents({ state: 'error', message: errText(e) }),
+      );
+      api.unreadCount().then(
+        (v) => setUnread({ state: 'ok', value: v.count }),
+        (e: unknown) => setUnread({ state: 'error', message: errText(e) }),
+      );
+    };
+    load();
+    const t = setInterval(load, 5 * 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const now = nowLocal();
+  return (
+    <div className="widgets">
+      <button className="widget" onClick={() => props.onNavigate('schedule')} aria-label="오늘 일정, 일정 화면 열기">
+        <h3>
+          <span>📅 오늘 일정</span>
+          {events.state === 'ok' && <span>{events.value.length}건</span>}
+        </h3>
+        {events.state === 'loading' && <p className="muted">불러오는 중…</p>}
+        {events.state === 'error' && <p className="muted">{events.message}</p>}
+        {events.state === 'ok' && events.value.length === 0 && <p className="muted">오늘 일정 없음</p>}
+        {events.state === 'ok' && events.value.length > 0 && (
+          <ul>
+            {events.value.slice(0, 5).map((e) => {
+              const past = !e.isAllDay && e.end.slice(0, 16) <= now;
+              const live = !e.isAllDay && e.start.slice(0, 16) <= now && now < e.end.slice(0, 16);
+              return (
+                <li key={e.id} className={live ? 'now' : past ? 'past' : ''}>
+                  <time>{e.isAllDay ? '종일' : `${e.start.slice(11, 16)}–${e.end.slice(11, 16)}`}</time>
+                  <span>
+                    {e.subject}
+                    {live && ' · 진행 중'}
+                  </span>
+                </li>
+              );
+            })}
+            {events.value.length > 5 && <li className="muted">외 {events.value.length - 5}건</li>}
+          </ul>
+        )}
+      </button>
+      <button className="widget" onClick={() => props.onNavigate('mail')} aria-label="안 읽은 메일, 메일 화면 열기">
+        <h3>
+          <span>✉️ 안 읽은 메일</span>
+        </h3>
+        {unread.state === 'loading' && <p className="muted">불러오는 중…</p>}
+        {unread.state === 'error' && <p className="muted">{unread.message}</p>}
+        {unread.state === 'ok' && (
+          <div className="big">
+            {unread.value}
+            <small>통</small>
+          </div>
+        )}
+      </button>
     </div>
   );
 }
@@ -66,8 +146,13 @@ export function Lobby(props: { onNavigate: (p: PageId) => void }) {
             {status}
           </span>
           <span>{today}</span>
+          <ThemeButton />
+          <span className="muted">
+            단축키 <kbd>?</kbd>
+          </span>
         </div>
         <h1 className="title">AURA 810</h1>
+        <Widgets onNavigate={props.onNavigate} />
         <div className="cols">
           <section>
             <h2>바로가기</h2>

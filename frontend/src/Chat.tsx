@@ -14,6 +14,8 @@ import {
 } from './api';
 import { CopyButton } from './CopyButton';
 import { MailPanel } from './MailPanel';
+import { isTyping } from './Shortcuts';
+import { ThemeButton } from './theme';
 import { Markdown } from './Markdown';
 import { diagnoseError, diagnoseHealth, Diagnosis, NoticeBox, PHASE_TEXT } from './Notice';
 
@@ -54,6 +56,8 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [info, setInfo] = useState('');
   const abortRef = useRef<AbortController | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const loadSeq = useRef(0);
   const warmed = useRef(false);
@@ -307,8 +311,43 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       void send();
+      return;
+    }
+    // 빈 입력창에서 ↑: 마지막 메시지 편집
+    if (e.key === 'ArrowUp' && !input && !busy) {
+      const last = [...messages].reverse().find((m) => m.role === 'USER' && !m.id.startsWith('tmp-'));
+      if (last) {
+        e.preventDefault();
+        setEditing(last.id);
+      }
     }
   };
+
+  // 채팅 단축키: Ctrl+K 검색, Ctrl+Shift+O 새 대화, Alt+R 재생성, / 입력창
+  const keyRef = useRef<(e: globalThis.KeyboardEvent) => void>(() => undefined);
+  keyRef.current = (e) => {
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && !e.shiftKey && e.code === 'KeyK') {
+      e.preventDefault();
+      setMenu(true);
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    } else if (mod && e.shiftKey && e.code === 'KeyO') {
+      e.preventDefault();
+      void open(null).then(() => inputRef.current?.focus());
+    } else if (e.altKey && !mod && e.code === 'KeyR') {
+      e.preventDefault();
+      if (!busy && messages.length > 0) void regenerate();
+    } else if (e.key === '/' && !mod && !isTyping(e)) {
+      e.preventDefault();
+      inputRef.current?.focus();
+    }
+  };
+  useEffect(() => {
+    const on = (e: globalThis.KeyboardEvent) => keyRef.current(e);
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  }, []);
 
   const status = diagnoseHealth(health);
   const showStatusBanner = healthLoaded && (status.level === 'down' || status.level === 'warn');
@@ -323,15 +362,16 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
           ← 로비
         </button>
         <div className="brand">AURA</div>
-        <button className="primary" onClick={() => void open(null)}>
+        <button className="primary" onClick={() => void open(null)} title="Ctrl+Shift+O">
           새 대화
         </button>
         <input
+          ref={searchRef}
           className="search"
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="대화 검색 (제목·내용)"
+          placeholder="대화 검색 (Ctrl+K)"
           aria-label="대화 검색"
         />
         <nav className="convs" aria-label="대화 목록">
@@ -383,9 +423,12 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
             ⚙ 설정
           </button>
         </div>
-        <div className="status" role="status" title={status.hint}>
-          <span className={`dot ${status.level === 'ok' ? 'ok' : status.level === 'down' ? 'down' : 'warn'}`} />
-          {healthLoaded ? status.title : '상태 확인 중…'}
+        <div className="side-foot">
+          <div className="status" role="status" title={status.hint}>
+            <span className={`dot ${status.level === 'ok' ? 'ok' : status.level === 'down' ? 'down' : 'warn'}`} />
+            {healthLoaded ? status.title : '상태 확인 중…'}
+          </div>
+          <ThemeButton />
         </div>
       </aside>
 
@@ -503,10 +546,11 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
 
         <div className="composer">
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKey}
-            placeholder="메시지 입력 (Enter 전송, Shift+Enter 줄바꿈)"
+            placeholder="메시지 입력 (Enter 전송 · Shift+Enter 줄바꿈 · ? 단축키)"
             rows={2}
             maxLength={8000}
           />

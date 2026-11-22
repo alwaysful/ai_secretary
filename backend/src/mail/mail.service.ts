@@ -65,6 +65,12 @@ export class MailService {
       .slice(0, opts.top);
   }
 
+  /** 받은편지함 안 읽은 메일 수 (Graph 폴더 집계값) */
+  async unreadCount(signal?: AbortSignal): Promise<number> {
+    const f = await this.graph<{ unreadItemCount?: number }>('/me/mailFolders/inbox?$select=unreadItemCount', {}, signal);
+    return f.unreadItemCount ?? 0;
+  }
+
   async get(id: string, signal?: AbortSignal): Promise<MailDetail> {
     const qs = query({ $select: `${SUMMARY_FIELDS},body` });
     const m = await this.graph<GraphMessage>(

@@ -91,4 +91,11 @@ describe('MailService', () => {
     fetchMock.mockResolvedValueOnce(new Response('', { status: 503 }));
     await expect(svc.get('abcdefgh')).rejects.toMatchObject({ code: 'UPSTREAM' });
   });
+
+  it('unreadCount: 받은편지함 집계값', async () => {
+    fetchMock.mockResolvedValue(json({ unreadItemCount: 7 }));
+    const { svc } = make();
+    expect(await svc.unreadCount()).toBe(7);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/me/mailFolders/inbox?$select=unreadItemCount');
+  });
 });

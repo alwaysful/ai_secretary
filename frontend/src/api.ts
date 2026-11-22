@@ -201,6 +201,8 @@ export const api = {
   deleteAllMemories: () => req<{ deleted: number }>('/memories?confirm=all', { method: 'DELETE' }),
   confirmAction: (id: string) => req<{ subject?: string; content?: string; deleted?: string }>(`/actions/${id}/confirm`, { method: 'POST' }),
   cancelAction: (id: string) => req<void>(`/actions/${id}`, { method: 'DELETE' }),
+  today: () => req<CalendarEvent[]>('/calendar/today'),
+  unreadCount: () => req<{ count: number }>('/mail/unread-count'),
   events: (days: number) => req<CalendarEvent[]>(`/calendar/events?days=${days}`),
 };
 
