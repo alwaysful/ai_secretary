@@ -53,6 +53,17 @@ export class EnvVars {
   @Type(() => Number) @IsInt() @Min(200) @Max(20_000)
   MAIL_BODY_MAX_CHARS: number = 4000;
 
+  /** Google 캘린더·Tasks 연동 (OAuth 데스크톱 클라이언트). 비우면 비활성. */
+  @Transform(emptyToUndefined) @IsOptional() @IsString()
+  GOOGLE_CLIENT_ID?: string;
+
+  @Transform(emptyToUndefined) @IsOptional() @IsString()
+  GOOGLE_CLIENT_SECRET?: string;
+
+  /** 기본: http://127.0.0.1:{PORT}/google/auth/callback */
+  @Transform(emptyToUndefined) @IsOptional() @IsUrl({ require_tld: false, require_protocol: true })
+  GOOGLE_REDIRECT_URI?: string;
+
   /** 대화 중 메일 요청 시 기본으로 읽을 메일 수 */
   @Type(() => Number) @IsInt() @Min(1) @Max(10)
   MAIL_CONTEXT_COUNT: number = 5;
@@ -69,6 +80,9 @@ export function validateEnv(raw: Record<string, unknown>): EnvVars {
   }
   if (env.MS_CLIENT_ID && !env.TOKEN_ENC_KEY) {
     throw new Error('Invalid environment: TOKEN_ENC_KEY is required when MS_CLIENT_ID is set');
+  }
+  if (env.GOOGLE_CLIENT_ID && (!env.GOOGLE_CLIENT_SECRET || !env.TOKEN_ENC_KEY)) {
+    throw new Error('Invalid environment: GOOGLE_CLIENT_SECRET and TOKEN_ENC_KEY are required when GOOGLE_CLIENT_ID is set');
   }
   try {
     new Intl.DateTimeFormat('en', { timeZone: env.TIMEZONE });

@@ -1,10 +1,11 @@
 import type { CalendarEvent } from '../calendar/calendar.types';
 import type { EventDraft } from '../calendar/event-parser';
+import type { TaskDraft } from '../google/google-tasks.service';
 
 /** 사용자 확인을 기다리는 쓰기 작업. 확인 버튼(POST /actions/:id/confirm)으로만 실행된다. */
 export interface PendingAction {
   id: string;
-  kind: 'calendar.create' | 'calendar.update' | 'memory.create' | 'memory.delete';
+  kind: 'calendar.create' | 'calendar.update' | 'tasks.create' | 'memory.create' | 'memory.delete';
   conversationId: string | null;
   /** 화면 표시용 한 줄 요약 */
   summary: string;
@@ -12,6 +13,10 @@ export interface PendingAction {
   draft?: EventDraft;
   eventId?: string;
   before?: CalendarEvent;
+  /** 저장할 캘린더 (calendar.create) */
+  target?: 'outlook' | 'google';
+  /** 할 일 (tasks.create) */
+  task?: TaskDraft;
   /** 기억 (memory.*) */
   memory?: { id?: string; content: string; category?: string | null };
   expiresAt: string;

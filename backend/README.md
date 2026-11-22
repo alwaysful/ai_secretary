@@ -41,6 +41,13 @@ npm test    # pretest에서 prisma generate 실행
 | DELETE | /mail/auth | 연동 해제, 저장 토큰 삭제 |
 | GET | /mail/messages?top=&unreadOnly= | 받은편지함 목록 |
 | GET | /mail/messages/:id | 본문(텍스트) |
+| GET | /google/auth/status | Google 연동 상태 |
+| POST | /google/auth/start | 동의 화면 URL `{url}` |
+| GET | /google/auth/callback | OAuth 리디렉션 (브라우저) |
+| DELETE | /google/auth | 연동 해제, 토큰 폐기 |
+| GET | /google/tasks | 미완료 할 일 |
+| POST | /google/tasks/:id/complete | 할 일 완료 |
+| GET | /calendar/events?days= | Outlook + Google 일정 |
 
 ## 메모리
 
@@ -64,3 +71,13 @@ npm test    # pretest에서 prisma generate 실행
 3. `npx prisma migrate dev --name mail_account`
 4. `POST /mail/auth/start` → 응답의 `verificationUri`에서 `userCode` 입력.
 5. `GET /mail/auth/status`로 `connected: true` 확인.
+
+## Google 캘린더·Tasks
+
+- 설정 절차: 루트 README "10. Google 캘린더·할 일 연동".
+- 인증: OAuth 2.0 + PKCE, 루프백 리디렉션 (`/google/auth/callback`). Google device flow는 캘린더·Tasks 범위 미지원이라 사용 안 함.
+- 범위: `calendar.events`, `tasks`, `openid email`.
+- 토큰 저장: `MailAccount(provider=google)`, AES-256-GCM. 마이그레이션 불필요.
+- `CalendarHub`: Outlook·Google 일정 병합. 한쪽 실패 시 나머지만 반환. 생성은 Google 우선, 수정은 일정의 `source`로.
+- 쓰기(일정 생성·수정, 할 일 추가)는 기존과 같이 확인 대기 → 사용자 확인 후 실행.
+- Google 리마인더는 공개 API 없음 → Google Tasks 사용.

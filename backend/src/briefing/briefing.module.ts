@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { GoogleModule } from '../google/google.module';
 import { ModelsModule } from '../ai/models/models.module';
 import { CalendarModule } from '../calendar/calendar.module';
 import { MailModule } from '../mail/mail.module';
@@ -8,7 +9,7 @@ import { BriefingController } from './briefing.controller';
 import { BriefingService } from './briefing.service';
 
 @Module({
-  imports: [ModelsModule, CalendarModule, MailModule, SettingsModule, MemoryModule],
+  imports: [ModelsModule, CalendarModule, GoogleModule, MailModule, SettingsModule, MemoryModule],
   controllers: [BriefingController],
   providers: [BriefingService],
 })

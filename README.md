@@ -182,7 +182,42 @@ curl -X POST http://127.0.0.1:3000/mail/auth/start
 
 `TOKEN_ENC_KEY` 분실·변경 시 재로그인 필요.
 
-## 10. 테스트
+## 10. Google 캘린더·할 일 연동 (선택)
+
+Google 리마인더는 공개 API 없음 → **Google Tasks(할 일)** 로 대체. Tasks는 Google 캘린더 앱·Gmail 사이드바에도 표시됨.
+
+1. https://console.cloud.google.com 접속 → 프로젝트 생성.
+2. "API 및 서비스 > 라이브러리"에서 **Google Calendar API**, **Google Tasks API** 사용 설정.
+3. "OAuth 동의 화면"(Google 인증 플랫폼)
+   - 사용자 유형: 외부
+   - 앱 이름·이메일 입력
+   - 데이터 액세스(범위): `.../auth/calendar.events`, `.../auth/tasks` 추가
+   - 대상(테스트 사용자): 본인 Gmail 추가. 게시 상태는 "테스트" 유지 가능.
+4. "사용자 인증 정보 > 사용자 인증 정보 만들기 > OAuth 클라이언트 ID"
+   - 애플리케이션 유형: **데스크톱 앱**
+   - 생성 후 클라이언트 ID, 클라이언트 보안 비밀번호 복사.
+5. `backend/.env`에 입력. `TOKEN_ENC_KEY`는 9번과 같은 키 (없으면 9번 2단계로 생성).
+
+```
+GOOGLE_CLIENT_ID=<클라이언트 ID>
+GOOGLE_CLIENT_SECRET=<클라이언트 보안 비밀번호>
+TOKEN_ENC_KEY=<64자리 키>
+```
+
+6. 서버 재시작 → 채팅 화면 사이드바 **"Google 캘린더·할 일 연결"** 클릭 → 새 창에서 로그인·허용 → "연결 완료" 확인.
+   - "확인되지 않은 앱" 경고: 테스트 모드라 정상. "고급 > (앱 이름)(으)로 이동".
+   - 리디렉션 주소 기본값 `http://127.0.0.1:3000/google/auth/callback` (데스크톱 앱 유형은 별도 등록 불필요). 포트 변경 시 자동 반영. 다른 주소 필요 시 `GOOGLE_REDIRECT_URI`.
+7. 사용 예
+   - "이번 주 일정 알려줘" → Outlook + Google 일정 합쳐서 조회
+   - "내일 3시 회의 잡아" → 확인 버튼 → Google 캘린더에 저장 (Google 연결 시 Google 우선, 아니면 Outlook)
+   - "할 일 뭐 있어?" → Google Tasks 미완료 목록
+   - "내일 우유 사기 할 일 추가해줘" / "리마인더에 약 먹기 등록" → 확인 버튼 → Google Tasks에 저장
+   - "내 일정" 화면: 일정 출처 표시 + 할 일 목록(체크 시 완료 처리)
+   - 아침 브리핑: 오늘까지 마감인 할 일 포함
+
+`GOOGLE_CLIENT_ID` 비우면 기능 비활성.
+
+## 11. 테스트
 
 ```bash
 npm test

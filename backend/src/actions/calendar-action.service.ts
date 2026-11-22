@@ -1,13 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { GoneException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { CalendarService } from '../calendar/calendar.service';
+import { CalendarHub } from '../calendar/calendar-hub.service';
 import { CalendarEvent } from '../calendar/calendar.types';
 import { EventDraft, isWriteIntent, parseEventCommand, UpdateChange } from '../calendar/event-parser';
+import { isTaskWriteIntent, parseTaskCommand } from '../calendar/task-parser';
 import { addDays, localIso, localNow, parseLocalIso, shortLabel, startOfLocalDay } from '../calendar/tz';
 import { escapeTags } from '../common/text';
 import { EnvVars } from '../config/env';
-import { MailAuthService } from '../mail/mail-auth.service';
+import { GoogleAuthService } from '../google/google-auth.service';
+import { GoogleTasksService, TaskItem } from '../google/google-tasks.service';
 import { MailError } from '../mail/mail.errors';
 import { ActionPlan, PendingAction } from './pending-action';
 
@@ -32,8 +34,9 @@ export class CalendarActionService {
   private readonly pending = new Map<string, PendingAction>();
 
   constructor(
-    private readonly calendar: CalendarService,
-    private readonly auth: MailAuthService,
+    private readonly calendar: CalendarHub,
+    private readonly tasks: GoogleTasksService,
+    private readonly googleAuth: GoogleAuthService,
     private readonly config: ConfigService<EnvVars, true>,
   ) {}
 
@@ -43,10 +46,11 @@ export class CalendarActionService {
     signal?: AbortSignal,
     now: Date = new Date(),
   ): Promise<ActionPlan | null> {
+    if (isTaskWriteIntent(text)) return this.planTask(text, conversationId, now);
     if (!isWriteIntent(text)) return null;
     const wrap = (body: string) => `<calendar-action>\n${body}\n</calendar-action>`;
-    if (!this.auth.configured) {
-      return { context: wrap('Outlook 설정 없음. 일정 등록 불가. 사용자에게 backend/README.md 설정을 안내한다.') };
+    if (!this.calendar.configured) {
+      return { context: wrap('캘린더 설정 없음. 일정 등록 불가. 사용자에게 backend/README.md 설정(Outlook 또는 Google)을 안내한다.') };
     }
     const tz = this.config.get('TIMEZONE', { infer: true });
     const cmd = parseEventCommand(text, localNow(now, tz));
@@ -56,14 +60,20 @@ export class CalendarActionService {
 
     let action: PendingAction;
     if (cmd.kind === 'create') {
-      action = this.store({ kind: 'calendar.create', conversationId, summary: `등록: ${describe(cmd.draft)}`, draft: cmd.draft }, now);
+      const target = await this.calendar.writeTarget().catch(() => null);
+      if (!target) return { context: wrap('연결된 캘린더 없음. 사용자에게 Outlook 또는 Google 연결을 안내한다.') };
+      const where = target === 'google' ? 'Google' : 'Outlook';
+      action = this.store(
+        { kind: 'calendar.create', conversationId, summary: `등록(${where}): ${describe(cmd.draft)}`, draft: cmd.draft, target },
+        now,
+      );
     } else {
       const start = startOfLocalDay(cmd.match.from.y, cmd.match.from.m, cmd.match.from.d, tz);
       let events: CalendarEvent[];
       try {
         events = await this.calendar.between(start, new Date(start.getTime() + cmd.match.days * DAY), signal);
       } catch (e) {
-        if (e instanceof MailError) return { context: wrap(`일정 조회 실패 (${e.code}). Outlook 재로그인이 필요할 수 있다고 안내한다.`) };
+        if (e instanceof MailError) return { context: wrap(`일정 조회 실패 (${e.code}). Outlook/Google 재연결이 필요할 수 있다고 안내한다.`) };
         throw e;
       }
       const hits = this.findTargets(events, cmd.match.subject, cmd.match.time);
@@ -100,12 +110,13 @@ export class CalendarActionService {
     return this.pending.has(id);
   }
 
-  async confirm(id: string, signal?: AbortSignal): Promise<CalendarEvent> {
+  async confirm(id: string, signal?: AbortSignal): Promise<CalendarEvent | TaskItem> {
     const a = this.take(id);
     try {
+      if (a.kind === 'tasks.create') return await this.tasks.create(a.task!, signal);
       return a.kind === 'calendar.create'
-        ? await this.calendar.create(a.draft!, signal)
-        : await this.calendar.update(a.eventId!, a.draft!, signal);
+        ? await this.calendar.create(a.draft!, signal, a.target)
+        : await this.calendar.update(a.eventId!, a.draft!, signal, a.before?.source);
     } catch (e) {
       // 실패하면 다시 시도할 수 있게 되돌려 놓는다
       this.pending.set(a.id, a);
@@ -117,10 +128,26 @@ export class CalendarActionService {
     this.take(id);
   }
 
+  private planTask(text: string, conversationId: string | null, now: Date): ActionPlan {
+    const wrap = (body: string) => `<task-action>\n${body}\n</task-action>`;
+    if (!this.googleAuth.configured) {
+      return { context: wrap('Google 설정 없음. 할 일 등록 불가. 사용자에게 backend/README.md "Google 연동"을 안내한다.') };
+    }
+    const cmd = parseTaskCommand(text, localNow(now, this.config.get('TIMEZONE', { infer: true })));
+    if (cmd.kind === 'unclear') return { context: wrap(`할 일 요청을 해석하지 못함: ${cmd.reason}. 무엇을 등록할지 다시 물어본다.`) };
+    const due = cmd.due ? ` (마감 ${shortLabel(`${cmd.due}T00:00`, false)})` : '';
+    const action = this.store(
+      { kind: 'tasks.create', conversationId, summary: `할 일: ${cmd.title}${due}`, task: { title: cmd.title, due: cmd.due } },
+      now,
+    );
+    return { action, context: wrap(this.pendingText(action)) };
+  }
+
   private pendingText(a: PendingAction): string {
+    const where = a.kind === 'tasks.create' ? 'Google Tasks' : '캘린더';
     return [
       `[확인 대기] ${escapeTags(a.summary)}`,
-      '아직 Outlook에 저장되지 않았다. 사용자가 화면의 "확인" 버튼을 눌러야 저장된다.',
+      `아직 ${where}에 저장되지 않았다. 사용자가 화면의 "확인" 버튼을 눌러야 저장된다.`,
       '내용(날짜·시간·제목)을 한 줄로 보여주고 확인 버튼을 눌러 달라고 짧게 안내한다. 이미 등록했다고 말하지 않는다.',
     ].join('\n');
   }

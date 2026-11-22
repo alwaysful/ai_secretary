@@ -4,8 +4,8 @@ import { Markdown } from '../../shared/Markdown';
 import { diagnoseError, NoticeBox, PHASE_TEXT } from '../../shared/Notice';
 
 const SRC_ERROR: Record<string, string> = {
-  NOT_CONFIGURED: 'Outlook 미설정',
-  NOT_CONNECTED: 'Outlook 미연결 (메일 화면에서 로그인)',
+  NOT_CONFIGURED: '미설정 (backend/README.md 참고)',
+  NOT_CONNECTED: '미연결 (채팅 화면 사이드바에서 Outlook/Google 연결)',
 };
 
 export function Briefing(props: { onBack: () => void }) {
@@ -100,6 +100,20 @@ export function Briefing(props: { onBack: () => void }) {
                 </div>
               ))}
             </section>
+            {(!!data.tasks?.length || !!data.errors.tasks) && (
+              <section className="card">
+                <h2>할 일 {data.errors.tasks ? '' : `(${data.tasks?.length ?? 0})`}</h2>
+                {data.errors.tasks && <p className="error">{SRC_ERROR[data.errors.tasks] ?? data.errors.tasks}</p>}
+                {data.tasks?.map((t) => (
+                  <div key={t.id} className="row">
+                    <time>{t.due ? (t.due < data.date ? `⚠ ${t.due.slice(5)}` : '오늘') : '—'}</time>
+                    <div>
+                      <strong>{t.title}</strong>
+                    </div>
+                  </div>
+                ))}
+              </section>
+            )}
             <section className="card">
               <h2>중요·안 읽은 메일 {data.errors.mail ? '' : `(${data.mails.length})`}</h2>
               {data.errors.mail && <p className="error">{SRC_ERROR[data.errors.mail] ?? data.errors.mail}</p>}
