@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { ApiError, BriefingData, streamBriefing, StreamPhase } from './api';
-import { Markdown } from './Markdown';
-import { diagnoseError, NoticeBox, PHASE_TEXT } from './Notice';
+import { ApiError, BriefingData, streamBriefing, StreamPhase } from '../../shared/api';
+import { Markdown } from '../../shared/Markdown';
+import { diagnoseError, NoticeBox, PHASE_TEXT } from '../../shared/Notice';
 
 const SRC_ERROR: Record<string, string> = {
   NOT_CONFIGURED: 'Outlook 미설정',

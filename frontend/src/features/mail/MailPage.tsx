@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, MailStatus, MailSummary } from './api';
+import { api, MailStatus, MailSummary } from '../../shared/api';
 import { MailPanel } from './MailPanel';
 
 export function MailPage(props: { onBack: () => void }) {

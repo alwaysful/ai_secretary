@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, ApiError, Settings } from './api';
+import { api, ApiError, Settings } from '../../shared/api';
 
 export function SettingsPage(props: { onBack: () => void }) {
   const [settings, setSettings] = useState<Settings | null>(null);

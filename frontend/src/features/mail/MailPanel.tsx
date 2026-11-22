@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, DeviceLogin, MailStatus } from './api';
+import { api, DeviceLogin, MailStatus } from '../../shared/api';
 
 /** Outlook 연동 상태. device code 로그인 중에는 3초마다 상태를 확인한다. */
 export function MailPanel() {

@@ -141,3 +141,7 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# 공부 집중 MediaPipe 모델 (npm run models 로 받음)
+frontend/public/models/*
+!frontend/public/models/.gitkeep
