@@ -1,15 +1,15 @@
 import { lazy, Suspense, useState } from 'react';
-import { Briefing } from './Briefing';
-import { Chat } from './Chat';
+import { Briefing } from '../features/briefing/Briefing';
+import { Chat } from '../features/chat/Chat';
 import { Lobby } from './Lobby';
-import { MailPage } from './MailPage';
-import { MemoryPage } from './MemoryPage';
-import { Schedule } from './Schedule';
-import { SettingsPage } from './SettingsPage';
+import { MailPage } from '../features/mail/MailPage';
+import { MemoryPage } from '../features/memory/MemoryPage';
+import { Schedule } from '../features/schedule/Schedule';
+import { SettingsPage } from '../features/settings/SettingsPage';
 import { ShortcutHelp, useGlobalShortcuts } from './Shortcuts';
 
 /** 공부 집중: mediapipe 포함, 필요할 때만 로드 */
-const StudyPage = lazy(() => import('./study/pages/StudyView').then((m) => ({ default: m.StudyPage })));
+const StudyPage = lazy(() => import('../features/study/pages/StudyView').then((m) => ({ default: m.StudyPage })));
 
 export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study';
 

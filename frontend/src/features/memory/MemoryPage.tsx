@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, Memory } from './api';
+import { api, Memory } from '../../shared/api';
 
 const fmt = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'short', timeStyle: 'short' });
 

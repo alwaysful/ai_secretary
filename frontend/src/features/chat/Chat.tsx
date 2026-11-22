@@ -11,13 +11,13 @@ import {
   streamMessage,
   streamRegenerate,
   StreamPhase,
-} from './api';
-import { CopyButton } from './CopyButton';
-import { MailPanel } from './MailPanel';
-import { isTyping } from './Shortcuts';
-import { ThemeButton } from './theme';
-import { Markdown } from './Markdown';
-import { diagnoseError, diagnoseHealth, Diagnosis, NoticeBox, PHASE_TEXT } from './Notice';
+} from '../../shared/api';
+import { CopyButton } from '../../shared/CopyButton';
+import { MailPanel } from '../mail/MailPanel';
+import { isTyping } from '../../app/Shortcuts';
+import { ThemeButton } from '../../shared/theme';
+import { Markdown } from '../../shared/Markdown';
+import { diagnoseError, diagnoseHealth, Diagnosis, NoticeBox, PHASE_TEXT } from '../../shared/Notice';
 
 const tmpId = () => `tmp-${crypto.randomUUID()}`;
 const label = (c: Conversation) => c.title || '새 대화';

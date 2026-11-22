@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { PageId } from './App';
-import { api, ApiError, CalendarEvent, Health } from './api';
-import { ThemeButton } from './theme';
+import { api, ApiError, CalendarEvent, Health } from '../shared/api';
+import { ThemeButton } from '../shared/theme';
 
 interface Item {
   id: PageId | null;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { PageId } from './App';
-import { cycleTheme } from './theme';
+import { cycleTheme } from '../shared/theme';
 
 export const PAGE_KEYS: [string, PageId, string][] = [
   ['1', 'lobby', '로비'],

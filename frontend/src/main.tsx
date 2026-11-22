@@ -1,8 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { App } from './App';
-import './styles.css';
-import { applyTheme } from './theme';
+import { App } from './app/App';
+import './app/styles.css';
+import { applyTheme } from './shared/theme';
 
 applyTheme();
 

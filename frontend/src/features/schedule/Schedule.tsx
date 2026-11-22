@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, CalendarEvent } from './api';
+import { api, CalendarEvent } from '../../shared/api';
 
 const RANGES = [1, 7, 14, 31];
 const DAY = ['일', '월', '화', '수', '목', '금', '토'];
