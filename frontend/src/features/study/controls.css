@@ -1,0 +1,62 @@
+/* 공부 집중 화면용 버튼·폼 (soulsoulsoul 전역 스타일 대체) */
+.analysis-layout,
+.study {
+  --radius: 10px;
+}
+
+.analysis-layout {
+  padding: 16px;
+}
+
+.analysis-layout .row {
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.btn {
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text, inherit);
+  font: inherit;
+  cursor: pointer;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn-danger {
+  border-color: #d93025;
+  background: #d93025;
+  color: #fff;
+}
+
+.btn-ghost {
+  background: transparent;
+}
+
+.analysis-layout .form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.analysis-layout input {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+}

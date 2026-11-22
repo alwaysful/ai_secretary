@@ -1,7 +1,7 @@
 import { FilesetResolver } from '@mediapipe/tasks-vision';
 
-const WASM_URL =
-  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+// node_modules의 wasm을 vite가 /mediapipe-wasm 으로 제공 (CDN 불필요)
+const WASM_URL = '/mediapipe-wasm';
 
 let fileset: ReturnType<typeof FilesetResolver.forVisionTasks> | null = null;
 

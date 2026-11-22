@@ -18,6 +18,7 @@ import { pickQuitMessage } from '../lib/quitMessages';
 import '../analysis.css';
 import '../study.css';
 import '../study-analysis.css';
+import '../controls.css';
 
 const JOINTS: Record<number, string> = {
   0: '코',
