@@ -18,6 +18,7 @@ const MAIN: Item[] = [
   { id: 'study', icon: '📚', label: '공부 집중', hint: '웹캠·화면 감시' },
   { id: 'memory', icon: '🧠', label: '기억 관리', hint: '장기 기억' },
   { id: 'settings', icon: '⚙️', label: '설정', hint: '모델·시스템 프롬프트' },
+  { id: 'models', icon: '⬇️', label: '다른 모델 다운로드 하러 가기', hint: 'Ollama' },
 ];
 
 const SOON: Item[] = [

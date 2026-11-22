@@ -3,6 +3,7 @@ import { Briefing } from '../features/briefing/Briefing';
 import { Chat } from '../features/chat/Chat';
 import { Lobby } from './Lobby';
 import { MailPage } from '../features/mail/MailPage';
+import { ModelsPage } from '../features/models/ModelsPage';
 import { MemoryPage } from '../features/memory/MemoryPage';
 import { Schedule } from '../features/schedule/Schedule';
 import { SettingsPage } from '../features/settings/SettingsPage';
@@ -11,7 +12,7 @@ import { ShortcutHelp, useGlobalShortcuts } from './Shortcuts';
 /** 공부 집중: mediapipe 포함, 필요할 때만 로드 */
 const StudyPage = lazy(() => import('../features/study/pages/StudyView').then((m) => ({ default: m.StudyPage })));
 
-export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study';
+export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study' | 'models';
 
 function Page(props: { page: PageId; go: (p: PageId) => void }) {
   const { page, go } = props;
@@ -22,7 +23,9 @@ function Page(props: { page: PageId; go: (p: PageId) => void }) {
     case 'memory':
       return <MemoryPage onBack={back} />;
     case 'settings':
-      return <SettingsPage onBack={back} />;
+      return <SettingsPage onBack={back} onModels={() => go('models')} />;
+    case 'models':
+      return <ModelsPage onBack={back} onSettings={() => go('settings')} />;
     case 'briefing':
       return <Briefing onBack={back} />;
     case 'schedule':

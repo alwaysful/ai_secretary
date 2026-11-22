@@ -122,6 +122,36 @@ export interface MailSummary {
   important?: boolean;
 }
 
+export interface HubModel {
+  name: string;
+  family: string;
+  sizeGb: number;
+  ramGb: number;
+  tags: string[];
+  quality: number;
+  speed: number;
+  desc: string;
+  installed: boolean;
+  bytes?: number;
+}
+
+export interface PullJob {
+  name: string;
+  status: 'pulling' | 'done' | 'error' | 'canceled';
+  phase: string;
+  completed: number;
+  total: number;
+  error?: string;
+}
+
+export interface ModelHub {
+  reachable: boolean;
+  current: string;
+  items: HubModel[];
+  others: { name: string; bytes: number }[];
+  jobs: PullJob[];
+}
+
 const BASE = '/api';
 
 export class ApiError extends Error {
@@ -203,6 +233,11 @@ export const api = {
   cancelAction: (id: string) => req<void>(`/actions/${id}`, { method: 'DELETE' }),
   today: () => req<CalendarEvent[]>('/calendar/today'),
   unreadCount: () => req<{ count: number }>('/mail/unread-count'),
+  modelHub: () => req<ModelHub>('/model-hub'),
+  pullJobs: () => req<PullJob[]>('/model-hub/jobs'),
+  pullModel: (name: string) => req<PullJob>('/model-hub/pull', { method: 'POST', body: JSON.stringify({ name }) }),
+  cancelPull: (name: string) => req<void>(`/model-hub/pull/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+  deleteModel: (name: string) => req<void>(`/model-hub/models/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   events: (days: number) => req<CalendarEvent[]>(`/calendar/events?days=${days}`),
 };
 
