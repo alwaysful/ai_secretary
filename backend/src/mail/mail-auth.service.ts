@@ -8,7 +8,8 @@ import { DeviceLogin, MailAuthStatus } from './mail.types';
 
 const PROVIDER = 'outlook';
 /** 읽기 전용 권한만 요청한다. 전송·삭제·수정 권한은 요청하지 않는다. */
-const SCOPES = 'offline_access User.Read Mail.Read Calendars.Read';
+/** Calendars.ReadWrite: 채팅 일정 생성·수정 (사용자 확인 후). 범위가 바뀌면 재로그인 필요. */
+const SCOPES = 'offline_access User.Read Mail.Read Calendars.ReadWrite';
 const DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code';
 const HTTP_TIMEOUT_MS = 15_000;
 const EXPIRY_SKEW_MS = 60_000;

@@ -12,24 +12,33 @@ import { MessageRole } from '@prisma/client';
 import { BaseModel, ChatMessage, ModelError } from '../ai/models/base-model';
 import { ToolContextProvider } from '../ai/tools/tool';
 import { describeError } from '../common/errors';
-import { Mutex } from '../common/mutex';
+import { inferenceMutex } from '../common/mutex';
+import { CalendarActionService, PendingAction } from '../actions/calendar-action.service';
+import { SettingsService } from '../settings/settings.service';
 import { EnvVars } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** tools: 도구 조회, queued: 다른 응답 대기, loading: 모델 메모리 적재, generating: 생성 중 */
 export type StreamPhase = 'tools' | 'queued' | 'loading' | 'generating';
-type StatusFn = (phase: StreamPhase) => void;
+export interface StreamHooks {
+  signal?: AbortSignal;
+  onStatus?: (phase: StreamPhase) => void;
+  /** 사용자 확인이 필요한 작업 (일정 등록 등) */
+  onAction?: (action: PendingAction) => void;
+}
 
 @Injectable()
 export class ConversationService {
   /** 한 번에 하나의 추론만 실행 (16GB RAM 제약) */
-  private readonly mutex = new Mutex();
+  private readonly mutex = inferenceMutex;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly model: BaseModel,
     private readonly config: ConfigService<EnvVars, true>,
     private readonly tools: ToolContextProvider,
+    private readonly settings: SettingsService,
+    private readonly actions: CalendarActionService,
   ) {}
 
   create(title?: string) {
@@ -73,7 +82,9 @@ export class ConversationService {
 
   async postMessage(id: string, content: string) {
     await this.assertExists(id);
-    const extra = await this.tools.contextFor(content); // 모델 슬롯을 잡기 전에 외부 I/O 수행
+    // 모델 슬롯을 잡기 전에 외부 I/O 수행
+    const [read, plan] = await Promise.all([this.tools.contextFor(content), this.actions.plan(content, id)]);
+    const extra = [read, plan?.context].filter(Boolean).join('\n') || null;
     const release = await this.mutex.acquire();
     try {
       const { userMessage, messages } = await this.prepare(id, content, extra);
@@ -94,30 +105,30 @@ export class ConversationService {
           durationMs: result.durationMs,
         },
       });
-      return { userMessage, assistantMessage };
+      return { userMessage, assistantMessage, action: plan?.action ?? null };
     } finally {
       release();
     }
   }
 
   /** 토큰 스트림. 종료(취소 포함) 시 누적된 응답을 저장한다. */
-  async *stream(id: string, content: string, signal?: AbortSignal, onStatus?: StatusFn): AsyncGenerator<string> {
+  async *stream(id: string, content: string, signal?: AbortSignal, hooks: StreamHooks = {}): AsyncGenerator<string> {
     await this.assertExists(id);
-    yield* this.run(id, content, signal, onStatus, async () => {
+    yield* this.run(id, content, signal, hooks, async () => {
       await this.prisma.message.create({ data: { conversationId: id, role: MessageRole.USER, content } });
     });
   }
 
   /** 마지막 사용자 메시지에 대한 응답을 다시 생성한다. 이전 응답은 삭제. */
-  async *regenerate(id: string, signal?: AbortSignal, onStatus?: StatusFn): AsyncGenerator<string> {
+  async *regenerate(id: string, signal?: AbortSignal, hooks: StreamHooks = {}): AsyncGenerator<string> {
     const last = await this.lastUserMessage(id);
-    yield* this.run(id, last.content, signal, onStatus, () => this.dropAfter(id, last.createdAt));
+    yield* this.run(id, last.content, signal, hooks, () => this.dropAfter(id, last.createdAt));
   }
 
   /** 마지막 사용자 메시지를 수정하고 응답을 다시 생성한다. */
-  async *editLast(id: string, content: string, signal?: AbortSignal, onStatus?: StatusFn): AsyncGenerator<string> {
+  async *editLast(id: string, content: string, signal?: AbortSignal, hooks: StreamHooks = {}): AsyncGenerator<string> {
     const last = await this.lastUserMessage(id);
-    yield* this.run(id, content, signal, onStatus, async () => {
+    yield* this.run(id, content, signal, hooks, async () => {
       await this.prisma.message.update({ where: { id: last.id }, data: { content } });
       await this.dropAfter(id, last.createdAt);
     });
@@ -142,11 +153,17 @@ export class ConversationService {
     id: string,
     userText: string,
     signal: AbortSignal | undefined,
-    onStatus: StatusFn | undefined,
+    hooks: StreamHooks,
     mutate: () => Promise<void>,
   ): AsyncGenerator<string> {
+    const { onStatus } = hooks;
     onStatus?.('tools');
-    const extra = await this.tools.contextFor(userText, signal);
+    const [read, plan] = await Promise.all([
+      this.tools.contextFor(userText, signal),
+      this.actions.plan(userText, id, signal),
+    ]);
+    if (plan?.action) hooks.onAction?.(plan.action);
+    const extra = [read, plan?.context].filter(Boolean).join('\n') || null;
     onStatus?.('queued');
     const release = await this.mutex.acquire();
     try {
@@ -177,6 +194,7 @@ export class ConversationService {
               content: full,
               model: this.model.name,
               durationMs: Date.now() - started,
+              stopped: Boolean(signal?.aborted),
             },
           });
         }
@@ -203,7 +221,7 @@ export class ConversationService {
     const history: ChatMessage[] = recent
       .reverse()
       .map((m) => ({ role: m.role.toLowerCase() as ChatMessage['role'], content: m.content }));
-    const system = [this.config.get('SYSTEM_PROMPT', { infer: true }), extra].filter(Boolean).join('\n\n');
+    const system = [this.settings.systemPrompt(), extra].filter(Boolean).join('\n\n');
     return system ? [{ role: 'system', content: system }, ...history] : history;
   }
 

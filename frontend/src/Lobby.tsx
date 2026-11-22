@@ -10,9 +10,11 @@ interface Item {
 }
 
 const MAIN: Item[] = [
+  { id: 'briefing', icon: '☀️', label: '아침 브리핑', hint: '오늘 일정·중요 메일' },
   { id: 'schedule', icon: '📅', label: '내 일정 보기' },
   { id: 'chat', icon: '💬', label: 'AI 채팅하기' },
   { id: 'mail', icon: '✉️', label: '메일 확인', hint: '읽기 전용' },
+  { id: 'settings', icon: '⚙️', label: '설정', hint: '모델·시스템 프롬프트' },
 ];
 
 const SOON: Item[] = [

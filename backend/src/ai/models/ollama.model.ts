@@ -33,7 +33,7 @@ function stripThink(text: string): string {
 }
 
 export class OllamaModel extends BaseModel implements OnModuleDestroy {
-  readonly name: string;
+  private _name: string;
   private readonly log = new Logger(OllamaModel.name);
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
@@ -41,9 +41,13 @@ export class OllamaModel extends BaseModel implements OnModuleDestroy {
 
   constructor(private readonly opts: OllamaOptions) {
     super();
-    this.name = opts.model;
+    this._name = opts.model;
     this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
     this.fetchFn = opts.fetchImpl ?? fetch;
+  }
+
+  get name(): string {
+    return this._name;
   }
 
   get state(): ModelState {
@@ -134,6 +138,23 @@ export class OllamaModel extends BaseModel implements OnModuleDestroy {
     } finally {
       reader.cancel().catch(() => undefined);
     }
+  }
+
+  async listModels(): Promise<string[]> {
+    const res = await this.request('/api/tags', { method: 'GET' }, undefined, 5_000);
+    const body = (await this.readJson(res)) as { models?: { name: string }[] };
+    return (body.models ?? []).map((m) => m.name).sort();
+  }
+
+  async switchTo(name: string): Promise<void> {
+    if (name === this._name || name === `${this._name}:latest`) return;
+    const installed = await this.listModels();
+    if (!installed.some((n) => n === name || n === `${name}:latest`)) {
+      throw new ModelError('NOT_FOUND', `model not pulled: ${name}`);
+    }
+    await this.unload().catch((e: Error) => this.log.warn(`unload failed: ${e.message}`));
+    this._name = name;
+    this._state = 'unloaded';
   }
 
   /** /api/tags(설치), /api/ps(메모리 적재)로 상태 점검. 실패해도 throw 하지 않는다. */

@@ -35,7 +35,16 @@ function setup() {
     get: (k: string) => ({ HISTORY_LIMIT: 20, SYSTEM_PROMPT: 'sys' })[k as 'HISTORY_LIMIT'],
   };
   const tools = { contextFor: jest.fn().mockResolvedValue(null) };
-  return { prisma, model, stored, tools, service: new ConversationService(prisma, model, config, tools) };
+  const settings: any = { systemPrompt: () => 'sys' };
+  const actions: any = { plan: jest.fn().mockResolvedValue(null) };
+  return {
+    prisma,
+    model,
+    stored,
+    tools,
+    actions,
+    service: new ConversationService(prisma, model, config, tools, settings, actions),
+  };
 }
 
 describe('ConversationService', () => {
@@ -124,7 +133,7 @@ describe('ConversationService', () => {
       yield 'a';
     });
     const phases: string[] = [];
-    for await (const _ of service.stream('c1', 'hi', undefined, (p) => phases.push(p))) void _;
+    for await (const _ of service.stream('c1', 'hi', undefined, { onStatus: (p) => phases.push(p) })) void _;
     expect(phases).toEqual(['tools', 'queued', 'generating']);
   });
 
@@ -156,5 +165,34 @@ describe('ConversationService', () => {
   it('regenerate: 사용자 메시지 없으면 400', async () => {
     const { service } = setup();
     await expect(service.regenerate('c1').next()).rejects.toThrow('no user message');
+  });
+
+  it('stream: 일정 쓰기 요청은 확인 대기 작업으로 전달, 컨텍스트 병합', async () => {
+    const { service, model, actions } = setup();
+    const action = { id: 'a1', summary: '등록: 회의' };
+    actions.plan.mockResolvedValue({ context: 'PLAN', action });
+    model.stream.mockImplementation(async function* () {
+      yield 'ok';
+    });
+    const got: unknown[] = [];
+    for await (const _ of service.stream('c1', '내일 3시 회의 잡아', undefined, { onAction: (a) => got.push(a) })) void _;
+    expect(got).toEqual([action]);
+    expect(model.stream.mock.calls[0][0].messages[0].content).toBe('sys\n\nPLAN');
+  });
+
+  it('stream: 중단 시 부분 응답을 stopped=true 로 저장', async () => {
+    const { service, model, stored } = setup();
+    const ac = new AbortController();
+    model.stream.mockImplementation(async function* () {
+      yield 'part';
+      ac.abort();
+      throw new ModelError('ABORTED', 'aborted');
+    });
+    await expect(
+      (async () => {
+        for await (const _ of service.stream('c1', 'hi', ac.signal)) void _;
+      })(),
+    ).rejects.toBeTruthy();
+    expect(stored[1]).toMatchObject({ role: 'ASSISTANT', content: 'part', stopped: true });
   });
 });

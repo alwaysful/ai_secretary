@@ -5,6 +5,7 @@ import {
   Conversation,
   Health,
   Message,
+  PendingAction,
   StreamHandlers,
   streamEditLast,
   streamMessage,
@@ -21,7 +22,7 @@ const label = (c: Conversation) => c.title || '새 대화';
 
 type Retry = () => Promise<void>;
 
-export function Chat(props: { onBack: () => void }) {
+export function Chat(props: { onBack: () => void; onSettings: () => void }) {
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [query, setQuery] = useState('');
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -36,6 +37,9 @@ export function Chat(props: { onBack: () => void }) {
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  const [actions, setActions] = useState<PendingAction[]>([]);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [info, setInfo] = useState('');
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const loadSeq = useRef(0);
@@ -85,6 +89,16 @@ export function Chat(props: { onBack: () => void }) {
     bottomRef.current?.scrollIntoView({ block: 'end' });
   }, [messages, phase]);
 
+  // Esc: 생성 중단
+  useEffect(() => {
+    if (!busy) return;
+    const onEsc = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') abortRef.current?.abort();
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [busy]);
+
   // 응답 대기 시간 표시
   useEffect(() => {
     if (!busy) return setElapsed(0);
@@ -112,10 +126,13 @@ export function Chat(props: { onBack: () => void }) {
     setError(null);
     setMenu(false);
     setEditing(null);
+    setInfo('');
+    setActions([]);
     ++loadSeq.current;
     if (!id) return setMessages([]);
     try {
       await refresh(id);
+      setActions(await api.actions(id).catch(() => []));
     } catch (e) {
       showError(e, () => open(id));
     }
@@ -141,6 +158,7 @@ export function Chat(props: { onBack: () => void }) {
           onToken: (t) =>
             setMessages((prev) => prev.map((m) => (m.id === aiId ? { ...m, content: m.content + t } : m))),
           onStatus: setPhase,
+          onAction: (a) => setActions((prev) => [...prev.filter((x) => x.id !== a.id), a]),
         },
         ac.signal,
       );
@@ -254,6 +272,24 @@ export function Chat(props: { onBack: () => void }) {
     }
   };
 
+  const decide = async (a: PendingAction, ok: boolean) => {
+    setActionBusy(a.id);
+    try {
+      if (ok) {
+        const ev = await api.confirmAction(a.id);
+        setInfo(`${a.kind === 'calendar.create' ? '등록' : '변경'} 완료: ${ev.subject}`);
+      } else {
+        await api.cancelAction(a.id);
+      }
+      setActions((prev) => prev.filter((x) => x.id !== a.id));
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) setActions((prev) => prev.filter((x) => x.id !== a.id));
+      showError(e);
+    } finally {
+      setActionBusy(null);
+    }
+  };
+
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -326,6 +362,9 @@ export function Chat(props: { onBack: () => void }) {
           {convs.length === 0 && <p className="muted">{query ? '검색 결과 없음' : '대화 없음'}</p>}
         </nav>
         <MailPanel />
+        <button className="ghost" onClick={props.onSettings}>
+          ⚙ 설정 (모델·프롬프트)
+        </button>
         <div className="status" role="status" title={status.hint}>
           <span className={`dot ${status.level === 'ok' ? 'ok' : status.level === 'down' ? 'down' : 'warn'}`} />
           {healthLoaded ? status.title : '상태 확인 중…'}
@@ -347,7 +386,7 @@ export function Chat(props: { onBack: () => void }) {
           {messages.length === 0 && (
             <div className="empty">
               <p>무엇을 도와줄까요?</p>
-              <p className="muted">예: &quot;안 읽은 메일 3통 요약해줘&quot;, &quot;내일 일정 알려줘&quot;</p>
+              <p className="muted">예: &quot;안 읽은 메일 3통 요약해줘&quot;, &quot;내일 일정 알려줘&quot;, &quot;내일 3시 회의 잡아&quot;</p>
             </div>
           )}
           {messages.map((m, i) => {
@@ -371,7 +410,15 @@ export function Chat(props: { onBack: () => void }) {
                     </div>
                   ) : null}
                   {streamingThis && m.content && phase === 'generating' && <span className="caret" aria-hidden />}
+                  {m.stopped && !streamingThis && <span className="stopped-tag">중단됨</span>}
                 </div>
+                {streamingThis && (
+                  <div className="msg-acts">
+                    <button className="tool stop" onClick={() => abortRef.current?.abort()} title="Esc">
+                      ■ 생성 중단 (Esc)
+                    </button>
+                  </div>
+                )}
                 {!streamingThis && m.content && (
                   <div className="msg-acts">
                     <CopyButton text={m.content} />
@@ -400,6 +447,26 @@ export function Chat(props: { onBack: () => void }) {
           <div ref={bottomRef} />
         </div>
 
+        {actions.length > 0 && (
+          <div className="actions" aria-label="확인 대기">
+            {actions.map((a) => (
+              <div key={a.id} className="action-card">
+                <div className="action-body">
+                  <strong>{a.kind === 'calendar.create' ? '📅 일정 등록 확인' : '📅 일정 변경 확인'}</strong>
+                  <span>{a.summary.replace(/^(등록|변경): /, '')}</span>
+                </div>
+                <button className="ghost" disabled={actionBusy === a.id} onClick={() => void decide(a, false)}>
+                  취소
+                </button>
+                <button className="primary" disabled={actionBusy === a.id} onClick={() => void decide(a, true)}>
+                  {actionBusy === a.id ? '처리 중…' : 'Outlook에 저장'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {info && <NoticeBox d={{ level: 'info', title: info, hint: '' }} onClose={() => setInfo('')} />}
+
         {error && (
           <NoticeBox
             d={error.d}
@@ -426,8 +493,8 @@ export function Chat(props: { onBack: () => void }) {
             maxLength={8000}
           />
           {busy ? (
-            <button className="primary" onClick={() => abortRef.current?.abort()}>
-              중지
+            <button className="primary danger" onClick={() => abortRef.current?.abort()} title="Esc">
+              ■ 중지
             </button>
           ) : (
             <button className="primary" onClick={() => void send()} disabled={!input.trim()}>

@@ -40,7 +40,7 @@ describe('MailService', () => {
     const out = await svc.list({ top: 5, unreadOnly: true });
 
     expect(out).toEqual([
-      { id: 'a', subject: 'S1', from: 'Kim <k@x.com>', receivedAt: '2026-11-22T05:03:00Z', isRead: false, preview: 'hi' },
+      { id: 'a', subject: 'S1', from: 'Kim <k@x.com>', receivedAt: '2026-11-22T05:03:00Z', isRead: false, preview: 'hi', important: false },
     ]);
     const [url, init] = fetchMock.mock.calls[0] as [string, any];
     expect(url).toContain('https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?');

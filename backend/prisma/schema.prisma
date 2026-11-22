@@ -31,6 +31,8 @@ model Message {
   promptTokens     Int?
   completionTokens Int?
   durationMs       Int?
+  /// 사용자가 생성을 중단한 응답
+  stopped          Boolean      @default(false)
   createdAt        DateTime     @default(now())
 
   @@index([conversationId, createdAt])
@@ -44,4 +46,12 @@ model MailAccount {
   refreshTokenEnc String
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+/// 앱 설정 (단일 행 id=1). null 이면 .env 기본값 사용.
+model AppSettings {
+  id           Int      @id @default(1)
+  model        String?
+  systemPrompt String?
+  updatedAt    DateTime @updatedAt
 }

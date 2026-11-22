@@ -69,3 +69,12 @@ export class PrismaErrorFilter implements ExceptionFilter {
     res.status(500).json({ statusCode: 500, code: 'INTERNAL', message: 'internal error' });
   }
 }
+
+/** REST 경로에서 새어 나온 ModelError → 503 + 코드 */
+@Catch(ModelError)
+export class ModelErrorFilter implements ExceptionFilter {
+  catch(e: ModelError, host: ArgumentsHost): void {
+    const { code, message, status } = describeError(e);
+    host.switchToHttp().getResponse<Response>().status(status).json({ statusCode: status, code, message });
+  }
+}
