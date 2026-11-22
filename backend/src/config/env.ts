@@ -19,6 +19,10 @@ export class EnvVars {
   @IsString()
   OLLAMA_MODEL: string = 'qwen3:4b';
 
+  /** 공부 집중: 화면 분석용 비전 모델 */
+  @IsString()
+  STUDY_VISION_MODEL: string = 'gemma4:12b';
+
   @IsString()
   OLLAMA_KEEP_ALIVE: string = '5m';
 

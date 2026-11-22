@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Briefing } from './Briefing';
 import { Chat } from './Chat';
 import { Lobby } from './Lobby';
@@ -8,7 +8,10 @@ import { Schedule } from './Schedule';
 import { SettingsPage } from './SettingsPage';
 import { ShortcutHelp, useGlobalShortcuts } from './Shortcuts';
 
-export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory';
+/** 공부 집중: mediapipe 포함, 필요할 때만 로드 */
+const StudyPage = lazy(() => import('./study/pages/StudyView').then((m) => ({ default: m.StudyPage })));
+
+export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study';
 
 function Page(props: { page: PageId; go: (p: PageId) => void }) {
   const { page, go } = props;
@@ -24,6 +27,12 @@ function Page(props: { page: PageId; go: (p: PageId) => void }) {
       return <Briefing onBack={back} />;
     case 'schedule':
       return <Schedule onBack={back} />;
+    case 'study':
+      return (
+        <Suspense fallback={null}>
+          <StudyPage onBack={back} />
+        </Suspense>
+      );
     case 'mail':
       return <MailPage onBack={back} />;
     default:

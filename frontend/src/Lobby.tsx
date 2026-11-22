@@ -15,6 +15,7 @@ const MAIN: Item[] = [
   { id: 'schedule', icon: '📅', label: '내 일정 보기' },
   { id: 'chat', icon: '💬', label: 'AI 채팅하기' },
   { id: 'mail', icon: '✉️', label: '메일 확인', hint: '읽기 전용' },
+  { id: 'study', icon: '📚', label: '공부 집중', hint: '웹캠·화면 감시' },
   { id: 'memory', icon: '🧠', label: '기억 관리', hint: '장기 기억' },
   { id: 'settings', icon: '⚙️', label: '설정', hint: '모델·시스템 프롬프트' },
 ];
