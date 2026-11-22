@@ -27,10 +27,14 @@ export class CalendarService {
     private readonly config: ConfigService<EnvVars, true>,
   ) {}
 
-  async upcoming(days: number, signal?: AbortSignal, now: Date = new Date()): Promise<CalendarEvent[]> {
-    const end = new Date(now.getTime() + days * 86_400_000);
+  upcoming(days: number, signal?: AbortSignal, now: Date = new Date()): Promise<CalendarEvent[]> {
+    return this.between(now, new Date(now.getTime() + days * 86_400_000), signal);
+  }
+
+  /** [start, end) 구간 일정 */
+  async between(start: Date, end: Date, signal?: AbortSignal): Promise<CalendarEvent[]> {
     const qs = new URLSearchParams({
-      startDateTime: now.toISOString(),
+      startDateTime: start.toISOString(),
       endDateTime: end.toISOString(),
       $select: 'id,subject,start,end,isAllDay,location',
       $orderby: 'start/dateTime',

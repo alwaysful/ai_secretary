@@ -3,7 +3,7 @@ import { TOOL_PREAMBLE, ToolRegistry } from '../../src/ai/tools/tool-registry.se
 
 function make(tool: Partial<{ matches: (t: string) => boolean; run: jest.Mock }>) {
   const fake: any = { name: 'fake', readOnly: true, matches: () => true, run: jest.fn(), ...tool };
-  return { fake, registry: new ToolRegistry(fake) };
+  return { fake, registry: new ToolRegistry(fake, { name: "outlook-calendar", matches: () => false } as any) };
 }
 
 describe('ToolRegistry', () => {
