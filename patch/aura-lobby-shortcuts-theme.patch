@@ -1,0 +1,715 @@
+From 64ea8c13ce7475341922ec3664e465a21b285752 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 22:13:52 +0000
+Subject: [PATCH] =?UTF-8?q?feat:=20=EB=A1=9C=EB=B9=84=20=EC=9C=84=EC=A0=AF?=
+ =?UTF-8?q?(=EC=98=A4=EB=8A=98=20=EC=9D=BC=EC=A0=95=C2=B7=EC=95=88=20?=
+ =?UTF-8?q?=EC=9D=BD=EC=9D=80=20=EB=A9=94=EC=9D=BC=20=EC=88=98),=20?=
+ =?UTF-8?q?=EB=8B=A8=EC=B6=95=ED=82=A4,=20=EB=8B=A4=ED=81=AC=20=EB=AA=A8?=
+ =?UTF-8?q?=EB=93=9C=20=EC=88=98=EB=8F=99=20=EC=A0=84=ED=99=98?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- GET /calendar/today, GET /mail/unread-count
+- 단축키: Alt+1~7 화면 이동, Ctrl+Shift+L 테마, ?·Ctrl+/ 도움말, 채팅 Ctrl+K·Ctrl+Shift+O·Alt+R·/·↑
+- 테마: 시스템/라이트/다크 (localStorage 저장, data-theme)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01GJ1batpDGs9b3kpkRfZj3Z
+---
+ backend/src/calendar/calendar.controller.ts |   5 +
+ backend/src/calendar/calendar.service.ts    |   8 ++
+ backend/src/mail/mail.controller.ts         |   5 +
+ backend/src/mail/mail.service.ts            |   6 +
+ backend/test/unit/mail.service.spec.ts      |   7 ++
+ frontend/src/App.tsx                        |  25 +++--
+ frontend/src/Chat.tsx                       |  56 +++++++++-
+ frontend/src/Lobby.tsx                      |  91 ++++++++++++++-
+ frontend/src/Shortcuts.tsx                  | 118 ++++++++++++++++++++
+ frontend/src/api.ts                         |   2 +
+ frontend/src/main.tsx                       |   3 +
+ frontend/src/styles.css                     |  48 +++++++-
+ frontend/src/theme.tsx                      |  65 +++++++++++
+ 13 files changed, 422 insertions(+), 17 deletions(-)
+ create mode 100644 frontend/src/Shortcuts.tsx
+ create mode 100644 frontend/src/theme.tsx
+
+diff --git a/backend/src/calendar/calendar.controller.ts b/backend/src/calendar/calendar.controller.ts
+index ec66650..af47005 100644
+--- a/backend/src/calendar/calendar.controller.ts
++++ b/backend/src/calendar/calendar.controller.ts
+@@ -16,6 +16,11 @@ export class UpcomingQueryDto {
+ export class CalendarController {
+   constructor(private readonly calendar: CalendarService) {}
+ 
++  @Get('today')
++  today() {
++    return this.calendar.today();
++  }
++
+   @Get('events')
+   events(@Query() q: UpcomingQueryDto) {
+     return this.calendar.upcoming(q.days);
+diff --git a/backend/src/calendar/calendar.service.ts b/backend/src/calendar/calendar.service.ts
+index 380cd3e..3cf3765 100644
+--- a/backend/src/calendar/calendar.service.ts
++++ b/backend/src/calendar/calendar.service.ts
+@@ -6,6 +6,7 @@ import { MailAuthService } from '../mail/mail-auth.service';
+ import { MailError } from '../mail/mail.errors';
+ import { CalendarEvent } from './calendar.types';
+ import { EventDraft } from './event-parser';
++import { localNow, startOfLocalDay } from './tz';
+ 
+ const GRAPH = 'https://graph.microsoft.com/v1.0';
+ const HTTP_TIMEOUT_MS = 15_000;
+@@ -43,6 +44,13 @@ export class CalendarService {
+     return this.between(now, new Date(now.getTime() + days * 86_400_000), signal);
+   }
+ 
++  /** TIMEZONE 기준 오늘 하루 일정 */
++  today(signal?: AbortSignal, now: Date = new Date()): Promise<CalendarEvent[]> {
++    const tz = this.config.get('TIMEZONE', { infer: true });
++    const t = localNow(now, tz);
++    return this.between(startOfLocalDay(t.y, t.m, t.d, tz), startOfLocalDay(t.y, t.m, t.d + 1, tz), signal);
++  }
++
+   /** [start, end) 구간 일정 */
+   async between(start: Date, end: Date, signal?: AbortSignal): Promise<CalendarEvent[]> {
+     const qs = new URLSearchParams({
+diff --git a/backend/src/mail/mail.controller.ts b/backend/src/mail/mail.controller.ts
+index d26b6f3..00df1ff 100644
+--- a/backend/src/mail/mail.controller.ts
++++ b/backend/src/mail/mail.controller.ts
+@@ -33,6 +33,11 @@ export class MailController {
+     private readonly mail: MailService,
+   ) {}
+ 
++  @Get('unread-count')
++  async unreadCount() {
++    return { count: await this.mail.unreadCount() };
++  }
++
+   @Get('auth/status')
+   status() {
+     return this.auth.status();
+diff --git a/backend/src/mail/mail.service.ts b/backend/src/mail/mail.service.ts
+index b49d382..8c5b31b 100644
+--- a/backend/src/mail/mail.service.ts
++++ b/backend/src/mail/mail.service.ts
+@@ -65,6 +65,12 @@ export class MailService {
+       .slice(0, opts.top);
+   }
+ 
++  /** 받은편지함 안 읽은 메일 수 (Graph 폴더 집계값) */
++  async unreadCount(signal?: AbortSignal): Promise<number> {
++    const f = await this.graph<{ unreadItemCount?: number }>('/me/mailFolders/inbox?$select=unreadItemCount', {}, signal);
++    return f.unreadItemCount ?? 0;
++  }
++
+   async get(id: string, signal?: AbortSignal): Promise<MailDetail> {
+     const qs = query({ $select: `${SUMMARY_FIELDS},body` });
+     const m = await this.graph<GraphMessage>(
+diff --git a/backend/test/unit/mail.service.spec.ts b/backend/test/unit/mail.service.spec.ts
+index a79ca51..3b559b8 100644
+--- a/backend/test/unit/mail.service.spec.ts
++++ b/backend/test/unit/mail.service.spec.ts
+@@ -91,4 +91,11 @@ describe('MailService', () => {
+     fetchMock.mockResolvedValueOnce(new Response('', { status: 503 }));
+     await expect(svc.get('abcdefgh')).rejects.toMatchObject({ code: 'UPSTREAM' });
+   });
++
++  it('unreadCount: 받은편지함 집계값', async () => {
++    fetchMock.mockResolvedValue(json({ unreadItemCount: 7 }));
++    const { svc } = make();
++    expect(await svc.unreadCount()).toBe(7);
++    expect(String(fetchMock.mock.calls[0][0])).toContain('/me/mailFolders/inbox?$select=unreadItemCount');
++  });
+ });
+diff --git a/frontend/src/App.tsx b/frontend/src/App.tsx
+index 37b26de..6749979 100644
+--- a/frontend/src/App.tsx
++++ b/frontend/src/App.tsx
+@@ -2,20 +2,20 @@ import { useState } from 'react';
+ import { Briefing } from './Briefing';
+ import { Chat } from './Chat';
+ import { Lobby } from './Lobby';
+-import { MemoryPage } from './MemoryPage';
+ import { MailPage } from './MailPage';
++import { MemoryPage } from './MemoryPage';
+ import { Schedule } from './Schedule';
+ import { SettingsPage } from './SettingsPage';
++import { ShortcutHelp, useGlobalShortcuts } from './Shortcuts';
+ 
+ export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory';
+ 
+-export function App() {
+-  const [page, setPage] = useState<PageId>('lobby');
+-  const back = () => setPage('lobby');
+-
++function Page(props: { page: PageId; go: (p: PageId) => void }) {
++  const { page, go } = props;
++  const back = () => go('lobby');
+   switch (page) {
+     case 'chat':
+-      return <Chat onBack={back} onSettings={() => setPage('settings')} onMemory={() => setPage('memory')} />;
++      return <Chat onBack={back} onSettings={() => go('settings')} onMemory={() => go('memory')} />;
+     case 'memory':
+       return <MemoryPage onBack={back} />;
+     case 'settings':
+@@ -27,6 +27,17 @@ export function App() {
+     case 'mail':
+       return <MailPage onBack={back} />;
+     default:
+-      return <Lobby onNavigate={setPage} />;
++      return <Lobby onNavigate={go} />;
+   }
+ }
++
++export function App() {
++  const [page, setPage] = useState<PageId>('lobby');
++  const { help, closeHelp } = useGlobalShortcuts(setPage);
++  return (
++    <>
++      <Page page={page} go={setPage} />
++      {help && <ShortcutHelp onClose={closeHelp} />}
++    </>
++  );
++}
+diff --git a/frontend/src/Chat.tsx b/frontend/src/Chat.tsx
+index b79a768..89cd8a0 100644
+--- a/frontend/src/Chat.tsx
++++ b/frontend/src/Chat.tsx
+@@ -14,6 +14,8 @@ import {
+ } from './api';
+ import { CopyButton } from './CopyButton';
+ import { MailPanel } from './MailPanel';
++import { isTyping } from './Shortcuts';
++import { ThemeButton } from './theme';
+ import { Markdown } from './Markdown';
+ import { diagnoseError, diagnoseHealth, Diagnosis, NoticeBox, PHASE_TEXT } from './Notice';
+ 
+@@ -54,6 +56,8 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
+   const [actionBusy, setActionBusy] = useState<string | null>(null);
+   const [info, setInfo] = useState('');
+   const abortRef = useRef<AbortController | null>(null);
++  const searchRef = useRef<HTMLInputElement>(null);
++  const inputRef = useRef<HTMLTextAreaElement>(null);
+   const bottomRef = useRef<HTMLDivElement>(null);
+   const loadSeq = useRef(0);
+   const warmed = useRef(false);
+@@ -307,9 +311,44 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
+     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+       e.preventDefault();
+       void send();
++      return;
++    }
++    // 빈 입력창에서 ↑: 마지막 메시지 편집
++    if (e.key === 'ArrowUp' && !input && !busy) {
++      const last = [...messages].reverse().find((m) => m.role === 'USER' && !m.id.startsWith('tmp-'));
++      if (last) {
++        e.preventDefault();
++        setEditing(last.id);
++      }
+     }
+   };
+ 
++  // 채팅 단축키: Ctrl+K 검색, Ctrl+Shift+O 새 대화, Alt+R 재생성, / 입력창
++  const keyRef = useRef<(e: globalThis.KeyboardEvent) => void>(() => undefined);
++  keyRef.current = (e) => {
++    const mod = e.ctrlKey || e.metaKey;
++    if (mod && !e.shiftKey && e.code === 'KeyK') {
++      e.preventDefault();
++      setMenu(true);
++      searchRef.current?.focus();
++      searchRef.current?.select();
++    } else if (mod && e.shiftKey && e.code === 'KeyO') {
++      e.preventDefault();
++      void open(null).then(() => inputRef.current?.focus());
++    } else if (e.altKey && !mod && e.code === 'KeyR') {
++      e.preventDefault();
++      if (!busy && messages.length > 0) void regenerate();
++    } else if (e.key === '/' && !mod && !isTyping(e)) {
++      e.preventDefault();
++      inputRef.current?.focus();
++    }
++  };
++  useEffect(() => {
++    const on = (e: globalThis.KeyboardEvent) => keyRef.current(e);
++    window.addEventListener('keydown', on);
++    return () => window.removeEventListener('keydown', on);
++  }, []);
++
+   const status = diagnoseHealth(health);
+   const showStatusBanner = healthLoaded && (status.level === 'down' || status.level === 'warn');
+   const lastUserIdx = messages.map((m) => m.role).lastIndexOf('USER');
+@@ -323,15 +362,16 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
+           ← 로비
+         </button>
+         <div className="brand">AURA</div>
+-        <button className="primary" onClick={() => void open(null)}>
++        <button className="primary" onClick={() => void open(null)} title="Ctrl+Shift+O">
+           새 대화
+         </button>
+         <input
++          ref={searchRef}
+           className="search"
+           type="search"
+           value={query}
+           onChange={(e) => setQuery(e.target.value)}
+-          placeholder="대화 검색 (제목·내용)"
++          placeholder="대화 검색 (Ctrl+K)"
+           aria-label="대화 검색"
+         />
+         <nav className="convs" aria-label="대화 목록">
+@@ -383,9 +423,12 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
+             ⚙ 설정
+           </button>
+         </div>
+-        <div className="status" role="status" title={status.hint}>
+-          <span className={`dot ${status.level === 'ok' ? 'ok' : status.level === 'down' ? 'down' : 'warn'}`} />
+-          {healthLoaded ? status.title : '상태 확인 중…'}
++        <div className="side-foot">
++          <div className="status" role="status" title={status.hint}>
++            <span className={`dot ${status.level === 'ok' ? 'ok' : status.level === 'down' ? 'down' : 'warn'}`} />
++            {healthLoaded ? status.title : '상태 확인 중…'}
++          </div>
++          <ThemeButton />
+         </div>
+       </aside>
+ 
+@@ -503,10 +546,11 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
+ 
+         <div className="composer">
+           <textarea
++            ref={inputRef}
+             value={input}
+             onChange={(e) => setInput(e.target.value)}
+             onKeyDown={onKey}
+-            placeholder="메시지 입력 (Enter 전송, Shift+Enter 줄바꿈)"
++            placeholder="메시지 입력 (Enter 전송 · Shift+Enter 줄바꿈 · ? 단축키)"
+             rows={2}
+             maxLength={8000}
+           />
+diff --git a/frontend/src/Lobby.tsx b/frontend/src/Lobby.tsx
+index 7a4c2a8..46c1a6b 100644
+--- a/frontend/src/Lobby.tsx
++++ b/frontend/src/Lobby.tsx
+@@ -1,6 +1,7 @@
+ import { useEffect, useState } from 'react';
+ import type { PageId } from './App';
+-import { api, Health } from './api';
++import { api, ApiError, CalendarEvent, Health } from './api';
++import { ThemeButton } from './theme';
+ 
+ interface Item {
+   id: PageId | null;
+@@ -10,11 +11,11 @@ interface Item {
+ }
+ 
+ const MAIN: Item[] = [
+-  { id: 'briefing', icon: '☀️', label: '아침 브리핑', hint: '오늘 일정·중요 메일' },
++  { id: 'briefing', icon: '☀️', label: '아침 브리핑', hint: '요약' },
+   { id: 'schedule', icon: '📅', label: '내 일정 보기' },
+   { id: 'chat', icon: '💬', label: 'AI 채팅하기' },
+   { id: 'mail', icon: '✉️', label: '메일 확인', hint: '읽기 전용' },
+-  { id: 'memory', icon: '🧠', label: '기억 관리', hint: 'AI가 기억할 내용' },
++  { id: 'memory', icon: '🧠', label: '기억 관리', hint: '장기 기억' },
+   { id: 'settings', icon: '⚙️', label: '설정', hint: '모델·시스템 프롬프트' },
+ ];
+ 
+@@ -37,6 +38,85 @@ function Links(props: { items: Item[]; onNavigate: (p: PageId) => void }) {
+   );
+ }
+ 
++type Load<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'error'; message: string };
++
++const errText = (e: unknown) =>
++  e instanceof ApiError && e.code === 'BACKEND_DOWN' ? '백엔드 연결 안 됨' : e instanceof Error ? e.message : String(e);
++
++const nowLocal = () => {
++  const d = new Date();
++  const p = (n: number) => String(n).padStart(2, '0');
++  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
++};
++
++/** 오늘 일정·안 읽은 메일 수. 5분마다 갱신 */
++function Widgets(props: { onNavigate: (p: PageId) => void }) {
++  const [events, setEvents] = useState<Load<CalendarEvent[]>>({ state: 'loading' });
++  const [unread, setUnread] = useState<Load<number>>({ state: 'loading' });
++
++  useEffect(() => {
++    const load = () => {
++      api.today().then(
++        (v) => setEvents({ state: 'ok', value: v }),
++        (e: unknown) => setEvents({ state: 'error', message: errText(e) }),
++      );
++      api.unreadCount().then(
++        (v) => setUnread({ state: 'ok', value: v.count }),
++        (e: unknown) => setUnread({ state: 'error', message: errText(e) }),
++      );
++    };
++    load();
++    const t = setInterval(load, 5 * 60_000);
++    return () => clearInterval(t);
++  }, []);
++
++  const now = nowLocal();
++  return (
++    <div className="widgets">
++      <button className="widget" onClick={() => props.onNavigate('schedule')} aria-label="오늘 일정, 일정 화면 열기">
++        <h3>
++          <span>📅 오늘 일정</span>
++          {events.state === 'ok' && <span>{events.value.length}건</span>}
++        </h3>
++        {events.state === 'loading' && <p className="muted">불러오는 중…</p>}
++        {events.state === 'error' && <p className="muted">{events.message}</p>}
++        {events.state === 'ok' && events.value.length === 0 && <p className="muted">오늘 일정 없음</p>}
++        {events.state === 'ok' && events.value.length > 0 && (
++          <ul>
++            {events.value.slice(0, 5).map((e) => {
++              const past = !e.isAllDay && e.end.slice(0, 16) <= now;
++              const live = !e.isAllDay && e.start.slice(0, 16) <= now && now < e.end.slice(0, 16);
++              return (
++                <li key={e.id} className={live ? 'now' : past ? 'past' : ''}>
++                  <time>{e.isAllDay ? '종일' : `${e.start.slice(11, 16)}–${e.end.slice(11, 16)}`}</time>
++                  <span>
++                    {e.subject}
++                    {live && ' · 진행 중'}
++                  </span>
++                </li>
++              );
++            })}
++            {events.value.length > 5 && <li className="muted">외 {events.value.length - 5}건</li>}
++          </ul>
++        )}
++      </button>
++      <button className="widget" onClick={() => props.onNavigate('mail')} aria-label="안 읽은 메일, 메일 화면 열기">
++        <h3>
++          <span>✉️ 안 읽은 메일</span>
++        </h3>
++        {unread.state === 'loading' && <p className="muted">불러오는 중…</p>}
++        {unread.state === 'error' && <p className="muted">{unread.message}</p>}
++        {unread.state === 'ok' && (
++          <div className="big">
++            {unread.value}
++            <small>통</small>
++          </div>
++        )}
++      </button>
++    </div>
++  );
++}
++
+ export function Lobby(props: { onNavigate: (p: PageId) => void }) {
+   const [health, setHealth] = useState<Health | null | undefined>(undefined);
+ 
+@@ -66,8 +146,13 @@ export function Lobby(props: { onNavigate: (p: PageId) => void }) {
+             {status}
+           </span>
+           <span>{today}</span>
++          <ThemeButton />
++          <span className="muted">
++            단축키 <kbd>?</kbd>
++          </span>
+         </div>
+         <h1 className="title">AURA 810</h1>
++        <Widgets onNavigate={props.onNavigate} />
+         <div className="cols">
+           <section>
+             <h2>바로가기</h2>
+diff --git a/frontend/src/Shortcuts.tsx b/frontend/src/Shortcuts.tsx
+new file mode 100644
+index 0000000..8ec6d33
+--- /dev/null
++++ b/frontend/src/Shortcuts.tsx
+@@ -0,0 +1,118 @@
++import { useEffect, useState } from 'react';
++import type { PageId } from './App';
++import { cycleTheme } from './theme';
++
++export const PAGE_KEYS: [string, PageId, string][] = [
++  ['1', 'lobby', '로비'],
++  ['2', 'chat', 'AI 채팅'],
++  ['3', 'briefing', '아침 브리핑'],
++  ['4', 'schedule', '일정'],
++  ['5', 'mail', '메일'],
++  ['6', 'memory', '기억 관리'],
++  ['7', 'settings', '설정'],
++];
++
++/** 입력 중인지 (단일 키 단축키는 입력 중에 무시) */
++export function isTyping(e: KeyboardEvent): boolean {
++  const t = e.target as HTMLElement | null;
++  return !!t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
++}
++
++/** 앱 전역 단축키: Alt+숫자 이동, Ctrl+Shift+L 테마, ? 도움말 */
++export function useGlobalShortcuts(navigate: (p: PageId) => void) {
++  const [help, setHelp] = useState(false);
++  useEffect(() => {
++    const on = (e: KeyboardEvent) => {
++      if (e.altKey && !e.ctrlKey && !e.metaKey) {
++        const hit = PAGE_KEYS.find(([k]) => e.code === `Digit${k}`);
++        if (hit) {
++          e.preventDefault();
++          navigate(hit[1]);
++          return;
++        }
++      }
++      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyL') {
++        e.preventDefault();
++        cycleTheme();
++        return;
++      }
++      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
++        e.preventDefault();
++        setHelp((v) => !v);
++        return;
++      }
++      if (e.key === '?' && !isTyping(e)) {
++        e.preventDefault();
++        setHelp(true);
++      }
++      if (e.key === 'Escape') setHelp(false);
++    };
++    window.addEventListener('keydown', on);
++    return () => window.removeEventListener('keydown', on);
++  }, [navigate]);
++  return { help, closeHelp: () => setHelp(false) };
++}
++
++const CHAT_KEYS: [string, string][] = [
++  ['Enter', '보내기'],
++  ['Shift+Enter', '줄바꿈'],
++  ['Esc', '응답 생성 중단'],
++  ['Ctrl+K', '대화 검색'],
++  ['Ctrl+Shift+O', '새 대화'],
++  ['Alt+R', '마지막 응답 재생성'],
++  ['↑ (빈 입력창)', '마지막 메시지 편집'],
++  ['/', '입력창으로 이동'],
++];
++
++export function ShortcutHelp(props: { onClose: () => void }) {
++  return (
++    <div className="overlay" onClick={props.onClose} role="presentation">
++      <div className="dialog" role="dialog" aria-modal="true" aria-label="단축키" onClick={(e) => e.stopPropagation()}>
++        <h2>
++          단축키
++          <button className="ghost" onClick={props.onClose} aria-label="닫기">
++            ✕
++          </button>
++        </h2>
++        <table className="keys">
++          <tbody>
++            <tr className="group">
++              <td colSpan={2}>전체</td>
++            </tr>
++            {PAGE_KEYS.map(([k, , label]) => (
++              <tr key={k}>
++                <td>
++                  <kbd>Alt+{k}</kbd>
++                </td>
++                <td>{label}</td>
++              </tr>
++            ))}
++            <tr>
++              <td>
++                <kbd>Ctrl+Shift+L</kbd>
++              </td>
++              <td>테마 전환 (시스템 → 라이트 → 다크)</td>
++            </tr>
++            <tr>
++              <td>
++                <kbd>?</kbd> / <kbd>Ctrl+/</kbd>
++              </td>
++              <td>이 도움말</td>
++            </tr>
++            <tr className="group">
++              <td colSpan={2}>채팅</td>
++            </tr>
++            {CHAT_KEYS.map(([k, label]) => (
++              <tr key={k}>
++                <td>
++                  <kbd>{k}</kbd>
++                </td>
++                <td>{label}</td>
++              </tr>
++            ))}
++          </tbody>
++        </table>
++      </div>
++    </div>
++  );
++}
+diff --git a/frontend/src/api.ts b/frontend/src/api.ts
+index 4960c17..b9f7677 100644
+--- a/frontend/src/api.ts
++++ b/frontend/src/api.ts
+@@ -201,6 +201,8 @@ export const api = {
+   deleteAllMemories: () => req<{ deleted: number }>('/memories?confirm=all', { method: 'DELETE' }),
+   confirmAction: (id: string) => req<{ subject?: string; content?: string; deleted?: string }>(`/actions/${id}/confirm`, { method: 'POST' }),
+   cancelAction: (id: string) => req<void>(`/actions/${id}`, { method: 'DELETE' }),
++  today: () => req<CalendarEvent[]>('/calendar/today'),
++  unreadCount: () => req<{ count: number }>('/mail/unread-count'),
+   events: (days: number) => req<CalendarEvent[]>(`/calendar/events?days=${days}`),
+ };
+ 
+diff --git a/frontend/src/main.tsx b/frontend/src/main.tsx
+index ed3b67f..af4be91 100644
+--- a/frontend/src/main.tsx
++++ b/frontend/src/main.tsx
+@@ -2,6 +2,9 @@ import { StrictMode } from 'react';
+ import { createRoot } from 'react-dom/client';
+ import { App } from './App';
+ import './styles.css';
++import { applyTheme } from './theme';
++
++applyTheme();
+ 
+ createRoot(document.getElementById('root')!).render(
+   <StrictMode>
+diff --git a/frontend/src/styles.css b/frontend/src/styles.css
+index 7aa1b09..8ae4f02 100644
+--- a/frontend/src/styles.css
++++ b/frontend/src/styles.css
+@@ -14,8 +14,10 @@
+   color-scheme: light dark;
+   font-family: 'Pretendard', 'Noto Sans KR', 'Malgun Gothic', system-ui, sans-serif;
+ }
++/* 테마: data-theme 없으면 시스템 설정, light/dark 면 수동 고정 */
++:root[data-theme='light'] { color-scheme: light; }
+ @media (prefers-color-scheme: dark) {
+-  :root {
++  :root:not([data-theme='light']) {
+     --bg: #10161c;
+     --panel: #18212a;
+     --ink: #e6ecf1;
+@@ -30,6 +32,21 @@
+     --warn: #e5b53b;
+   }
+ }
++:root[data-theme='dark'] {
++  color-scheme: dark;
++  --bg: #10161c;
++  --panel: #18212a;
++  --ink: #e6ecf1;
++  --muted: #8d9ba8;
++  --line: #2a3541;
++  --accent: #4fb8b0;
++  --accent-ink: #08201e;
++  --user: #1c3a3a;
++  --ai: #1e2832;
++  --err: #ff8a80;
++  --ok: #5cc98a;
++  --warn: #e5b53b;
++}
+ * { box-sizing: border-box; }
+ html, body, #root { height: 100%; margin: 0; }
+ body { background: var(--bg); color: var(--ink); font-size: 15px; line-height: 1.55; }
+@@ -219,3 +236,32 @@ code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-weight:
+ .mem-edit { width: 100%; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--accent); border-radius: 6px; padding: 8px 10px; resize: vertical; }
+ .tag { display: inline-block; font-size: 12px; background: var(--user); border-radius: 4px; padding: 0 6px; margin-right: 6px; }
+ .toggle { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; cursor: pointer; }
++
++/* 로비 위젯 */
++.widgets { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin: 0 0 36px; }
++.widget { border: 1px solid var(--line); border-radius: 14px; padding: 18px 22px; display: flex; flex-direction: column; gap: 10px; background: var(--panel); text-align: left; font: inherit; color: inherit; }
++button.widget { cursor: pointer; }
++button.widget:hover { border-color: var(--accent); }
++.widget h3 { margin: 0; font-size: 15px; color: var(--muted); font-weight: 600; display: flex; justify-content: space-between; }
++.widget .big { font-size: 40px; font-weight: 800; line-height: 1; }
++.widget .big small { font-size: 15px; font-weight: 400; color: var(--muted); margin-left: 6px; }
++.widget ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
++.widget li { display: flex; gap: 12px; }
++.widget li time { min-width: 92px; color: var(--muted); font-variant-numeric: tabular-nums; }
++.widget li.past { opacity: 0.5; }
++.widget li.now time { color: var(--accent); font-weight: 700; }
++@media (max-width: 760px) { .widgets { grid-template-columns: 1fr; } }
++
++/* 테마 전환·단축키 */
++.theme-btn { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 13px; color: var(--muted); }
++.theme-btn:hover { color: var(--ink); }
++kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; background: var(--bg); }
++.overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: grid; place-items: center; z-index: 100; padding: 16px; }
++.dialog { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 26px; width: min(520px, 100%); max-height: 90vh; overflow-y: auto; }
++.dialog h2 { margin: 0 0 12px; font-size: 18px; display: flex; justify-content: space-between; align-items: center; }
++.keys { width: 100%; border-collapse: collapse; font-size: 14px; }
++.keys td { padding: 6px 0; border-bottom: 1px solid var(--line); }
++.keys td:first-child { white-space: nowrap; padding-right: 16px; }
++.keys tr.group td { color: var(--muted); font-size: 12px; padding-top: 14px; border-bottom: 0; }
++.side-foot { display: flex; gap: 6px; align-items: center; }
++.side-foot .status { flex: 1; min-width: 0; }
+diff --git a/frontend/src/theme.tsx b/frontend/src/theme.tsx
+new file mode 100644
+index 0000000..583f00a
+--- /dev/null
++++ b/frontend/src/theme.tsx
+@@ -0,0 +1,65 @@
++import { useEffect, useState } from 'react';
++
++export type Theme = 'system' | 'light' | 'dark';
++const KEY = 'aura.theme';
++const EVENT = 'aura-theme';
++const ORDER: Theme[] = ['system', 'light', 'dark'];
++
++export function getTheme(): Theme {
++  try {
++    const v = localStorage.getItem(KEY);
++    return v === 'light' || v === 'dark' ? v : 'system';
++  } catch {
++    return 'system';
++  }
++}
++
++export function applyTheme(t: Theme = getTheme()): void {
++  const root = document.documentElement;
++  if (t === 'system') delete root.dataset.theme;
++  else root.dataset.theme = t;
++}
++
++export function setTheme(t: Theme): void {
++  try {
++    if (t === 'system') localStorage.removeItem(KEY);
++    else localStorage.setItem(KEY, t);
++  } catch {
++    /* 저장 불가 환경: 이번 세션만 적용 */
++  }
++  applyTheme(t);
++  window.dispatchEvent(new CustomEvent(EVENT, { detail: t }));
++}
++
++export function cycleTheme(): Theme {
++  const next = ORDER[(ORDER.indexOf(getCurrent()) + 1) % ORDER.length];
++  setTheme(next);
++  return next;
++}
++
++let current: Theme = getTheme();
++const getCurrent = () => current;
++window.addEventListener(EVENT, (e) => {
++  current = (e as CustomEvent<Theme>).detail;
++});
++
++export const THEME_LABEL: Record<Theme, string> = { system: '🖥 시스템', light: '☀ 라이트', dark: '🌙 다크' };
++
++export function useTheme(): Theme {
++  const [t, setT] = useState<Theme>(getCurrent());
++  useEffect(() => {
++    const on = (e: Event) => setT((e as CustomEvent<Theme>).detail);
++    window.addEventListener(EVENT, on);
++    return () => window.removeEventListener(EVENT, on);
++  }, []);
++  return t;
++}
++
++export function ThemeButton() {
++  const t = useTheme();
++  return (
++    <button className="theme-btn" onClick={() => cycleTheme()} title="테마 전환 (Ctrl+Shift+L)" aria-label={`테마: ${THEME_LABEL[t]}`}>
++      {THEME_LABEL[t]}
++    </button>
++  );
++}
+-- 
+2.43.0
+

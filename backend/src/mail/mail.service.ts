@@ -10,7 +10,7 @@ const GRAPH = 'https://graph.microsoft.com/v1.0';
 const HTTP_TIMEOUT_MS = 15_000;
 /** 안 읽음 필터는 Graph의 정렬 제약 때문에 서버가 아닌 클라이언트에서 한다. */
 const UNREAD_SCAN = 50;
-const SUMMARY_FIELDS = 'id,subject,from,receivedDateTime,isRead,bodyPreview';
+const SUMMARY_FIELDS = 'id,subject,from,receivedDateTime,isRead,bodyPreview,importance,flag';
 
 interface GraphMessage {
   id: string;
@@ -19,6 +19,8 @@ interface GraphMessage {
   receivedDateTime: string;
   isRead?: boolean;
   bodyPreview?: string;
+  importance?: string;
+  flag?: { flagStatus?: string };
   body?: { content?: string };
 }
 
@@ -32,6 +34,7 @@ function toSummary(m: GraphMessage): MailSummary {
     receivedAt: m.receivedDateTime,
     isRead: Boolean(m.isRead),
     preview: cleanText(m.bodyPreview ?? ''),
+    important: m.importance === 'high' || m.flag?.flagStatus === 'flagged',
   };
 }
 
@@ -60,6 +63,12 @@ export class MailService {
       .map(toSummary)
       .filter((m) => !opts.unreadOnly || !m.isRead)
       .slice(0, opts.top);
+  }
+
+  /** 받은편지함 안 읽은 메일 수 (Graph 폴더 집계값) */
+  async unreadCount(signal?: AbortSignal): Promise<number> {
+    const f = await this.graph<{ unreadItemCount?: number }>('/me/mailFolders/inbox?$select=unreadItemCount', {}, signal);
+    return f.unreadItemCount ?? 0;
   }
 
   async get(id: string, signal?: AbortSignal): Promise<MailDetail> {

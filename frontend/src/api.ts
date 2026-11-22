@@ -11,7 +11,53 @@ export interface Message {
   content: string;
   model?: string | null;
   durationMs?: number | null;
+  /** 사용자가 중단한 응답 */
+  stopped?: boolean;
   createdAt: string;
+}
+
+export interface EventDraft {
+  subject: string;
+  start: string;
+  end: string;
+  isAllDay: boolean;
+  location: string;
+}
+
+/** 사용자 확인을 기다리는 작업 (일정 등록·변경) */
+export interface PendingAction {
+  id: string;
+  kind: 'calendar.create' | 'calendar.update' | 'memory.create' | 'memory.delete';
+  conversationId: string | null;
+  summary: string;
+  draft?: EventDraft;
+  memory?: { id?: string; content: string; category?: string | null };
+  eventId?: string;
+  before?: CalendarEvent;
+  expiresAt: string;
+}
+
+export interface Memory {
+  id: string;
+  content: string;
+  category: string | null;
+  enabled: boolean;
+  source: 'manual' | 'chat';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Settings {
+  model: string;
+  systemPrompt: string;
+  defaults: { model: string; systemPrompt: string };
+}
+
+export interface BriefingData {
+  date: string;
+  events: CalendarEvent[];
+  mails: MailSummary[];
+  errors: { calendar?: string; mail?: string };
 }
 
 export interface Health {
@@ -73,6 +119,7 @@ export interface MailSummary {
   receivedAt: string;
   isRead: boolean;
   preview: string;
+  important?: boolean;
 }
 
 const BASE = '/api';
@@ -91,12 +138,20 @@ export class ApiError extends Error {
 const backendDown = () => new ApiError(0, '백엔드 서버에 연결할 수 없음', 'BACKEND_DOWN');
 
 async function failure(res: Response): Promise<ApiError> {
-  const body = (await res.json().catch(() => null)) as { message?: string | string[]; code?: ErrorCode } | null;
+  const body = (await res.json().catch(() => null)) as {
+    message?: string | string[];
+    code?: ErrorCode;
+    /** 메일·일정 오류 코드 (NOT_CONNECTED 등) */
+    error?: string;
+  } | null;
   // Vite 프록시가 백엔드에 못 붙으면 JSON 없는 5xx를 돌려준다
   if (!body && res.status >= 500) return backendDown();
   const m = body?.message;
   const code = body?.code ?? (res.status === 404 ? 'NOT_FOUND' : res.status < 500 ? 'BAD_REQUEST' : 'INTERNAL');
-  return new ApiError(res.status, Array.isArray(m) ? m.join(', ') : (m ?? `HTTP ${res.status}`), code);
+  const text = Array.isArray(m) ? m.join(', ') : (m ?? `HTTP ${res.status}`);
+  if (body?.error === 'NOT_CONNECTED') return new ApiError(res.status, 'Outlook 재로그인 필요 (일정 쓰기 권한 추가됨)', code);
+  if (body?.error === 'NOT_CONFIGURED') return new ApiError(res.status, 'Outlook 설정 없음 (backend/.env)', code);
+  return new ApiError(res.status, text, code);
 }
 
 async function call(path: string, init?: RequestInit): Promise<Response> {
@@ -132,13 +187,35 @@ export const api = {
   mailStart: () => req<DeviceLogin>('/mail/auth/start', { method: 'POST' }),
   mailDisconnect: () => req<void>('/mail/auth', { method: 'DELETE' }),
   mailList: (unreadOnly: boolean) => req<MailSummary[]>(`/mail/messages?top=15&unreadOnly=${unreadOnly}`),
+  settings: () => req<Settings>('/settings'),
+  saveSettings: (s: { model?: string; systemPrompt?: string }) =>
+    req<Settings>('/settings', { method: 'PUT', body: JSON.stringify(s) }),
+  models: () => req<string[]>('/settings/models'),
+  actions: (conversationId: string) => req<PendingAction[]>(`/actions?conversationId=${conversationId}`),
+  memories: (q?: string) => req<Memory[]>(q ? `/memories?q=${encodeURIComponent(q)}` : '/memories'),
+  createMemory: (m: { content: string; category?: string }) =>
+    req<Memory>('/memories', { method: 'POST', body: JSON.stringify(m) }),
+  updateMemory: (id: string, m: { content?: string; category?: string; enabled?: boolean }) =>
+    req<Memory>(`/memories/${id}`, { method: 'PATCH', body: JSON.stringify(m) }),
+  deleteMemory: (id: string) => req<void>(`/memories/${id}`, { method: 'DELETE' }),
+  deleteAllMemories: () => req<{ deleted: number }>('/memories?confirm=all', { method: 'DELETE' }),
+  confirmAction: (id: string) => req<{ subject?: string; content?: string; deleted?: string }>(`/actions/${id}/confirm`, { method: 'POST' }),
+  cancelAction: (id: string) => req<void>(`/actions/${id}`, { method: 'DELETE' }),
+  today: () => req<CalendarEvent[]>('/calendar/today'),
+  unreadCount: () => req<{ count: number }>('/mail/unread-count'),
   events: (days: number) => req<CalendarEvent[]>(`/calendar/events?days=${days}`),
 };
 
 export interface StreamHandlers {
   onToken: (t: string) => void;
   onStatus?: (p: StreamPhase) => void;
+  onAction?: (a: PendingAction) => void;
+  /** 브리핑 원자료 */
+  onData?: (d: BriefingData) => void;
 }
+
+/** 아침 브리핑 (원자료 → 요약 토큰) */
+export const streamBriefing = (h: StreamHandlers, signal: AbortSignal) => streamSse('/briefing/stream', undefined, h, signal);
 
 /** 새 메시지 전송 */
 export const streamMessage = (id: string, content: string, h: StreamHandlers, signal: AbortSignal) =>
@@ -186,9 +263,22 @@ async function streamSse(path: string, body: unknown, h: StreamHandlers, signal:
         else if (line.startsWith('data:')) data += line.slice(5).trim();
       }
       if (!data) continue;
-      const parsed = JSON.parse(data) as { token?: string; message?: string; code?: ErrorCode; phase?: StreamPhase };
+      const parsed = JSON.parse(data) as {
+        token?: string;
+        message?: string;
+        code?: ErrorCode;
+        phase?: StreamPhase;
+      } & Record<string, unknown>;
       if (event === 'error') throw new ApiError(500, parsed.message ?? 'stream error', parsed.code ?? 'INTERNAL');
       if (event === 'done') return;
+      if (event === 'action') {
+        h.onAction?.(parsed as unknown as PendingAction);
+        continue;
+      }
+      if (event === 'data') {
+        h.onData?.(parsed as unknown as BriefingData);
+        continue;
+      }
       if (event === 'status') {
         if (parsed.phase) h.onStatus?.(parsed.phase);
         continue;

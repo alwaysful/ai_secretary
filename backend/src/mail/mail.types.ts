@@ -6,6 +6,8 @@ export interface MailSummary {
   receivedAt: string;
   isRead: boolean;
   preview: string;
+  /** 중요도 높음 또는 플래그 */
+  important: boolean;
 }
 
 export interface MailDetail extends MailSummary {

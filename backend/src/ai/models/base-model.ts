@@ -60,6 +60,16 @@ export abstract class BaseModel {
   abstract stream(request: GenerateRequest): AsyncIterable<string>;
   abstract unload(): Promise<void>;
 
+  /** 설치된 모델 목록 */
+  async listModels(): Promise<string[]> {
+    return [this.name];
+  }
+
+  /** 사용할 모델 변경. 기존 모델은 메모리에서 내린다. */
+  async switchTo(name: string): Promise<void> {
+    if (name !== this.name) throw new ModelError('NOT_FOUND', `model switching not supported: ${name}`);
+  }
+
   /** 상태 점검. 기본 구현은 알 수 없음. */
   async probe(): Promise<ModelProbe> {
     return { reachable: true, installed: null, loaded: null };

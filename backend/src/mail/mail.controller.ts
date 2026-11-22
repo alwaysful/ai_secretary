@@ -33,6 +33,11 @@ export class MailController {
     private readonly mail: MailService,
   ) {}
 
+  @Get('unread-count')
+  async unreadCount() {
+    return { count: await this.mail.unreadCount() };
+  }
+
   @Get('auth/status')
   status() {
     return this.auth.status();

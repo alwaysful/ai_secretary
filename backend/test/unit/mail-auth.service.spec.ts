@@ -67,7 +67,7 @@ describe('MailAuthService', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('startDeviceLogin: 사용자 코드 반환, 읽기 전용 scope 요청', async () => {
+  it('startDeviceLogin: 사용자 코드 반환, 메일은 읽기 전용 scope', async () => {
     fetchMock.mockResolvedValue(
       json({ device_code: 'dc', user_code: 'ABCD-1234', verification_uri: 'https://microsoft.com/devicelogin', expires_in: 900, interval: 5 }),
     );
@@ -80,6 +80,7 @@ describe('MailAuthService', () => {
     const body = String((fetchMock.mock.calls[0] as [string, any])[1].body);
     expect(body).toContain('Mail.Read');
     expect(body).not.toContain('Mail.Send');
-    expect(body).not.toContain('ReadWrite');
+    expect(body).not.toContain('Mail.ReadWrite');
+    expect(body).toContain('Calendars.ReadWrite');
   });
 });

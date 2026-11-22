@@ -6,6 +6,10 @@ import { escapeTags } from '../../common/text';
 import { EnvVars } from '../../config/env';
 import { MailAuthService } from '../../mail/mail-auth.service';
 import { MailError } from '../../mail/mail.errors';
+import { isWriteIntent } from '../../calendar/event-parser';
+import { localParts, startOfLocalDay } from '../../calendar/tz';
+
+export { startOfLocalDay };
 import { ContextTool, ToolError } from './tool';
 
 const CAL_INTENT = /(일정|스케[줄쥴]|캘린더|달력|약속|미팅|회의|calendar|schedule|agenda|meeting)/i;
@@ -42,34 +46,6 @@ export function parseRange(text: string, todayDow: number): DayRange {
   return { label: '앞으로 7일', from: 0, days: 7 };
 }
 
-/** tz 기준 날짜 성분 */
-function localParts(d: Date, tz: string) {
-  const p = Object.fromEntries(
-    new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      hourCycle: 'h23',
-      year: 'numeric',
-      month: 'numeric',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: 'numeric',
-      second: 'numeric',
-    })
-      .formatToParts(d)
-      .filter((x) => x.type !== 'literal')
-      .map((x) => [x.type, Number(x.value)]),
-  ) as Record<'year' | 'month' | 'day' | 'hour' | 'minute' | 'second', number>;
-  return p;
-}
-
-/** tz 기준 y-m-d 00:00 의 UTC 시각 */
-export function startOfLocalDay(y: number, m: number, d: number, tz: string): Date {
-  const guess = Date.UTC(y, m - 1, d);
-  const p = localParts(new Date(guess), tz);
-  const offset = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - guess;
-  return new Date(guess - offset);
-}
-
 /** 채팅에서 일정 관련 질문이 오면 Outlook 일정을 읽어 프롬프트에 주입한다. 읽기 전용. */
 @Injectable()
 export class CalendarTool implements ContextTool {
@@ -82,8 +58,9 @@ export class CalendarTool implements ContextTool {
     private readonly config: ConfigService<EnvVars, true>,
   ) {}
 
+  /** 생성·수정 요청은 CalendarActionService가 처리 */
   matches(text: string): boolean {
-    return CAL_INTENT.test(text);
+    return CAL_INTENT.test(text) && !isWriteIntent(text);
   }
 
   async run(text: string, signal?: AbortSignal, now: Date = new Date()): Promise<string> {

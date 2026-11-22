@@ -40,7 +40,7 @@ describe('MailService', () => {
     const out = await svc.list({ top: 5, unreadOnly: true });
 
     expect(out).toEqual([
-      { id: 'a', subject: 'S1', from: 'Kim <k@x.com>', receivedAt: '2026-11-22T05:03:00Z', isRead: false, preview: 'hi' },
+      { id: 'a', subject: 'S1', from: 'Kim <k@x.com>', receivedAt: '2026-11-22T05:03:00Z', isRead: false, preview: 'hi', important: false },
     ]);
     const [url, init] = fetchMock.mock.calls[0] as [string, any];
     expect(url).toContain('https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?');
@@ -90,5 +90,12 @@ describe('MailService', () => {
     await expect(svc.get('abcdefgh')).rejects.toMatchObject({ code: 'NOT_FOUND' });
     fetchMock.mockResolvedValueOnce(new Response('', { status: 503 }));
     await expect(svc.get('abcdefgh')).rejects.toMatchObject({ code: 'UPSTREAM' });
+  });
+
+  it('unreadCount: 받은편지함 집계값', async () => {
+    fetchMock.mockResolvedValue(json({ unreadItemCount: 7 }));
+    const { svc } = make();
+    expect(await svc.unreadCount()).toBe(7);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/me/mailFolders/inbox?$select=unreadItemCount');
   });
 });

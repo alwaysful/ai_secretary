@@ -10,3 +10,6 @@ export class Mutex {
     return prev.then(() => release);
   }
 }
+
+/** 앱 전체 모델 추론 슬롯 (채팅·브리핑 공용) */
+export const inferenceMutex = new Mutex();

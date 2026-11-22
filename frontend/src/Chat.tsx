@@ -5,6 +5,7 @@ import {
   Conversation,
   Health,
   Message,
+  PendingAction,
   StreamHandlers,
   streamEditLast,
   streamMessage,
@@ -13,6 +14,8 @@ import {
 } from './api';
 import { CopyButton } from './CopyButton';
 import { MailPanel } from './MailPanel';
+import { isTyping } from './Shortcuts';
+import { ThemeButton } from './theme';
 import { Markdown } from './Markdown';
 import { diagnoseError, diagnoseHealth, Diagnosis, NoticeBox, PHASE_TEXT } from './Notice';
 
@@ -21,7 +24,20 @@ const label = (c: Conversation) => c.title || '새 대화';
 
 type Retry = () => Promise<void>;
 
-export function Chat(props: { onBack: () => void }) {
+const ACTION_TITLE: Record<PendingAction['kind'], string> = {
+  'calendar.create': '📅 일정 등록 확인',
+  'calendar.update': '📅 일정 변경 확인',
+  'memory.create': '🧠 기억 추가 확인',
+  'memory.delete': '🧠 기억 삭제 확인',
+};
+const ACTION_OK: Record<PendingAction['kind'], string> = {
+  'calendar.create': 'Outlook에 저장',
+  'calendar.update': 'Outlook에 저장',
+  'memory.create': '기억하기',
+  'memory.delete': '삭제',
+};
+
+export function Chat(props: { onBack: () => void; onSettings: () => void; onMemory: () => void }) {
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [query, setQuery] = useState('');
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -36,7 +52,12 @@ export function Chat(props: { onBack: () => void }) {
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  const [actions, setActions] = useState<PendingAction[]>([]);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [info, setInfo] = useState('');
   const abortRef = useRef<AbortController | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const loadSeq = useRef(0);
   const warmed = useRef(false);
@@ -85,6 +106,16 @@ export function Chat(props: { onBack: () => void }) {
     bottomRef.current?.scrollIntoView({ block: 'end' });
   }, [messages, phase]);
 
+  // Esc: 생성 중단
+  useEffect(() => {
+    if (!busy) return;
+    const onEsc = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') abortRef.current?.abort();
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [busy]);
+
   // 응답 대기 시간 표시
   useEffect(() => {
     if (!busy) return setElapsed(0);
@@ -112,10 +143,13 @@ export function Chat(props: { onBack: () => void }) {
     setError(null);
     setMenu(false);
     setEditing(null);
+    setInfo('');
+    setActions([]);
     ++loadSeq.current;
     if (!id) return setMessages([]);
     try {
       await refresh(id);
+      setActions(await api.actions(id).catch(() => []));
     } catch (e) {
       showError(e, () => open(id));
     }
@@ -141,6 +175,7 @@ export function Chat(props: { onBack: () => void }) {
           onToken: (t) =>
             setMessages((prev) => prev.map((m) => (m.id === aiId ? { ...m, content: m.content + t } : m))),
           onStatus: setPhase,
+          onAction: (a) => setActions((prev) => [...prev.filter((x) => x.id !== a.id), a]),
         },
         ac.signal,
       );
@@ -254,12 +289,65 @@ export function Chat(props: { onBack: () => void }) {
     }
   };
 
+  const decide = async (a: PendingAction, ok: boolean) => {
+    setActionBusy(a.id);
+    try {
+      if (ok) {
+        await api.confirmAction(a.id);
+        setInfo(`${ACTION_TITLE[a.kind].replace(' 확인', '')} 완료: ${a.summary.replace(/^[^:]+: /, '')}`);
+      } else {
+        await api.cancelAction(a.id);
+      }
+      setActions((prev) => prev.filter((x) => x.id !== a.id));
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) setActions((prev) => prev.filter((x) => x.id !== a.id));
+      showError(e);
+    } finally {
+      setActionBusy(null);
+    }
+  };
+
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       void send();
+      return;
+    }
+    // 빈 입력창에서 ↑: 마지막 메시지 편집
+    if (e.key === 'ArrowUp' && !input && !busy) {
+      const last = [...messages].reverse().find((m) => m.role === 'USER' && !m.id.startsWith('tmp-'));
+      if (last) {
+        e.preventDefault();
+        setEditing(last.id);
+      }
     }
   };
+
+  // 채팅 단축키: Ctrl+K 검색, Ctrl+Shift+O 새 대화, Alt+R 재생성, / 입력창
+  const keyRef = useRef<(e: globalThis.KeyboardEvent) => void>(() => undefined);
+  keyRef.current = (e) => {
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && !e.shiftKey && e.code === 'KeyK') {
+      e.preventDefault();
+      setMenu(true);
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    } else if (mod && e.shiftKey && e.code === 'KeyO') {
+      e.preventDefault();
+      void open(null).then(() => inputRef.current?.focus());
+    } else if (e.altKey && !mod && e.code === 'KeyR') {
+      e.preventDefault();
+      if (!busy && messages.length > 0) void regenerate();
+    } else if (e.key === '/' && !mod && !isTyping(e)) {
+      e.preventDefault();
+      inputRef.current?.focus();
+    }
+  };
+  useEffect(() => {
+    const on = (e: globalThis.KeyboardEvent) => keyRef.current(e);
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  }, []);
 
   const status = diagnoseHealth(health);
   const showStatusBanner = healthLoaded && (status.level === 'down' || status.level === 'warn');
@@ -274,15 +362,16 @@ export function Chat(props: { onBack: () => void }) {
           ← 로비
         </button>
         <div className="brand">AURA</div>
-        <button className="primary" onClick={() => void open(null)}>
+        <button className="primary" onClick={() => void open(null)} title="Ctrl+Shift+O">
           새 대화
         </button>
         <input
+          ref={searchRef}
           className="search"
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="대화 검색 (제목·내용)"
+          placeholder="대화 검색 (Ctrl+K)"
           aria-label="대화 검색"
         />
         <nav className="convs" aria-label="대화 목록">
@@ -326,9 +415,20 @@ export function Chat(props: { onBack: () => void }) {
           {convs.length === 0 && <p className="muted">{query ? '검색 결과 없음' : '대화 없음'}</p>}
         </nav>
         <MailPanel />
-        <div className="status" role="status" title={status.hint}>
-          <span className={`dot ${status.level === 'ok' ? 'ok' : status.level === 'down' ? 'down' : 'warn'}`} />
-          {healthLoaded ? status.title : '상태 확인 중…'}
+        <div className="side-links">
+          <button className="ghost" onClick={props.onMemory}>
+            🧠 기억
+          </button>
+          <button className="ghost" onClick={props.onSettings}>
+            ⚙ 설정
+          </button>
+        </div>
+        <div className="side-foot">
+          <div className="status" role="status" title={status.hint}>
+            <span className={`dot ${status.level === 'ok' ? 'ok' : status.level === 'down' ? 'down' : 'warn'}`} />
+            {healthLoaded ? status.title : '상태 확인 중…'}
+          </div>
+          <ThemeButton />
         </div>
       </aside>
 
@@ -347,7 +447,7 @@ export function Chat(props: { onBack: () => void }) {
           {messages.length === 0 && (
             <div className="empty">
               <p>무엇을 도와줄까요?</p>
-              <p className="muted">예: &quot;안 읽은 메일 3통 요약해줘&quot;, &quot;내일 일정 알려줘&quot;</p>
+              <p className="muted">예: &quot;안 읽은 메일 3통 요약해줘&quot;, &quot;내일 일정 알려줘&quot;, &quot;내일 3시 회의 잡아&quot;</p>
             </div>
           )}
           {messages.map((m, i) => {
@@ -371,7 +471,15 @@ export function Chat(props: { onBack: () => void }) {
                     </div>
                   ) : null}
                   {streamingThis && m.content && phase === 'generating' && <span className="caret" aria-hidden />}
+                  {m.stopped && !streamingThis && <span className="stopped-tag">중단됨</span>}
                 </div>
+                {streamingThis && (
+                  <div className="msg-acts">
+                    <button className="tool stop" onClick={() => abortRef.current?.abort()} title="Esc">
+                      ■ 생성 중단 (Esc)
+                    </button>
+                  </div>
+                )}
                 {!streamingThis && m.content && (
                   <div className="msg-acts">
                     <CopyButton text={m.content} />
@@ -400,6 +508,26 @@ export function Chat(props: { onBack: () => void }) {
           <div ref={bottomRef} />
         </div>
 
+        {actions.length > 0 && (
+          <div className="actions" aria-label="확인 대기">
+            {actions.map((a) => (
+              <div key={a.id} className="action-card">
+                <div className="action-body">
+                  <strong>{ACTION_TITLE[a.kind]}</strong>
+                  <span>{a.summary.replace(/^[^:]+: /, '')}</span>
+                </div>
+                <button className="ghost" disabled={actionBusy === a.id} onClick={() => void decide(a, false)}>
+                  취소
+                </button>
+                <button className="primary" disabled={actionBusy === a.id} onClick={() => void decide(a, true)}>
+                  {actionBusy === a.id ? '처리 중…' : ACTION_OK[a.kind]}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {info && <NoticeBox d={{ level: 'info', title: info, hint: '' }} onClose={() => setInfo('')} />}
+
         {error && (
           <NoticeBox
             d={error.d}
@@ -418,16 +546,17 @@ export function Chat(props: { onBack: () => void }) {
 
         <div className="composer">
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKey}
-            placeholder="메시지 입력 (Enter 전송, Shift+Enter 줄바꿈)"
+            placeholder="메시지 입력 (Enter 전송 · Shift+Enter 줄바꿈 · ? 단축키)"
             rows={2}
             maxLength={8000}
           />
           {busy ? (
-            <button className="primary" onClick={() => abortRef.current?.abort()}>
-              중지
+            <button className="primary danger" onClick={() => abortRef.current?.abort()} title="Esc">
+              ■ 중지
             </button>
           ) : (
             <button className="primary" onClick={() => void send()} disabled={!input.trim()}>
