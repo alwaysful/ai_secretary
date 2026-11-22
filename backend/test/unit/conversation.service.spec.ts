@@ -28,7 +28,8 @@ function setup() {
   const config: any = {
     get: (k: string) => ({ HISTORY_LIMIT: 20, SYSTEM_PROMPT: 'sys' })[k as 'HISTORY_LIMIT'],
   };
-  return { prisma, model, stored, service: new ConversationService(prisma, model, config) };
+  const tools = { contextFor: jest.fn().mockResolvedValue(null) };
+  return { prisma, model, stored, tools, service: new ConversationService(prisma, model, config, tools) };
 }
 
 describe('ConversationService', () => {
@@ -85,5 +86,29 @@ describe('ConversationService', () => {
     for await (const t of service.stream('c1', 'hi')) out.push(t);
     expect(out).toEqual(['a', 'b']);
     expect(stored[1]).toMatchObject({ role: 'ASSISTANT', content: 'ab' });
+  });
+
+  it('postMessage: 도구 컨텍스트는 system에 병합, DB에는 저장 안 함', async () => {
+    const { service, model, tools, stored } = setup();
+    tools.contextFor.mockResolvedValue('CTX');
+    model.generate.mockResolvedValue({ content: 'ok', model: 'fake', durationMs: 1 });
+
+    await service.postMessage('c1', '메일 보여줘');
+
+    expect(tools.contextFor).toHaveBeenCalledWith('메일 보여줘');
+    expect(model.generate.mock.calls[0][0].messages[0]).toEqual({ role: 'system', content: 'sys\n\nCTX' });
+    expect(stored.some((m) => String(m.content).includes('CTX'))).toBe(false);
+  });
+
+  it('stream: 도구 컨텍스트에 취소 신호 전달', async () => {
+    const { service, model, tools } = setup();
+    tools.contextFor.mockResolvedValue('CTX');
+    model.stream.mockImplementation(async function* () {
+      yield 'a';
+    });
+    const ac = new AbortController();
+    for await (const _ of service.stream('c1', 'hi', ac.signal)) void _;
+    expect(tools.contextFor).toHaveBeenCalledWith('hi', ac.signal);
+    expect(model.stream.mock.calls[0][0].messages[0].content).toBe('sys\n\nCTX');
   });
 });

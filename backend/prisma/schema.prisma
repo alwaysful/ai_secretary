@@ -35,3 +35,13 @@ model Message {
 
   @@index([conversationId, createdAt])
 }
+
+/// 외부 메일 계정 연동. 리프레시 토큰은 AES-256-GCM으로 암호화해 저장한다.
+model MailAccount {
+  id              String   @id @default(uuid()) @db.Uuid
+  provider        String   @unique
+  email           String?
+  refreshTokenEnc String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}

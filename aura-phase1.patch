@@ -1,0 +1,1201 @@
+diff --git a/backend/.env.example b/backend/.env.example
+new file mode 100644
+index 0000000..b782dee
+--- /dev/null
++++ b/backend/.env.example
+@@ -0,0 +1,18 @@
++# 서버 (기본: 로컬 루프백만 허용)
++PORT=3000
++HOST=127.0.0.1
++
++# PostgreSQL (docker-compose.yml 기본값과 일치)
++DATABASE_URL=postgresql://aura:aura@127.0.0.1:5432/aura?schema=public
++
++# Ollama
++OLLAMA_BASE_URL=http://127.0.0.1:11434
++OLLAMA_MODEL=qwen3:4b
++# 유휴 시 메모리 유지 시간. 0 = 응답 후 즉시 해제
++OLLAMA_KEEP_ALIVE=5m
++# 모델 요청 타임아웃(ms)
++MODEL_TIMEOUT_MS=120000
++
++# 대화 (프롬프트에 포함할 최근 메시지 수)
++HISTORY_LIMIT=20
++# SYSTEM_PROMPT=
+diff --git a/backend/.gitignore b/backend/.gitignore
+new file mode 100644
+index 0000000..a6c6376
+--- /dev/null
++++ b/backend/.gitignore
+@@ -0,0 +1,11 @@
++node_modules/
++dist/
++coverage/
++.env
++.env.*
++!.env.example
++*.log
++*.gguf
++*.safetensors
++*.db
++*.sqlite3
+diff --git a/backend/README.md b/backend/README.md
+new file mode 100644
+index 0000000..844cf10
+--- /dev/null
++++ b/backend/README.md
+@@ -0,0 +1,44 @@
++# AURA backend (Phase 1)
++
++NestJS + Prisma + PostgreSQL + Ollama. 전부 TypeScript.
++
++## 명세서 대비 변경
++
++- FastAPI(Python) → NestJS(TypeScript). 사유: 프로젝트 지침. 단일 언어, Prisma 타입 공유.
++- Python은 미도입. 필요해지면 추론 전용 사이드카로만 추가 (예: 임베딩, llama.cpp 바인딩).
++- 디렉터리: `backend/src/ai/*`에 AI 모듈 배치. 명세서의 `ai/` 최상위 폴더는 미사용.
++
++## 실행
++
++```bash
++cd backend
++cp .env.example .env
++docker compose up -d            # PostgreSQL
++ollama pull qwen3:4b
++npm install
++npx prisma migrate dev --name init
++npm run start:dev
++```
++
++## 테스트
++
++```bash
++npm test    # pretest에서 prisma generate 실행
++```
++
++## API
++
++| Method | Path | 설명 |
++|---|---|---|
++| GET | /health | DB, 모델 상태 |
++| POST | /conversations | `{title?}` |
++| GET | /conversations | 목록 |
++| GET | /conversations/:id/messages | 기록 |
++| POST | /conversations/:id/messages | `{content}` → 응답 |
++| POST | /conversations/:id/messages/stream | SSE, `data:{"token"}` / `event: done` |
++
++## 메모리
++
++- 추론은 Mutex로 직렬화. 동시에 1건.
++- `OLLAMA_KEEP_ALIVE=0` → 응답 후 즉시 해제. 서버 종료 시 `unload()` 호출.
++- 실제 RAM 사용량은 벤치마크 필요 (미측정).
+diff --git a/backend/docker-compose.yml b/backend/docker-compose.yml
+new file mode 100644
+index 0000000..60fb1a3
+--- /dev/null
++++ b/backend/docker-compose.yml
+@@ -0,0 +1,15 @@
++services:
++  postgres:
++    image: postgres:16-alpine
++    restart: unless-stopped
++    environment:
++      POSTGRES_USER: aura
++      POSTGRES_PASSWORD: aura
++      POSTGRES_DB: aura
++    ports:
++      - "127.0.0.1:5432:5432"
++    volumes:
++      - aura_pg:/var/lib/postgresql/data
++
++volumes:
++  aura_pg:
+diff --git a/backend/nest-cli.json b/backend/nest-cli.json
+new file mode 100644
+index 0000000..d50e6ab
+--- /dev/null
++++ b/backend/nest-cli.json
+@@ -0,0 +1,6 @@
++{
++  "$schema": "https://json.schemastore.org/nest-cli",
++  "collection": "@nestjs/schematics",
++  "sourceRoot": "src",
++  "compilerOptions": { "deleteOutDir": true }
++}
+diff --git a/backend/package.json b/backend/package.json
+new file mode 100644
+index 0000000..91ee9a4
+--- /dev/null
++++ b/backend/package.json
+@@ -0,0 +1,46 @@
++{
++  "name": "aura-backend",
++  "version": "0.1.0",
++  "private": true,
++  "description": "AURA backend (NestJS + Prisma + PostgreSQL)",
++  "engines": { "node": ">=20" },
++  "scripts": {
++    "build": "nest build",
++    "start": "nest start",
++    "start:dev": "nest start --watch",
++    "start:prod": "node dist/main",
++    "prisma:generate": "prisma generate",
++    "prisma:migrate": "prisma migrate dev",
++    "prisma:deploy": "prisma migrate deploy",
++    "pretest": "prisma generate",
++    "test": "jest"
++  },
++  "dependencies": {
++    "@nestjs/common": "^11.0.0",
++    "@nestjs/config": "^4.0.0",
++    "@nestjs/core": "^11.0.0",
++    "@nestjs/platform-express": "^11.0.0",
++    "@prisma/client": "^6.0.0",
++    "class-transformer": "^0.5.1",
++    "class-validator": "^0.14.1",
++    "reflect-metadata": "^0.2.2",
++    "rxjs": "^7.8.1"
++  },
++  "devDependencies": {
++    "@nestjs/cli": "^11.0.0",
++    "@types/express": "^5.0.0",
++    "@types/jest": "^29.5.0",
++    "@types/node": "^22.0.0",
++    "jest": "^29.7.0",
++    "prisma": "^6.0.0",
++    "ts-jest": "^29.2.0",
++    "typescript": "^5.7.0"
++  },
++  "jest": {
++    "moduleFileExtensions": ["js", "json", "ts"],
++    "rootDir": ".",
++    "testRegex": "test/.*\\.spec\\.ts$",
++    "transform": { "^.+\\.ts$": "ts-jest" },
++    "testEnvironment": "node"
++  }
++}
+diff --git a/backend/prisma/schema.prisma b/backend/prisma/schema.prisma
+new file mode 100644
+index 0000000..df81148
+--- /dev/null
++++ b/backend/prisma/schema.prisma
+@@ -0,0 +1,37 @@
++generator client {
++  provider = "prisma-client-js"
++}
++
++datasource db {
++  provider = "postgresql"
++  url      = env("DATABASE_URL")
++}
++
++enum MessageRole {
++  SYSTEM
++  USER
++  ASSISTANT
++}
++
++model Conversation {
++  id        String    @id @default(uuid()) @db.Uuid
++  title     String?
++  createdAt DateTime  @default(now())
++  updatedAt DateTime  @updatedAt
++  messages  Message[]
++}
++
++model Message {
++  id               String       @id @default(uuid()) @db.Uuid
++  conversationId   String       @db.Uuid
++  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
++  role             MessageRole
++  content          String
++  model            String?
++  promptTokens     Int?
++  completionTokens Int?
++  durationMs       Int?
++  createdAt        DateTime     @default(now())
++
++  @@index([conversationId, createdAt])
++}
+diff --git a/backend/src/ai/models/base-model.ts b/backend/src/ai/models/base-model.ts
+new file mode 100644
+index 0000000..4ea9bbd
+--- /dev/null
++++ b/backend/src/ai/models/base-model.ts
+@@ -0,0 +1,52 @@
++export type ChatRole = 'system' | 'user' | 'assistant';
++
++export interface ChatMessage {
++  role: ChatRole;
++  content: string;
++}
++
++export interface GenerateRequest {
++  messages: ChatMessage[];
++  temperature?: number;
++  maxTokens?: number;
++  /** 호출자 취소 신호 */
++  signal?: AbortSignal;
++  /** 요청별 타임아웃(ms). 미지정 시 모델 기본값 */
++  timeoutMs?: number;
++}
++
++export interface GenerateResponse {
++  content: string;
++  model: string;
++  promptTokens?: number;
++  completionTokens?: number;
++  durationMs: number;
++}
++
++export type ModelState = 'unloaded' | 'loading' | 'ready' | 'error';
++
++export type ModelErrorCode = 'UNAVAILABLE' | 'NOT_FOUND' | 'TIMEOUT' | 'ABORTED' | 'BAD_RESPONSE';
++
++export class ModelError extends Error {
++  constructor(
++    public readonly code: ModelErrorCode,
++    message: string,
++    cause?: unknown,
++  ) {
++    super(message, cause === undefined ? undefined : { cause });
++    this.name = 'ModelError';
++  }
++}
++
++/**
++ * 모든 모델 공급자의 공통 인터페이스.
++ * abstract class라서 NestJS DI 토큰으로도 사용한다.
++ */
++export abstract class BaseModel {
++  abstract readonly name: string;
++  abstract get state(): ModelState;
++  abstract load(): Promise<void>;
++  abstract generate(request: GenerateRequest): Promise<GenerateResponse>;
++  abstract stream(request: GenerateRequest): AsyncIterable<string>;
++  abstract unload(): Promise<void>;
++}
+diff --git a/backend/src/ai/models/models.module.ts b/backend/src/ai/models/models.module.ts
+new file mode 100644
+index 0000000..7d1e118
+--- /dev/null
++++ b/backend/src/ai/models/models.module.ts
+@@ -0,0 +1,23 @@
++import { Module } from '@nestjs/common';
++import { ConfigService } from '@nestjs/config';
++import { EnvVars } from '../../config/env';
++import { BaseModel } from './base-model';
++import { OllamaModel } from './ollama.model';
++
++@Module({
++  providers: [
++    {
++      provide: BaseModel,
++      inject: [ConfigService],
++      useFactory: (config: ConfigService<EnvVars, true>) =>
++        new OllamaModel({
++          baseUrl: config.get('OLLAMA_BASE_URL', { infer: true }),
++          model: config.get('OLLAMA_MODEL', { infer: true }),
++          keepAlive: config.get('OLLAMA_KEEP_ALIVE', { infer: true }),
++          timeoutMs: config.get('MODEL_TIMEOUT_MS', { infer: true }),
++        }),
++    },
++  ],
++  exports: [BaseModel],
++})
++export class ModelsModule {}
+diff --git a/backend/src/ai/models/ollama.model.ts b/backend/src/ai/models/ollama.model.ts
+new file mode 100644
+index 0000000..c20d2e2
+--- /dev/null
++++ b/backend/src/ai/models/ollama.model.ts
+@@ -0,0 +1,227 @@
++import { Logger, OnModuleDestroy } from '@nestjs/common';
++import {
++  BaseModel,
++  GenerateRequest,
++  GenerateResponse,
++  ModelError,
++  ModelErrorCode,
++  ModelState,
++} from './base-model';
++
++export interface OllamaOptions {
++  baseUrl: string;
++  model: string;
++  keepAlive: string;
++  timeoutMs: number;
++  /** 테스트용 주입 */
++  fetchImpl?: typeof fetch;
++}
++
++interface OllamaChunk {
++  message?: { content?: string };
++  done?: boolean;
++  prompt_eval_count?: number;
++  eval_count?: number;
++  error?: string;
++}
++
++const JSON_HEADERS = { 'Content-Type': 'application/json' };
++
++function stripThink(text: string): string {
++  return text.replace(/<think>[\s\S]*?<\/think>/g, '').trimStart();
++}
++
++export class OllamaModel extends BaseModel implements OnModuleDestroy {
++  readonly name: string;
++  private readonly log = new Logger(OllamaModel.name);
++  private readonly baseUrl: string;
++  private readonly fetchFn: typeof fetch;
++  private _state: ModelState = 'unloaded';
++
++  constructor(private readonly opts: OllamaOptions) {
++    super();
++    this.name = opts.model;
++    this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
++    this.fetchFn = opts.fetchImpl ?? fetch;
++  }
++
++  get state(): ModelState {
++    return this._state;
++  }
++
++  /** 모델 존재 확인 후 빈 요청으로 메모리에 적재한다. */
++  async load(): Promise<void> {
++    if (this._state === 'ready') return;
++    this._state = 'loading';
++    try {
++      const tags = await this.request('/api/tags', { method: 'GET' }, undefined, 10_000);
++      const body = (await this.readJson(tags)) as { models?: { name: string }[] };
++      const found = (body.models ?? []).some(
++        (m) => m.name === this.name || m.name === `${this.name}:latest`,
++      );
++      if (!found) throw new ModelError('NOT_FOUND', `model not pulled: ${this.name}`);
++
++      await this.request('/api/generate', {
++        method: 'POST',
++        headers: JSON_HEADERS,
++        body: JSON.stringify({ model: this.name, keep_alive: this.opts.keepAlive }),
++      });
++      this._state = 'ready';
++    } catch (e) {
++      this._state = 'error';
++      throw e;
++    }
++  }
++
++  async generate(req: GenerateRequest): Promise<GenerateResponse> {
++    await this.ensureReady();
++    const started = Date.now();
++    const res = await this.request(
++      '/api/chat',
++      { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(this.chatBody(req, false)) },
++      req.signal,
++      req.timeoutMs,
++    );
++    const data = (await this.readJson(res, req.signal)) as OllamaChunk;
++    if (data.error) throw new ModelError('BAD_RESPONSE', data.error);
++    return {
++      content: stripThink(data.message?.content ?? ''),
++      model: this.name,
++      promptTokens: data.prompt_eval_count,
++      completionTokens: data.eval_count,
++      durationMs: Date.now() - started,
++    };
++  }
++
++  async *stream(req: GenerateRequest): AsyncIterable<string> {
++    await this.ensureReady();
++    const res = await this.request(
++      '/api/chat',
++      { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(this.chatBody(req, true)) },
++      req.signal,
++      req.timeoutMs,
++    );
++    if (!res.body) throw new ModelError('BAD_RESPONSE', 'empty response body');
++
++    const reader = res.body.getReader();
++    const decoder = new TextDecoder();
++    let buf = '';
++    try {
++      while (true) {
++        let chunk: ReadableStreamReadResult<Uint8Array>;
++        try {
++          chunk = await reader.read();
++        } catch (e) {
++          throw this.toModelError(e, req.signal, 'BAD_RESPONSE');
++        }
++        if (chunk.done) break;
++        buf += decoder.decode(chunk.value, { stream: true });
++        let nl: number;
++        while ((nl = buf.indexOf('\n')) >= 0) {
++          const line = buf.slice(0, nl).trim();
++          buf = buf.slice(nl + 1);
++          if (!line) continue;
++          const token = this.parseLine(line);
++          if (token) yield token;
++        }
++      }
++      const rest = buf.trim();
++      if (rest) {
++        const token = this.parseLine(rest);
++        if (token) yield token;
++      }
++    } finally {
++      reader.cancel().catch(() => undefined);
++    }
++  }
++
++  /** keep_alive=0 요청으로 Ollama가 모델을 즉시 메모리에서 내리게 한다. */
++  async unload(): Promise<void> {
++    if (this._state === 'unloaded') return;
++    await this.request('/api/generate', {
++      method: 'POST',
++      headers: JSON_HEADERS,
++      body: JSON.stringify({ model: this.name, keep_alive: 0 }),
++    });
++    this._state = 'unloaded';
++  }
++
++  async onModuleDestroy(): Promise<void> {
++    try {
++      await this.unload();
++    } catch (e) {
++      this.log.warn(`unload failed: ${(e as Error).message}`);
++    }
++  }
++
++  private async ensureReady(): Promise<void> {
++    if (this._state !== 'ready') await this.load();
++  }
++
++  private chatBody(req: GenerateRequest, stream: boolean): Record<string, unknown> {
++    const options: Record<string, number> = {};
++    if (req.temperature !== undefined) options.temperature = req.temperature;
++    if (req.maxTokens !== undefined) options.num_predict = req.maxTokens;
++    return {
++      model: this.name,
++      messages: req.messages,
++      stream,
++      think: false,
++      keep_alive: this.opts.keepAlive,
++      options,
++    };
++  }
++
++  private parseLine(line: string): string {
++    let data: OllamaChunk;
++    try {
++      data = JSON.parse(line) as OllamaChunk;
++    } catch (e) {
++      throw new ModelError('BAD_RESPONSE', 'invalid stream line', e);
++    }
++    if (data.error) throw new ModelError('BAD_RESPONSE', data.error);
++    return data.message?.content ?? '';
++  }
++
++  private async readJson(res: Response, signal?: AbortSignal): Promise<unknown> {
++    try {
++      return await res.json();
++    } catch (e) {
++      throw this.toModelError(e, signal, 'BAD_RESPONSE');
++    }
++  }
++
++  private async request(
++    path: string,
++    init: RequestInit,
++    signal?: AbortSignal,
++    timeoutMs: number = this.opts.timeoutMs,
++  ): Promise<Response> {
++    const timeout = AbortSignal.timeout(timeoutMs);
++    const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
++    let res: Response;
++    try {
++      res = await this.fetchFn(this.baseUrl + path, { ...init, signal: combined });
++    } catch (e) {
++      throw this.toModelError(e, signal, 'UNAVAILABLE');
++    }
++    if (!res.ok) {
++      const text = await res.text().catch(() => '');
++      throw new ModelError(
++        res.status === 404 ? 'NOT_FOUND' : 'BAD_RESPONSE',
++        `ollama ${res.status}: ${text.slice(0, 200)}`,
++      );
++    }
++    return res;
++  }
++
++  private toModelError(e: unknown, signal: AbortSignal | undefined, fallback: ModelErrorCode): ModelError {
++    if (e instanceof ModelError) return e;
++    if (signal?.aborted) return new ModelError('ABORTED', 'request aborted', e);
++    if (e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')) {
++      return new ModelError('TIMEOUT', 'model request timed out', e);
++    }
++    const msg = fallback === 'UNAVAILABLE' ? `ollama unreachable at ${this.baseUrl}` : 'bad ollama response';
++    return new ModelError(fallback, msg, e);
++  }
++}
+diff --git a/backend/src/app.module.ts b/backend/src/app.module.ts
+new file mode 100644
+index 0000000..416eb07
+--- /dev/null
++++ b/backend/src/app.module.ts
+@@ -0,0 +1,18 @@
++import { Module } from '@nestjs/common';
++import { ConfigModule } from '@nestjs/config';
++import { ModelsModule } from './ai/models/models.module';
++import { validateEnv } from './config/env';
++import { ConversationModule } from './conversation/conversation.module';
++import { HealthController } from './health/health.controller';
++import { PrismaModule } from './prisma/prisma.module';
++
++@Module({
++  imports: [
++    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
++    PrismaModule,
++    ModelsModule,
++    ConversationModule,
++  ],
++  controllers: [HealthController],
++})
++export class AppModule {}
+diff --git a/backend/src/common/mutex.ts b/backend/src/common/mutex.ts
+new file mode 100644
+index 0000000..9046c84
+--- /dev/null
++++ b/backend/src/common/mutex.ts
+@@ -0,0 +1,12 @@
++/** FIFO 상호배제. 16GB RAM 제약상 모델 추론을 한 번에 하나만 실행하기 위해 사용. */
++export class Mutex {
++  private tail: Promise<void> = Promise.resolve();
++
++  acquire(): Promise<() => void> {
++    let release!: () => void;
++    const next = new Promise<void>((resolve) => (release = resolve));
++    const prev = this.tail;
++    this.tail = prev.then(() => next);
++    return prev.then(() => release);
++  }
++}
+diff --git a/backend/src/config/env.ts b/backend/src/config/env.ts
+new file mode 100644
+index 0000000..0291897
+--- /dev/null
++++ b/backend/src/config/env.ts
+@@ -0,0 +1,43 @@
++import { plainToInstance, Type } from 'class-transformer';
++import { IsInt, IsOptional, IsString, IsUrl, Max, Min, validateSync } from 'class-validator';
++
++export class EnvVars {
++  @Type(() => Number) @IsInt() @Min(1) @Max(65535)
++  PORT: number = 3000;
++
++  @IsString()
++  HOST: string = '127.0.0.1';
++
++  @IsString()
++  DATABASE_URL!: string;
++
++  @IsUrl({ require_tld: false })
++  OLLAMA_BASE_URL: string = 'http://127.0.0.1:11434';
++
++  @IsString()
++  OLLAMA_MODEL: string = 'qwen3:4b';
++
++  @IsString()
++  OLLAMA_KEEP_ALIVE: string = '5m';
++
++  @Type(() => Number) @IsInt() @Min(1000)
++  MODEL_TIMEOUT_MS: number = 120_000;
++
++  @Type(() => Number) @IsInt() @Min(1) @Max(200)
++  HISTORY_LIMIT: number = 20;
++
++  @IsOptional() @IsString()
++  SYSTEM_PROMPT: string = '너는 AURA, 사용자의 로컬 개인 비서다. 간결하고 정확하게 한국어로 답한다.';
++}
++
++export function validateEnv(raw: Record<string, unknown>): EnvVars {
++  const env = plainToInstance(EnvVars, raw);
++  const errors = validateSync(env);
++  if (errors.length > 0) {
++    const msg = errors
++      .map((e) => `${e.property}: ${Object.values(e.constraints ?? {}).join(', ')}`)
++      .join('; ');
++    throw new Error(`Invalid environment: ${msg}`);
++  }
++  return env;
++}
+diff --git a/backend/src/conversation/conversation.controller.ts b/backend/src/conversation/conversation.controller.ts
+new file mode 100644
+index 0000000..3e3270e
+--- /dev/null
++++ b/backend/src/conversation/conversation.controller.ts
+@@ -0,0 +1,67 @@
++import { Body, Controller, Get, HttpException, Logger, Param, ParseUUIDPipe, Post, Res } from '@nestjs/common';
++import type { Response } from 'express';
++import { CreateConversationDto, CreateMessageDto } from './conversation.dto';
++import { ConversationService } from './conversation.service';
++
++@Controller('conversations')
++export class ConversationController {
++  private readonly log = new Logger(ConversationController.name);
++
++  constructor(private readonly conversations: ConversationService) {}
++
++  @Post()
++  create(@Body() dto: CreateConversationDto) {
++    return this.conversations.create(dto.title);
++  }
++
++  @Get()
++  list() {
++    return this.conversations.list();
++  }
++
++  @Get(':id/messages')
++  messages(@Param('id', ParseUUIDPipe) id: string) {
++    return this.conversations.getMessages(id);
++  }
++
++  @Post(':id/messages')
++  send(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateMessageDto) {
++    return this.conversations.postMessage(id, dto.content);
++  }
++
++  /** SSE: `data: {"token":"..."}` 반복, 종료 시 `event: done`. */
++  @Post(':id/messages/stream')
++  async stream(
++    @Param('id', ParseUUIDPipe) id: string,
++    @Body() dto: CreateMessageDto,
++    @Res() res: Response,
++  ): Promise<void> {
++    await this.conversations.assertExists(id);
++
++    const abort = new AbortController();
++    res.on('close', () => {
++      if (!res.writableEnded) abort.abort();
++    });
++    res.status(200).set({
++      'Content-Type': 'text/event-stream',
++      'Cache-Control': 'no-cache',
++      Connection: 'keep-alive',
++    });
++    res.flushHeaders();
++
++    try {
++      for await (const token of this.conversations.stream(id, dto.content, abort.signal)) {
++        res.write(`data: ${JSON.stringify({ token })}\n\n`);
++      }
++      res.write('event: done\ndata: {}\n\n');
++    } catch (e) {
++      if (!abort.signal.aborted) {
++        this.log.error(e instanceof Error ? e.message : String(e));
++        const message = e instanceof HttpException ? e.message : 'internal error';
++        res.write(`event: error\ndata: ${JSON.stringify({ message })}\n\n`);
++      }
++    } finally {
++      res.end();
++    }
++  }
++}
+diff --git a/backend/src/conversation/conversation.dto.ts b/backend/src/conversation/conversation.dto.ts
+new file mode 100644
+index 0000000..1a26e23
+--- /dev/null
++++ b/backend/src/conversation/conversation.dto.ts
+@@ -0,0 +1,15 @@
++import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
++
++export class CreateConversationDto {
++  @IsOptional()
++  @IsString()
++  @MaxLength(200)
++  title?: string;
++}
++
++export class CreateMessageDto {
++  @IsString()
++  @IsNotEmpty()
++  @MaxLength(8000)
++  content!: string;
++}
+diff --git a/backend/src/conversation/conversation.module.ts b/backend/src/conversation/conversation.module.ts
+new file mode 100644
+index 0000000..16f5d44
+--- /dev/null
++++ b/backend/src/conversation/conversation.module.ts
+@@ -0,0 +1,11 @@
++import { Module } from '@nestjs/common';
++import { ModelsModule } from '../ai/models/models.module';
++import { ConversationController } from './conversation.controller';
++import { ConversationService } from './conversation.service';
++
++@Module({
++  imports: [ModelsModule],
++  controllers: [ConversationController],
++  providers: [ConversationService],
++})
++export class ConversationModule {}
+diff --git a/backend/src/conversation/conversation.service.ts b/backend/src/conversation/conversation.service.ts
+new file mode 100644
+index 0000000..5de14b3
+--- /dev/null
++++ b/backend/src/conversation/conversation.service.ts
+@@ -0,0 +1,136 @@
++import {
++  BadGatewayException,
++  GatewayTimeoutException,
++  HttpException,
++  Injectable,
++  NotFoundException,
++  ServiceUnavailableException,
++} from '@nestjs/common';
++import { ConfigService } from '@nestjs/config';
++import { MessageRole } from '@prisma/client';
++import { BaseModel, ChatMessage, ModelError } from '../ai/models/base-model';
++import { Mutex } from '../common/mutex';
++import { EnvVars } from '../config/env';
++import { PrismaService } from '../prisma/prisma.service';
++
++@Injectable()
++export class ConversationService {
++  /** 한 번에 하나의 추론만 실행 (16GB RAM 제약) */
++  private readonly mutex = new Mutex();
++
++  constructor(
++    private readonly prisma: PrismaService,
++    private readonly model: BaseModel,
++    private readonly config: ConfigService<EnvVars, true>,
++  ) {}
++
++  create(title?: string) {
++    return this.prisma.conversation.create({ data: { title } });
++  }
++
++  list() {
++    return this.prisma.conversation.findMany({ orderBy: { updatedAt: 'desc' }, take: 100 });
++  }
++
++  async assertExists(id: string): Promise<void> {
++    const found = await this.prisma.conversation.findUnique({ where: { id }, select: { id: true } });
++    if (!found) throw new NotFoundException(`conversation ${id} not found`);
++  }
++
++  async getMessages(id: string) {
++    await this.assertExists(id);
++    return this.prisma.message.findMany({ where: { conversationId: id }, orderBy: { createdAt: 'asc' } });
++  }
++
++  async postMessage(id: string, content: string) {
++    await this.assertExists(id);
++    const release = await this.mutex.acquire();
++    try {
++      const { userMessage, messages } = await this.prepare(id, content);
++      let result;
++      try {
++        result = await this.model.generate({ messages });
++      } catch (e) {
++        throw this.toHttpError(e);
++      }
++      const assistantMessage = await this.prisma.message.create({
++        data: {
++          conversationId: id,
++          role: MessageRole.ASSISTANT,
++          content: result.content,
++          model: result.model,
++          promptTokens: result.promptTokens,
++          completionTokens: result.completionTokens,
++          durationMs: result.durationMs,
++        },
++      });
++      return { userMessage, assistantMessage };
++    } finally {
++      release();
++    }
++  }
++
++  /** 토큰 스트림. 종료(취소 포함) 시 누적된 응답을 저장한다. */
++  async *stream(id: string, content: string, signal?: AbortSignal): AsyncGenerator<string> {
++    await this.assertExists(id);
++    const release = await this.mutex.acquire();
++    try {
++      const { messages } = await this.prepare(id, content);
++      const started = Date.now();
++      let full = '';
++      try {
++        for await (const token of this.model.stream({ messages, signal })) {
++          full += token;
++          yield token;
++        }
++      } catch (e) {
++        throw this.toHttpError(e);
++      } finally {
++        if (full) {
++          await this.prisma.message.create({
++            data: {
++              conversationId: id,
++              role: MessageRole.ASSISTANT,
++              content: full,
++              model: this.model.name,
++              durationMs: Date.now() - started,
++            },
++          });
++        }
++      }
++    } finally {
++      release();
++    }
++  }
++
++  private async prepare(id: string, content: string) {
++    const userMessage = await this.prisma.message.create({
++      data: { conversationId: id, role: MessageRole.USER, content },
++    });
++    const recent = await this.prisma.message.findMany({
++      where: { conversationId: id },
++      orderBy: { createdAt: 'desc' },
++      take: this.config.get('HISTORY_LIMIT', { infer: true }),
++    });
++    const history: ChatMessage[] = recent
++      .reverse()
++      .map((m) => ({ role: m.role.toLowerCase() as ChatMessage['role'], content: m.content }));
++    const system = this.config.get('SYSTEM_PROMPT', { infer: true });
++    const messages: ChatMessage[] = system ? [{ role: 'system', content: system }, ...history] : history;
++    return { userMessage, messages };
++  }
++
++  private toHttpError(e: unknown): Error {
++    if (!(e instanceof ModelError)) return e as Error;
++    switch (e.code) {
++      case 'TIMEOUT':
++        return new GatewayTimeoutException(e.message);
++      case 'BAD_RESPONSE':
++        return new BadGatewayException(e.message);
++      case 'ABORTED':
++        return new HttpException('client closed request', 499);
++      default:
++        return new ServiceUnavailableException(e.message);
++    }
++  }
++}
+diff --git a/backend/src/health/health.controller.ts b/backend/src/health/health.controller.ts
+new file mode 100644
+index 0000000..622a747
+--- /dev/null
++++ b/backend/src/health/health.controller.ts
+@@ -0,0 +1,20 @@
++import { Controller, Get } from '@nestjs/common';
++import { BaseModel } from '../ai/models/base-model';
++import { PrismaService } from '../prisma/prisma.service';
++
++@Controller('health')
++export class HealthController {
++  constructor(
++    private readonly prisma: PrismaService,
++    private readonly model: BaseModel,
++  ) {}
++
++  @Get()
++  async check() {
++    const db = await this.prisma.$queryRaw`SELECT 1`.then(
++      () => 'ok',
++      () => 'down',
++    );
++    return { status: db === 'ok' ? 'ok' : 'degraded', db, model: { name: this.model.name, state: this.model.state } };
++  }
++}
+diff --git a/backend/src/main.ts b/backend/src/main.ts
+new file mode 100644
+index 0000000..2cee704
+--- /dev/null
++++ b/backend/src/main.ts
+@@ -0,0 +1,20 @@
++import 'reflect-metadata';
++import { Logger, ValidationPipe } from '@nestjs/common';
++import { ConfigService } from '@nestjs/config';
++import { NestFactory } from '@nestjs/core';
++import { AppModule } from './app.module';
++import { EnvVars } from './config/env';
++
++async function bootstrap(): Promise<void> {
++  const app = await NestFactory.create(AppModule);
++  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
++  app.enableShutdownHooks();
++
++  const config = app.get(ConfigService<EnvVars, true>);
++  const port = config.get('PORT', { infer: true });
++  const host = config.get('HOST', { infer: true });
++  await app.listen(port, host);
++  new Logger('Bootstrap').log(`AURA backend: http://${host}:${port}`);
++}
++
++void bootstrap();
+diff --git a/backend/src/prisma/prisma.module.ts b/backend/src/prisma/prisma.module.ts
+new file mode 100644
+index 0000000..7207426
+--- /dev/null
++++ b/backend/src/prisma/prisma.module.ts
+@@ -0,0 +1,9 @@
++import { Global, Module } from '@nestjs/common';
++import { PrismaService } from './prisma.service';
++
++@Global()
++@Module({
++  providers: [PrismaService],
++  exports: [PrismaService],
++})
++export class PrismaModule {}
+diff --git a/backend/src/prisma/prisma.service.ts b/backend/src/prisma/prisma.service.ts
+new file mode 100644
+index 0000000..829d52f
+--- /dev/null
++++ b/backend/src/prisma/prisma.service.ts
+@@ -0,0 +1,13 @@
++import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
++import { PrismaClient } from '@prisma/client';
++
++@Injectable()
++export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
++  async onModuleInit(): Promise<void> {
++    await this.$connect();
++  }
++
++  async onModuleDestroy(): Promise<void> {
++    await this.$disconnect();
++  }
++}
+diff --git a/backend/test/unit/conversation.service.spec.ts b/backend/test/unit/conversation.service.spec.ts
+new file mode 100644
+index 0000000..1fe58dc
+--- /dev/null
++++ b/backend/test/unit/conversation.service.spec.ts
+@@ -0,0 +1,89 @@
++import { GatewayTimeoutException, NotFoundException } from '@nestjs/common';
++import { BaseModel, GenerateResponse, ModelError } from '../../src/ai/models/base-model';
++import { ConversationService } from '../../src/conversation/conversation.service';
++
++class FakeModel extends BaseModel {
++  readonly name = 'fake';
++  readonly state = 'ready' as const;
++  generate = jest.fn<Promise<GenerateResponse>, [any]>();
++  stream = jest.fn();
++  async load() {}
++  async unload() {}
++}
++
++function setup() {
++  const stored: any[] = [];
++  const prisma: any = {
++    conversation: { findUnique: jest.fn().mockResolvedValue({ id: 'c1' }) },
++    message: {
++      create: jest.fn(async ({ data }) => {
++        const row = { id: String(stored.length + 1), createdAt: new Date(), ...data };
++        stored.push(row);
++        return row;
++      }),
++      findMany: jest.fn(async () => [...stored].reverse()), // createdAt desc
++    },
++  };
++  const model = new FakeModel();
++  const config: any = {
++    get: (k: string) => ({ HISTORY_LIMIT: 20, SYSTEM_PROMPT: 'sys' })[k as 'HISTORY_LIMIT'],
++  };
++  return { prisma, model, stored, service: new ConversationService(prisma, model, config) };
++}
++
++describe('ConversationService', () => {
++  it('postMessage: user/assistant 저장, 프롬프트는 system + 시간순 기록', async () => {
++    const { service, model, stored } = setup();
++    model.generate.mockResolvedValue({ content: 'ok', model: 'fake', durationMs: 5 });
++
++    const res = await service.postMessage('c1', 'hello');
++
++    expect(model.generate.mock.calls[0][0].messages).toEqual([
++      { role: 'system', content: 'sys' },
++      { role: 'user', content: 'hello' },
++    ]);
++    expect(stored.map((m) => m.role)).toEqual(['USER', 'ASSISTANT']);
++    expect(res.assistantMessage.content).toBe('ok');
++  });
++
++  it('postMessage: 대화 없으면 404, 모델 호출 안 함', async () => {
++    const { service, model, prisma } = setup();
++    prisma.conversation.findUnique.mockResolvedValue(null);
++    await expect(service.postMessage('x', 'hi')).rejects.toBeInstanceOf(NotFoundException);
++    expect(model.generate).not.toHaveBeenCalled();
++  });
++
++  it('postMessage: 모델 TIMEOUT → 504, 사용자 메시지는 유지', async () => {
++    const { service, model, stored } = setup();
++    model.generate.mockRejectedValue(new ModelError('TIMEOUT', 'slow'));
++    await expect(service.postMessage('c1', 'hi')).rejects.toBeInstanceOf(GatewayTimeoutException);
++    expect(stored.map((m) => m.role)).toEqual(['USER']);
++  });
++
++  it('postMessage: 동시 요청은 직렬 실행', async () => {
++    const { service, model } = setup();
++    let running = 0;
++    let maxRunning = 0;
++    model.generate.mockImplementation(async () => {
++      running++;
++      maxRunning = Math.max(maxRunning, running);
++      await new Promise((r) => setTimeout(r, 10));
++      running--;
++      return { content: 'ok', model: 'fake', durationMs: 10 };
++    });
++    await Promise.all([service.postMessage('c1', 'a'), service.postMessage('c1', 'b')]);
++    expect(maxRunning).toBe(1);
++  });
++
++  it('stream: 토큰 yield 후 누적 응답 저장', async () => {
++    const { service, model, stored } = setup();
++    model.stream.mockImplementation(async function* () {
++      yield 'a';
++      yield 'b';
++    });
++    const out: string[] = [];
++    for await (const t of service.stream('c1', 'hi')) out.push(t);
++    expect(out).toEqual(['a', 'b']);
++    expect(stored[1]).toMatchObject({ role: 'ASSISTANT', content: 'ab' });
++  });
++});
+diff --git a/backend/test/unit/ollama.model.spec.ts b/backend/test/unit/ollama.model.spec.ts
+new file mode 100644
+index 0000000..575eaca
+--- /dev/null
++++ b/backend/test/unit/ollama.model.spec.ts
+@@ -0,0 +1,93 @@
++import { ModelError } from '../../src/ai/models/base-model';
++import { OllamaModel } from '../../src/ai/models/ollama.model';
++
++const json = (body: unknown, status = 200) =>
++  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
++
++function make(fetchImpl: jest.Mock) {
++  return new OllamaModel({
++    baseUrl: 'http://ollama.test/',
++    model: 'qwen3:4b',
++    keepAlive: '5m',
++    timeoutMs: 5000,
++    fetchImpl: fetchImpl as unknown as typeof fetch,
++  });
++}
++
++const ready = () =>
++  jest.fn().mockResolvedValueOnce(json({ models: [{ name: 'qwen3:4b' }] })).mockResolvedValueOnce(json({}));
++
++describe('OllamaModel', () => {
++  it('load: 모델 확인 후 ready', async () => {
++    const f = ready();
++    const m = make(f);
++    await m.load();
++    expect(m.state).toBe('ready');
++    expect(f.mock.calls[0][0]).toBe('http://ollama.test/api/tags');
++  });
++
++  it('load: 모델 없으면 NOT_FOUND', async () => {
++    const f = jest.fn().mockResolvedValue(json({ models: [{ name: 'other:1b' }] }));
++    const m = make(f);
++    await expect(m.load()).rejects.toMatchObject({ code: 'NOT_FOUND' });
++    expect(m.state).toBe('error');
++  });
++
++  it('load: 연결 실패면 UNAVAILABLE', async () => {
++    const f = jest.fn().mockRejectedValue(new TypeError('fetch failed'));
++    await expect(make(f).load()).rejects.toMatchObject({ code: 'UNAVAILABLE' });
++  });
++
++  it('generate: 응답 파싱 및 <think> 제거', async () => {
++    const f = ready().mockResolvedValueOnce(
++      json({ message: { content: '<think>x</think>안녕' }, prompt_eval_count: 3, eval_count: 2 }),
++    );
++    const res = await make(f).generate({ messages: [{ role: 'user', content: 'hi' }] });
++    expect(res).toMatchObject({ content: '안녕', model: 'qwen3:4b', promptTokens: 3, completionTokens: 2 });
++    const body = JSON.parse(f.mock.calls[2][1].body as string);
++    expect(body).toMatchObject({ stream: false, think: false, keep_alive: '5m' });
++  });
++
++  it('generate: 타임아웃이면 TIMEOUT', async () => {
++    const f = ready().mockRejectedValueOnce(Object.assign(new Error('t'), { name: 'TimeoutError' }));
++    await expect(make(f).generate({ messages: [] })).rejects.toMatchObject({ code: 'TIMEOUT' });
++  });
++
++  it('generate: 호출자 취소면 ABORTED', async () => {
++    const ac = new AbortController();
++    ac.abort();
++    const f = ready().mockRejectedValueOnce(Object.assign(new Error('a'), { name: 'AbortError' }));
++    await expect(make(f).generate({ messages: [], signal: ac.signal })).rejects.toMatchObject({
++      code: 'ABORTED',
++    });
++  });
++
++  it('generate: HTTP 오류면 BAD_RESPONSE', async () => {
++    const f = ready().mockResolvedValueOnce(new Response('boom', { status: 500 }));
++    const err = await make(f).generate({ messages: [] }).catch((e) => e);
++    expect(err).toBeInstanceOf(ModelError);
++    expect(err.code).toBe('BAD_RESPONSE');
++  });
++
++  it('stream: NDJSON 토큰 순서대로 yield', async () => {
++    const lines =
++      JSON.stringify({ message: { content: '가' } }) +
++      '\n' +
++      JSON.stringify({ message: { content: '나' } }) +
++      '\n' +
++      JSON.stringify({ done: true, message: { content: '' } });
++    const f = ready().mockResolvedValueOnce(new Response(lines));
++    const out: string[] = [];
++    for await (const t of make(f).stream({ messages: [] })) out.push(t);
++    expect(out).toEqual(['가', '나']);
++  });
++
++  it('unload: keep_alive=0 전송 후 unloaded', async () => {
++    const f = ready().mockResolvedValueOnce(json({}));
++    const m = make(f);
++    await m.load();
++    await m.unload();
++    expect(m.state).toBe('unloaded');
++    expect(JSON.parse(f.mock.calls[2][1].body as string)).toEqual({ model: 'qwen3:4b', keep_alive: 0 });
++  });
++});
+diff --git a/backend/tsconfig.build.json b/backend/tsconfig.build.json
+new file mode 100644
+index 0000000..6206db3
+--- /dev/null
++++ b/backend/tsconfig.build.json
+@@ -0,0 +1,5 @@
++{
++  "extends": "./tsconfig.json",
++  "include": ["src/**/*"],
++  "exclude": ["node_modules", "dist", "test", "**/*.spec.ts"]
++}
+diff --git a/backend/tsconfig.json b/backend/tsconfig.json
+new file mode 100644
+index 0000000..60ae067
+--- /dev/null
++++ b/backend/tsconfig.json
+@@ -0,0 +1,18 @@
++{
++  "compilerOptions": {
++    "module": "commonjs",
++    "target": "ES2022",
++    "lib": ["ES2023"],
++    "outDir": "./dist",
++    "strict": true,
++    "esModuleInterop": true,
++    "experimentalDecorators": true,
++    "emitDecoratorMetadata": true,
++    "skipLibCheck": true,
++    "sourceMap": true,
++    "removeComments": true,
++    "forceConsistentCasingInFileNames": true,
++    "types": ["node", "jest"]
++  },
++  "include": ["src/**/*", "test/**/*"]
++}
+diff --git a/data/.gitkeep b/data/.gitkeep
+new file mode 100644
+index 0000000..e69de29
