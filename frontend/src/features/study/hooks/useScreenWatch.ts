@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { studyApi, type ScreenCheck } from '../api/study';
 import { errorText } from '../format';
+import { pickSlackMessage } from '../lib/hints';
 import { notifyDesktop } from '../lib/notify';
+import { isRobot } from '../lib/tone';
 import { openScreen, type ScreenSession } from '../services/screenCaptureService';
 
 const CAPTURE_MS = 30_000; // 캡처 간격
@@ -57,8 +59,9 @@ export function useScreenWatch(paused = false) {
         const now = Date.now();
         if (res.distracted && res.message && now - lastToast >= TOAST_COOLDOWN_MS) {
           lastToast = now;
-          setToast(res.message);
-          notifyDesktop('딴짓 감지', res.message);
+          const msg = isRobot() ? pickSlackMessage() : res.message;
+          setToast(msg);
+          notifyDesktop('딴짓 감지', msg);
         }
       } catch (e) {
         if (!closed) setError(errorText(e));

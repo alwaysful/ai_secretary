@@ -1,5 +1,5 @@
 import type { QuitPhase } from '../hooks/useQuitGuard';
-import { QUIT_PROMPT } from '../lib/quitMessages';
+import { quitPrompt } from '../lib/quitMessages';
 import '../quit.css';
 
 interface Props {
@@ -20,7 +20,7 @@ export function QuitBanner({ phase, remainingMs, onCancel, onQuit }: Props) {
   const ready = phase === 'ready';
   return (
     <div className={ready ? 'quit-banner quit-banner-ready' : 'quit-banner'} role="status">
-      <span>{ready ? '이제 종료할 수 있습니다.' : QUIT_PROMPT}</span>
+      <span>{ready ? '이제 종료할 수 있습니다.' : quitPrompt()}</span>
       <strong className="quit-timer">{mmss(remainingMs)}</strong>
       <button type="button" className="btn" onClick={onCancel}>
         계속 공부

@@ -15,6 +15,7 @@ import { pickTurtleMessage } from '../lib/messages';
 import { requestDesktopPermission } from '../lib/notify';
 import { closeAlertWindow, showAlertWindow } from '../lib/pipAlert';
 import { pickQuitMessage } from '../lib/quitMessages';
+import { getTone, setTone, type Tone } from '../lib/tone';
 import '../analysis.css';
 import '../study.css';
 import '../study-analysis.css';
@@ -62,6 +63,11 @@ export function StudyPage({ onBack }: { onBack: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { status, error, frame, start, stop } = useAnalysis(videoRef);
   const [view, setView] = useState<'user' | 'analysis'>('user');
+  const [tone, setToneState] = useState<Tone>(getTone);
+  const changeTone = (t: Tone) => {
+    setTone(t);
+    setToneState(t);
+  };
   const [deviceId, setDeviceId] = useState(loadDeviceId);
   const [calibration, setCalibration] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -342,6 +348,26 @@ export function StudyPage({ onBack }: { onBack: () => void }) {
               </div>
               <div className="analysis-hints">
                 <h2>어겼을 때 메시지</h2>
+                <div className="row" role="radiogroup" aria-label="멘트 말투">
+                  {(
+                    [
+                      ['devil', '😈 악마', '비꼬는 멘트'],
+                      ['robot', '🤖 로봇', '딱딱한 안내'],
+                    ] as const
+                  ).map(([id, label, hint]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="radio"
+                      aria-checked={tone === id}
+                      className={tone === id ? 'btn btn-primary' : 'btn'}
+                      onClick={() => changeTone(id)}
+                      title={hint}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
                 <div className="row">
                   {hints.map((h) => (
                     <button
