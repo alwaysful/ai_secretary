@@ -3,11 +3,13 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { PrismaErrorFilter } from './common/errors';
 import { EnvVars } from './config/env';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+  app.useGlobalFilters(new PrismaErrorFilter());
   app.enableShutdownHooks();
 
   const config = app.get(ConfigService<EnvVars, true>);

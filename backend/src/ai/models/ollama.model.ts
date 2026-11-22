@@ -5,6 +5,7 @@ import {
   GenerateResponse,
   ModelError,
   ModelErrorCode,
+  ModelProbe,
   ModelState,
 } from './base-model';
 
@@ -50,8 +51,8 @@ export class OllamaModel extends BaseModel implements OnModuleDestroy {
   }
 
   /** 모델 존재 확인 후 빈 요청으로 메모리에 적재한다. */
-  async load(): Promise<void> {
-    if (this._state === 'ready') return;
+  async load(force = false): Promise<void> {
+    if (this._state === 'ready' && !force) return;
     this._state = 'loading';
     try {
       const tags = await this.request('/api/tags', { method: 'GET' }, undefined, 10_000);
@@ -132,6 +133,23 @@ export class OllamaModel extends BaseModel implements OnModuleDestroy {
       }
     } finally {
       reader.cancel().catch(() => undefined);
+    }
+  }
+
+  /** /api/tags(설치), /api/ps(메모리 적재)로 상태 점검. 실패해도 throw 하지 않는다. */
+  async probe(): Promise<ModelProbe> {
+    const names = async (path: string) => {
+      const res = await this.request(path, { method: 'GET' }, undefined, 3_000);
+      const body = (await this.readJson(res)) as { models?: { name?: string; model?: string }[] };
+      return (body.models ?? []).flatMap((m) => [m.name, m.model]).filter((n): n is string => !!n);
+    };
+    const has = (list: string[]) => list.some((n) => n === this.name || n === `${this.name}:latest`);
+    try {
+      const tags = await names('/api/tags');
+      const ps = await names('/api/ps').catch(() => null);
+      return { reachable: true, installed: has(tags), loaded: ps ? has(ps) : null };
+    } catch {
+      return { reachable: false, installed: null, loaded: null };
     }
   }
 

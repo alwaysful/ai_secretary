@@ -1,70 +1,171 @@
 import { KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { api, Conversation, Health, Message, streamMessage } from './api';
+import {
+  api,
+  ApiError,
+  Conversation,
+  Health,
+  Message,
+  StreamHandlers,
+  streamEditLast,
+  streamMessage,
+  streamRegenerate,
+  StreamPhase,
+} from './api';
+import { CopyButton } from './CopyButton';
 import { MailPanel } from './MailPanel';
+import { Markdown } from './Markdown';
+import { diagnoseError, diagnoseHealth, Diagnosis, NoticeBox, PHASE_TEXT } from './Notice';
 
 const tmpId = () => `tmp-${crypto.randomUUID()}`;
 const label = (c: Conversation) => c.title || '새 대화';
 
+type Retry = () => Promise<void>;
+
 export function Chat(props: { onBack: () => void }) {
   const [convs, setConvs] = useState<Conversation[]>([]);
+  const [query, setQuery] = useState('');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [phase, setPhase] = useState<StreamPhase | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [error, setError] = useState<{ d: Diagnosis; retry?: Retry } | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
+  const [healthLoaded, setHealthLoaded] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const loadSeq = useRef(0);
+  const warmed = useRef(false);
 
-  const loadConvs = useCallback(() => api.conversations().then(setConvs).catch(() => undefined), []);
+  const modelName = health?.model.name ?? '모델';
 
+  const loadConvs = useCallback(
+    (q = query) =>
+      api
+        .conversations(q.trim() || undefined)
+        .then(setConvs)
+        .catch(() => undefined),
+    [query],
+  );
+
+  // 검색어 디바운스
   useEffect(() => {
-    void loadConvs();
-  }, [loadConvs]);
+    const t = setTimeout(() => void loadConvs(query), 250);
+    return () => clearTimeout(t);
+  }, [query, loadConvs]);
 
-  useEffect(() => {
-    const poll = () =>
+  const pollHealth = useCallback(
+    () =>
       api
         .health()
-        .then(setHealth)
-        .catch(() => setHealth(null));
-    poll();
-    const t = setInterval(poll, 10_000);
+        .then((h) => {
+          setHealth(h);
+          // 모델이 메모리에 없으면 미리 올려 첫 응답 지연을 줄인다
+          if (!warmed.current && h.model.reachable && h.model.installed !== false && h.model.loaded === false) {
+            warmed.current = true;
+            void api.warmup().catch(() => undefined);
+          }
+        })
+        .catch(() => setHealth(null))
+        .finally(() => setHealthLoaded(true)),
+    [],
+  );
+
+  useEffect(() => {
+    void pollHealth();
+    const t = setInterval(() => void pollHealth(), busy ? 3_000 : 10_000);
     return () => clearInterval(t);
-  }, []);
+  }, [pollHealth, busy]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [messages]);
+  }, [messages, phase]);
+
+  // 응답 대기 시간 표시
+  useEffect(() => {
+    if (!busy) return setElapsed(0);
+    const started = Date.now();
+    const t = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [busy]);
+
+  const showError = (e: unknown, retry?: Retry) => {
+    const code = e instanceof ApiError ? e.code : 'INTERNAL';
+    const msg = e instanceof Error ? e.message : String(e);
+    setError({ d: diagnoseError(code, msg, modelName), retry });
+    void pollHealth();
+  };
+
+  const refresh = async (id: string) => {
+    const seq = loadSeq.current;
+    const list = await api.messages(id);
+    if (seq === loadSeq.current) setMessages(list.filter((m) => m.role !== 'SYSTEM'));
+  };
 
   const open = async (id: string | null) => {
     abortRef.current?.abort();
     setActiveId(id);
-    setError('');
+    setError(null);
     setMenu(false);
-    const seq = ++loadSeq.current;
+    setEditing(null);
+    ++loadSeq.current;
     if (!id) return setMessages([]);
     try {
-      const list = await api.messages(id);
-      if (seq === loadSeq.current) setMessages(list.filter((m) => m.role !== 'SYSTEM'));
+      await refresh(id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      showError(e, () => open(id));
     }
   };
 
-  const send = async () => {
-    const content = input.trim();
-    if (!content || busy) return;
-    setInput('');
-    setError('');
+  /** 스트림 공통 처리. prepare: 화면 메시지 목록 갱신, run: 실제 요청 */
+  const runStream = async (
+    id: string,
+    prepare: (prev: Message[], aiId: string) => Message[],
+    run: (h: StreamHandlers, signal: AbortSignal) => Promise<void>,
+    retry: Retry,
+  ) => {
+    setError(null);
     setBusy(true);
-
+    setPhase(null);
     const ac = new AbortController();
     abortRef.current = ac;
-    const now = new Date().toISOString();
     const aiId = tmpId();
+    setMessages((prev) => prepare(prev, aiId));
+    try {
+      await run(
+        {
+          onToken: (t) =>
+            setMessages((prev) => prev.map((m) => (m.id === aiId ? { ...m, content: m.content + t } : m))),
+          onStatus: setPhase,
+        },
+        ac.signal,
+      );
+    } catch (e) {
+      if (!ac.signal.aborted) showError(e, retry);
+    } finally {
+      setBusy(false);
+      setPhase(null);
+      abortRef.current = null;
+      await refresh(id).catch(() => undefined);
+      void loadConvs();
+    }
+  };
+
+  const aiPlaceholder = (aiId: string): Message => ({
+    id: aiId,
+    role: 'ASSISTANT',
+    content: '',
+    createdAt: new Date().toISOString(),
+  });
+
+  const send = async (text = input): Promise<void> => {
+    const content = text.trim();
+    if (!content || busy) return;
+    setInput('');
     let id = activeId;
     try {
       if (!id) {
@@ -73,23 +174,83 @@ export function Chat(props: { onBack: () => void }) {
         setActiveId(id);
         setConvs((prev) => [c, ...prev]);
       }
-      setMessages((prev) => [
-        ...prev,
-        { id: tmpId(), role: 'USER', content, createdAt: now },
-        { id: aiId, role: 'ASSISTANT', content: '', createdAt: now },
-      ]);
-      await streamMessage(
-        id,
-        content,
-        (t) => setMessages((prev) => prev.map((m) => (m.id === aiId ? { ...m, content: m.content + t } : m))),
-        ac.signal,
-      );
     } catch (e) {
-      if (!ac.signal.aborted) setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-      abortRef.current = null;
-      void loadConvs();
+      setInput(content);
+      return showError(e, () => send(content));
+    }
+    const cid = id;
+    await runStream(
+      cid,
+      (prev, aiId) => [
+        ...prev,
+        { id: tmpId(), role: 'USER', content, createdAt: new Date().toISOString() },
+        aiPlaceholder(aiId),
+      ],
+      (h, s) => streamMessage(cid, content, h, s),
+      async () => {
+        // 질문이 저장됐으면 재생성, 아니면 다시 전송
+        const last = (await api.messages(cid)).at(-1);
+        if (last?.role === 'USER' && last.content === content) await regenerate(cid);
+        else await send(content);
+      },
+    );
+  };
+
+  /** 마지막 사용자 메시지 뒤를 잘라낸 목록 */
+  const cutAfterLastUser = (prev: Message[], replace?: string) => {
+    const idx = prev.map((m) => m.role).lastIndexOf('USER');
+    if (idx < 0) return prev;
+    const head = prev.slice(0, idx + 1);
+    if (replace !== undefined) head[idx] = { ...head[idx], content: replace };
+    return head;
+  };
+
+  const regenerate = async (id = activeId): Promise<void> => {
+    if (!id || busy) return;
+    const cid = id;
+    await runStream(
+      cid,
+      (prev, aiId) => [...cutAfterLastUser(prev), aiPlaceholder(aiId)],
+      (h, s) => streamRegenerate(cid, h, s),
+      () => regenerate(cid),
+    );
+  };
+
+  const saveEdit = async (content: string) => {
+    const text = content.trim();
+    if (!activeId || !text || busy) return;
+    setEditing(null);
+    const cid = activeId;
+    await runStream(
+      cid,
+      (prev, aiId) => [...cutAfterLastUser(prev, text), aiPlaceholder(aiId)],
+      (h, s) => streamEditLast(cid, text, h, s),
+      () => regenerate(cid),
+    );
+  };
+
+  const rename = async () => {
+    if (!renaming) return;
+    const title = renaming.title.trim();
+    const { id } = renaming;
+    setRenaming(null);
+    if (!title) return;
+    try {
+      const c = await api.renameConversation(id, title);
+      setConvs((prev) => prev.map((x) => (x.id === id ? c : x)));
+    } catch (e) {
+      showError(e);
+    }
+  };
+
+  const remove = async (c: Conversation) => {
+    if (!window.confirm(`"${label(c)}" 대화를 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    try {
+      await api.deleteConversation(c.id);
+      setConvs((prev) => prev.filter((x) => x.id !== c.id));
+      if (c.id === activeId) void open(null);
+    } catch (e) {
+      showError(e);
     }
   };
 
@@ -100,7 +261,11 @@ export function Chat(props: { onBack: () => void }) {
     }
   };
 
-  const modelOk = health?.model.state === 'ready' || health?.model.state === 'unloaded';
+  const status = diagnoseHealth(health);
+  const showStatusBanner = healthLoaded && (status.level === 'down' || status.level === 'warn');
+  const lastUserIdx = messages.map((m) => m.role).lastIndexOf('USER');
+  const lastIdx = messages.length - 1;
+  const activeConv = convs.find((c) => c.id === activeId);
 
   return (
     <div className="app">
@@ -112,18 +277,58 @@ export function Chat(props: { onBack: () => void }) {
         <button className="primary" onClick={() => void open(null)}>
           새 대화
         </button>
+        <input
+          className="search"
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="대화 검색 (제목·내용)"
+          aria-label="대화 검색"
+        />
         <nav className="convs" aria-label="대화 목록">
-          {convs.map((c) => (
-            <button key={c.id} className={c.id === activeId ? 'conv on' : 'conv'} onClick={() => void open(c.id)}>
-              {label(c)}
-            </button>
-          ))}
-          {convs.length === 0 && <p className="muted">대화 없음</p>}
+          {convs.map((c) =>
+            renaming?.id === c.id ? (
+              <input
+                key={c.id}
+                className="rename"
+                autoFocus
+                value={renaming.title}
+                maxLength={200}
+                onChange={(e) => setRenaming({ id: c.id, title: e.target.value })}
+                onBlur={() => void rename()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) void rename();
+                  if (e.key === 'Escape') setRenaming(null);
+                }}
+                aria-label="대화 제목"
+              />
+            ) : (
+              <div key={c.id} className={c.id === activeId ? 'conv-row on' : 'conv-row'}>
+                <button className="conv" onClick={() => void open(c.id)} title={label(c)}>
+                  {label(c)}
+                </button>
+                <span className="conv-acts">
+                  <button
+                    className="icon"
+                    onClick={() => setRenaming({ id: c.id, title: c.title ?? '' })}
+                    aria-label="제목 수정"
+                    title="제목 수정"
+                  >
+                    ✎
+                  </button>
+                  <button className="icon" onClick={() => void remove(c)} aria-label="삭제" title="삭제">
+                    🗑
+                  </button>
+                </span>
+              </div>
+            ),
+          )}
+          {convs.length === 0 && <p className="muted">{query ? '검색 결과 없음' : '대화 없음'}</p>}
         </nav>
         <MailPanel />
-        <div className="status" role="status">
-          <span className={health ? (health.db === 'ok' && modelOk ? 'dot ok' : 'dot warn') : 'dot down'} />
-          {health ? `DB ${health.db} · ${health.model.name} ${health.model.state}` : '백엔드 연결 안 됨'}
+        <div className="status" role="status" title={status.hint}>
+          <span className={`dot ${status.level === 'ok' ? 'ok' : status.level === 'down' ? 'down' : 'warn'}`} />
+          {healthLoaded ? status.title : '상태 확인 중…'}
         </div>
       </aside>
 
@@ -132,28 +337,83 @@ export function Chat(props: { onBack: () => void }) {
           <button className="ghost menu" onClick={() => setMenu((v) => !v)} aria-label="메뉴">
             ☰
           </button>
-          <h1>{activeId ? label(convs.find((c) => c.id === activeId) ?? ({ title: null } as Conversation)) : '새 대화'}</h1>
+          <h1>{activeConv ? label(activeConv) : '새 대화'}</h1>
         </header>
+
+        {showStatusBanner && <NoticeBox d={status} onRetry={() => void pollHealth()} />}
+        {healthLoaded && status.level === 'info' && !busy && <NoticeBox d={status} />}
 
         <div className="log">
           {messages.length === 0 && (
             <div className="empty">
               <p>무엇을 도와줄까요?</p>
-              <p className="muted">예: &quot;안 읽은 메일 3통 요약해줘&quot;</p>
+              <p className="muted">예: &quot;안 읽은 메일 3통 요약해줘&quot;, &quot;내일 일정 알려줘&quot;</p>
             </div>
           )}
-          {messages.map((m) => (
-            <div key={m.id} className={m.role === 'USER' ? 'msg user' : 'msg ai'}>
-              <div className="bubble">{m.content || (busy ? '…' : '')}</div>
+          {messages.map((m, i) => {
+            const isUser = m.role === 'USER';
+            const streamingThis = busy && i === lastIdx && !isUser;
+            if (isUser && editing === m.id) {
+              return <EditBox key={m.id} initial={m.content} onSave={saveEdit} onCancel={() => setEditing(null)} />;
+            }
+            return (
+              <div key={m.id} className={isUser ? 'msg user' : 'msg ai'}>
+                <div className="bubble">
+                  {isUser ? (
+                    <div className="plain">{m.content}</div>
+                  ) : m.content ? (
+                    <Markdown text={m.content} />
+                  ) : streamingThis ? (
+                    <div className="phase" role="status">
+                      <span className="spinner" aria-hidden />
+                      {phase ? PHASE_TEXT[phase] : '요청 중…'}
+                      {elapsed >= 3 && <span className="muted"> · {elapsed}초</span>}
+                    </div>
+                  ) : null}
+                  {streamingThis && m.content && phase === 'generating' && <span className="caret" aria-hidden />}
+                </div>
+                {!streamingThis && m.content && (
+                  <div className="msg-acts">
+                    <CopyButton text={m.content} />
+                    {isUser && i === lastUserIdx && !busy && !m.id.startsWith('tmp-') && (
+                      <button className="tool" onClick={() => setEditing(m.id)}>
+                        편집
+                      </button>
+                    )}
+                    {!isUser && i === lastIdx && !busy && (
+                      <button className="tool" onClick={() => void regenerate()}>
+                        재생성
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {!busy && lastIdx >= 0 && messages[lastIdx].role === 'USER' && editing !== messages[lastIdx].id && (
+            <div className="msg ai">
+              <button className="ghost" onClick={() => void regenerate()}>
+                응답 생성
+              </button>
             </div>
-          ))}
+          )}
           <div ref={bottomRef} />
         </div>
 
         {error && (
-          <p className="error banner" role="alert">
-            {error}
-          </p>
+          <NoticeBox
+            d={error.d}
+            onRetry={
+              error.retry
+                ? () => {
+                    const r = error.retry!;
+                    setError(null);
+                    void r();
+                  }
+                : undefined
+            }
+            onClose={() => setError(null)}
+          />
         )}
 
         <div className="composer">
@@ -176,6 +436,39 @@ export function Chat(props: { onBack: () => void }) {
           )}
         </div>
       </main>
+    </div>
+  );
+}
+
+function EditBox(props: { initial: string; onSave: (t: string) => void; onCancel: () => void }) {
+  const [text, setText] = useState(props.initial);
+  return (
+    <div className="msg user">
+      <div className="editbox">
+        <textarea
+          autoFocus
+          value={text}
+          rows={3}
+          maxLength={8000}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              props.onSave(text);
+            }
+            if (e.key === 'Escape') props.onCancel();
+          }}
+          aria-label="메시지 편집"
+        />
+        <div className="msg-acts">
+          <button className="ghost" onClick={props.onCancel}>
+            취소
+          </button>
+          <button className="primary" onClick={() => props.onSave(text)} disabled={!text.trim()}>
+            저장 후 재생성
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

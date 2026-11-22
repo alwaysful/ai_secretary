@@ -16,9 +16,32 @@ export interface Message {
 
 export interface Health {
   status: string;
-  db: string;
-  model: { name: string; state: string };
+  db: 'ok' | 'down';
+  model: {
+    name: string;
+    state: 'unloaded' | 'loading' | 'ready' | 'error';
+    /** Ollama 접속 가능 */
+    reachable: boolean;
+    /** 모델 pull 여부 (null: 모름) */
+    installed: boolean | null;
+    /** 메모리 적재 여부 (null: 모름) */
+    loaded: boolean | null;
+  };
 }
+
+/** 백엔드 오류 코드 + 프론트 전용 BACKEND_DOWN */
+export type ErrorCode =
+  | 'BACKEND_DOWN'
+  | 'DB_DOWN'
+  | 'OLLAMA_DOWN'
+  | 'MODEL_NOT_FOUND'
+  | 'MODEL_TIMEOUT'
+  | 'MODEL_ERROR'
+  | 'NOT_FOUND'
+  | 'BAD_REQUEST'
+  | 'INTERNAL';
+
+export type StreamPhase = 'tools' | 'queued' | 'loading' | 'generating';
 
 export interface MailStatus {
   configured: boolean;
@@ -58,20 +81,35 @@ export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    public readonly code: ErrorCode = 'INTERNAL',
   ) {
     super(message);
     this.name = 'ApiError';
   }
 }
 
+const backendDown = () => new ApiError(0, '백엔드 서버에 연결할 수 없음', 'BACKEND_DOWN');
+
 async function failure(res: Response): Promise<ApiError> {
-  const body = (await res.json().catch(() => null)) as { message?: string | string[] } | null;
+  const body = (await res.json().catch(() => null)) as { message?: string | string[]; code?: ErrorCode } | null;
+  // Vite 프록시가 백엔드에 못 붙으면 JSON 없는 5xx를 돌려준다
+  if (!body && res.status >= 500) return backendDown();
   const m = body?.message;
-  return new ApiError(res.status, Array.isArray(m) ? m.join(', ') : (m ?? `HTTP ${res.status}`));
+  const code = body?.code ?? (res.status === 404 ? 'NOT_FOUND' : res.status < 500 ? 'BAD_REQUEST' : 'INTERNAL');
+  return new ApiError(res.status, Array.isArray(m) ? m.join(', ') : (m ?? `HTTP ${res.status}`), code);
+}
+
+async function call(path: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(BASE + path, init);
+  } catch (e) {
+    if (init?.signal?.aborted) throw e;
+    throw backendDown();
+  }
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(BASE + path, {
+  const res = await call(path, {
     ...init,
     headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
   });
@@ -81,7 +119,12 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => req<Health>('/health'),
-  conversations: () => req<Conversation[]>('/conversations'),
+  warmup: () => req<{ state: string }>('/health/warmup', { method: 'POST' }),
+  conversations: (q?: string) =>
+    req<Conversation[]>(q ? `/conversations?q=${encodeURIComponent(q)}` : '/conversations'),
+  renameConversation: (id: string, title: string) =>
+    req<Conversation>(`/conversations/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
+  deleteConversation: (id: string) => req<void>(`/conversations/${id}`, { method: 'DELETE' }),
   createConversation: (title?: string) =>
     req<Conversation>('/conversations', { method: 'POST', body: JSON.stringify({ title }) }),
   messages: (id: string) => req<Message[]>(`/conversations/${id}/messages`),
@@ -92,17 +135,29 @@ export const api = {
   events: (days: number) => req<CalendarEvent[]>(`/calendar/events?days=${days}`),
 };
 
-/** SSE(POST)를 fetch로 읽는다. data:{"token"} → onToken, event:error → throw. */
-export async function streamMessage(
-  id: string,
-  content: string,
-  onToken: (t: string) => void,
-  signal: AbortSignal,
-): Promise<void> {
-  const res = await fetch(`${BASE}/conversations/${id}/messages/stream`, {
+export interface StreamHandlers {
+  onToken: (t: string) => void;
+  onStatus?: (p: StreamPhase) => void;
+}
+
+/** 새 메시지 전송 */
+export const streamMessage = (id: string, content: string, h: StreamHandlers, signal: AbortSignal) =>
+  streamSse(`/conversations/${id}/messages/stream`, { content }, h, signal);
+
+/** 마지막 응답 재생성 */
+export const streamRegenerate = (id: string, h: StreamHandlers, signal: AbortSignal) =>
+  streamSse(`/conversations/${id}/regenerate/stream`, undefined, h, signal);
+
+/** 마지막 질문 수정 후 재생성 */
+export const streamEditLast = (id: string, content: string, h: StreamHandlers, signal: AbortSignal) =>
+  streamSse(`/conversations/${id}/edit-last/stream`, { content }, h, signal);
+
+/** SSE(POST)를 fetch로 읽는다. data:{"token"} → onToken, event:status → onStatus, event:error → throw. */
+async function streamSse(path: string, body: unknown, h: StreamHandlers, signal: AbortSignal): Promise<void> {
+  const res = await call(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
+    body: body === undefined ? undefined : JSON.stringify(body),
     signal,
   });
   if (!res.ok || !res.body) throw await failure(res);
@@ -111,9 +166,15 @@ export async function streamMessage(
   const decoder = new TextDecoder();
   let buf = '';
   for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try {
+      chunk = await reader.read();
+    } catch (e) {
+      if (signal.aborted) throw e;
+      throw backendDown();
+    }
+    if (chunk.done) break;
+    buf += decoder.decode(chunk.value, { stream: true });
     let sep: number;
     while ((sep = buf.indexOf('\n\n')) >= 0) {
       const block = buf.slice(0, sep);
@@ -125,10 +186,16 @@ export async function streamMessage(
         else if (line.startsWith('data:')) data += line.slice(5).trim();
       }
       if (!data) continue;
-      const parsed = JSON.parse(data) as { token?: string; message?: string };
-      if (event === 'error') throw new Error(parsed.message ?? 'stream error');
+      const parsed = JSON.parse(data) as { token?: string; message?: string; code?: ErrorCode; phase?: StreamPhase };
+      if (event === 'error') throw new ApiError(500, parsed.message ?? 'stream error', parsed.code ?? 'INTERNAL');
       if (event === 'done') return;
-      if (parsed.token) onToken(parsed.token);
+      if (event === 'status') {
+        if (parsed.phase) h.onStatus?.(parsed.phase);
+        continue;
+      }
+      if (parsed.token) h.onToken(parsed.token);
     }
   }
+  // done 없이 끊김 = 백엔드 중단
+  if (!signal.aborted) throw backendDown();
 }

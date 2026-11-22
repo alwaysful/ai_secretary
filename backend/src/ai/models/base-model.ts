@@ -25,6 +25,15 @@ export interface GenerateResponse {
 
 export type ModelState = 'unloaded' | 'loading' | 'ready' | 'error';
 
+export interface ModelProbe {
+  /** 모델 서버 접속 가능 여부 */
+  reachable: boolean;
+  /** 모델 설치 여부. 모르면 null */
+  installed: boolean | null;
+  /** 모델이 메모리에 올라가 있는지. 모르면 null */
+  loaded: boolean | null;
+}
+
 export type ModelErrorCode = 'UNAVAILABLE' | 'NOT_FOUND' | 'TIMEOUT' | 'ABORTED' | 'BAD_RESPONSE';
 
 export class ModelError extends Error {
@@ -45,8 +54,14 @@ export class ModelError extends Error {
 export abstract class BaseModel {
   abstract readonly name: string;
   abstract get state(): ModelState;
-  abstract load(): Promise<void>;
+  /** force: 상태가 ready여도 다시 적재 요청 (keep_alive 만료 대비) */
+  abstract load(force?: boolean): Promise<void>;
   abstract generate(request: GenerateRequest): Promise<GenerateResponse>;
   abstract stream(request: GenerateRequest): AsyncIterable<string>;
   abstract unload(): Promise<void>;
+
+  /** 상태 점검. 기본 구현은 알 수 없음. */
+  async probe(): Promise<ModelProbe> {
+    return { reachable: true, installed: null, loaded: null };
+  }
 }

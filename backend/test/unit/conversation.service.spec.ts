@@ -17,11 +17,17 @@ function setup() {
     conversation: { findUnique: jest.fn().mockResolvedValue({ id: 'c1' }) },
     message: {
       create: jest.fn(async ({ data }) => {
-        const row = { id: String(stored.length + 1), createdAt: new Date(), ...data };
+        const row = { id: String(stored.length + 1), createdAt: new Date(Date.now() + stored.length), ...data };
         stored.push(row);
         return row;
       }),
       findMany: jest.fn(async () => [...stored].reverse()), // createdAt desc
+      findFirst: jest.fn(async () => [...stored].reverse().find((m) => m.role === 'USER') ?? null),
+      update: jest.fn(async ({ where, data }) => Object.assign(stored.find((m) => m.id === where.id), data)),
+      deleteMany: jest.fn(async ({ where }) => {
+        const keep = stored.filter((m) => !(m.createdAt > where.createdAt.gt));
+        stored.splice(0, stored.length, ...keep);
+      }),
     },
   };
   const model = new FakeModel();
@@ -110,5 +116,45 @@ describe('ConversationService', () => {
     for await (const _ of service.stream('c1', 'hi', ac.signal)) void _;
     expect(tools.contextFor).toHaveBeenCalledWith('hi', ac.signal);
     expect(model.stream.mock.calls[0][0].messages[0].content).toBe('sys\n\nCTX');
+  });
+
+  it('stream: 상태 이벤트 순서', async () => {
+    const { service, model } = setup();
+    model.stream.mockImplementation(async function* () {
+      yield 'a';
+    });
+    const phases: string[] = [];
+    for await (const _ of service.stream('c1', 'hi', undefined, (p) => phases.push(p))) void _;
+    expect(phases).toEqual(['tools', 'queued', 'generating']);
+  });
+
+  it('regenerate: 마지막 응답 삭제 후 같은 질문으로 재생성', async () => {
+    const { service, model, stored } = setup();
+    const replies = ['first', 'second'];
+    model.stream.mockImplementation(async function* () {
+      yield replies.shift()!;
+    });
+    for await (const _ of service.stream('c1', 'q')) void _;
+    for await (const _ of service.regenerate('c1')) void _;
+    expect(stored.map((m) => [m.role, m.content])).toEqual([
+      ['USER', 'q'],
+      ['ASSISTANT', 'second'],
+    ]);
+    expect(model.stream.mock.calls[1][0].messages.at(-1)).toEqual({ role: 'user', content: 'q' });
+  });
+
+  it('editLast: 마지막 질문 수정 후 재생성', async () => {
+    const { service, model, stored } = setup();
+    model.stream.mockImplementation(async function* () {
+      yield 'r';
+    });
+    for await (const _ of service.stream('c1', 'old')) void _;
+    for await (const _ of service.editLast('c1', 'new')) void _;
+    expect(stored.map((m) => m.content)).toEqual(['new', 'r']);
+  });
+
+  it('regenerate: 사용자 메시지 없으면 400', async () => {
+    const { service } = setup();
+    await expect(service.regenerate('c1').next()).rejects.toThrow('no user message');
   });
 });
