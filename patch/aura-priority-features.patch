@@ -1,0 +1,3721 @@
+From 0c7cce02fe31a19ae51d1ec85a8949027dc95bba Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 21:22:59 +0000
+Subject: [PATCH] =?UTF-8?q?feat:=20=EC=9D=BC=EC=A0=95=20=EB=8F=84=EA=B5=AC?=
+ =?UTF-8?q?,=20=EB=8C=80=ED=99=94=20=EA=B4=80=EB=A6=AC,=20=EB=A7=88?=
+ =?UTF-8?q?=ED=81=AC=EB=8B=A4=EC=9A=B4,=20=EC=9E=AC=EC=83=9D=EC=84=B1?=
+ =?UTF-8?q?=C2=B7=ED=8E=B8=EC=A7=91,=20=EB=AA=A8=EB=8D=B8=20=EC=83=81?=
+ =?UTF-8?q?=ED=83=9C=C2=B7=EC=98=A4=EB=A5=98=20=EC=95=88=EB=82=B4?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- CalendarTool: 채팅 일정 질문 시 Outlook 일정 주입 (오늘/내일/모레/이번 주/다음 주/N일/M월 D일)
+- 대화 삭제·제목 수정·검색 API 및 UI
+- 마크다운·코드 블록 렌더링, 복사 버튼
+- 응답 재생성, 마지막 메시지 편집 (SSE)
+- 스트림 단계(status) 이벤트, 모델 warmup, /health 에 Ollama 접속·설치·적재 상태
+- 오류 코드(DB_DOWN/OLLAMA_DOWN/MODEL_*)로 백엔드·DB·Ollama 구분 안내
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01GJ1batpDGs9b3kpkRfZj3Z
+---
+ backend/src/ai/models/base-model.ts           |   17 +-
+ backend/src/ai/models/ollama.model.ts         |   22 +-
+ backend/src/ai/tools/calendar.tool.ts         |  143 ++
+ backend/src/ai/tools/tool-registry.service.ts |    5 +-
+ backend/src/ai/tools/tools.module.ts          |    6 +-
+ backend/src/calendar/calendar.service.ts      |   10 +-
+ backend/src/common/errors.ts                  |   71 +
+ .../conversation/conversation.controller.ts   |   76 +-
+ backend/src/conversation/conversation.dto.ts  |   14 +
+ .../src/conversation/conversation.service.ts  |  103 +-
+ backend/src/health/health.controller.ts       |   31 +-
+ backend/src/main.ts                           |    2 +
+ backend/test/unit/calendar.tool.spec.ts       |   67 +
+ .../test/unit/conversation.service.spec.ts    |   48 +-
+ backend/test/unit/tool-registry.spec.ts       |    2 +-
+ frontend/package-lock.json                    | 1592 ++++++++++++++++-
+ frontend/package.json                         |    9 +-
+ frontend/src/Chat.tsx                         |  411 ++++-
+ frontend/src/CopyButton.tsx                   |   20 +
+ frontend/src/Markdown.tsx                     |   47 +
+ frontend/src/Notice.tsx                       |  118 ++
+ frontend/src/api.ts                           |  109 +-
+ frontend/src/copy.ts                          |   12 +
+ frontend/src/styles.css                       |   62 +
+ 24 files changed, 2823 insertions(+), 174 deletions(-)
+ create mode 100644 backend/src/ai/tools/calendar.tool.ts
+ create mode 100644 backend/src/common/errors.ts
+ create mode 100644 backend/test/unit/calendar.tool.spec.ts
+ create mode 100644 frontend/src/CopyButton.tsx
+ create mode 100644 frontend/src/Markdown.tsx
+ create mode 100644 frontend/src/Notice.tsx
+ create mode 100644 frontend/src/copy.ts
+
+diff --git a/backend/src/ai/models/base-model.ts b/backend/src/ai/models/base-model.ts
+index 4ea9bbd..ec4f60b 100644
+--- a/backend/src/ai/models/base-model.ts
++++ b/backend/src/ai/models/base-model.ts
+@@ -25,6 +25,15 @@ export interface GenerateResponse {
+ 
+ export type ModelState = 'unloaded' | 'loading' | 'ready' | 'error';
+ 
++export interface ModelProbe {
++  /** 모델 서버 접속 가능 여부 */
++  reachable: boolean;
++  /** 모델 설치 여부. 모르면 null */
++  installed: boolean | null;
++  /** 모델이 메모리에 올라가 있는지. 모르면 null */
++  loaded: boolean | null;
++}
++
+ export type ModelErrorCode = 'UNAVAILABLE' | 'NOT_FOUND' | 'TIMEOUT' | 'ABORTED' | 'BAD_RESPONSE';
+ 
+ export class ModelError extends Error {
+@@ -45,8 +54,14 @@ export class ModelError extends Error {
+ export abstract class BaseModel {
+   abstract readonly name: string;
+   abstract get state(): ModelState;
+-  abstract load(): Promise<void>;
++  /** force: 상태가 ready여도 다시 적재 요청 (keep_alive 만료 대비) */
++  abstract load(force?: boolean): Promise<void>;
+   abstract generate(request: GenerateRequest): Promise<GenerateResponse>;
+   abstract stream(request: GenerateRequest): AsyncIterable<string>;
+   abstract unload(): Promise<void>;
++
++  /** 상태 점검. 기본 구현은 알 수 없음. */
++  async probe(): Promise<ModelProbe> {
++    return { reachable: true, installed: null, loaded: null };
++  }
+ }
+diff --git a/backend/src/ai/models/ollama.model.ts b/backend/src/ai/models/ollama.model.ts
+index 8a2e594..db492ca 100644
+--- a/backend/src/ai/models/ollama.model.ts
++++ b/backend/src/ai/models/ollama.model.ts
+@@ -5,6 +5,7 @@ import {
+   GenerateResponse,
+   ModelError,
+   ModelErrorCode,
++  ModelProbe,
+   ModelState,
+ } from './base-model';
+ 
+@@ -50,8 +51,8 @@ export class OllamaModel extends BaseModel implements OnModuleDestroy {
+   }
+ 
+   /** 모델 존재 확인 후 빈 요청으로 메모리에 적재한다. */
+-  async load(): Promise<void> {
+-    if (this._state === 'ready') return;
++  async load(force = false): Promise<void> {
++    if (this._state === 'ready' && !force) return;
+     this._state = 'loading';
+     try {
+       const tags = await this.request('/api/tags', { method: 'GET' }, undefined, 10_000);
+@@ -135,6 +136,23 @@ export class OllamaModel extends BaseModel implements OnModuleDestroy {
+     }
+   }
+ 
++  /** /api/tags(설치), /api/ps(메모리 적재)로 상태 점검. 실패해도 throw 하지 않는다. */
++  async probe(): Promise<ModelProbe> {
++    const names = async (path: string) => {
++      const res = await this.request(path, { method: 'GET' }, undefined, 3_000);
++      const body = (await this.readJson(res)) as { models?: { name?: string; model?: string }[] };
++      return (body.models ?? []).flatMap((m) => [m.name, m.model]).filter((n): n is string => !!n);
++    };
++    const has = (list: string[]) => list.some((n) => n === this.name || n === `${this.name}:latest`);
++    try {
++      const tags = await names('/api/tags');
++      const ps = await names('/api/ps').catch(() => null);
++      return { reachable: true, installed: has(tags), loaded: ps ? has(ps) : null };
++    } catch {
++      return { reachable: false, installed: null, loaded: null };
++    }
++  }
++
+   /** keep_alive=0 요청으로 Ollama가 모델을 즉시 메모리에서 내리게 한다. */
+   async unload(): Promise<void> {
+     if (this._state === 'unloaded') return;
+diff --git a/backend/src/ai/tools/calendar.tool.ts b/backend/src/ai/tools/calendar.tool.ts
+new file mode 100644
+index 0000000..e93aca6
+--- /dev/null
++++ b/backend/src/ai/tools/calendar.tool.ts
+@@ -0,0 +1,143 @@
++import { Injectable } from '@nestjs/common';
++import { ConfigService } from '@nestjs/config';
++import { CalendarService } from '../../calendar/calendar.service';
++import { CalendarEvent } from '../../calendar/calendar.types';
++import { escapeTags } from '../../common/text';
++import { EnvVars } from '../../config/env';
++import { MailAuthService } from '../../mail/mail-auth.service';
++import { MailError } from '../../mail/mail.errors';
++import { ContextTool, ToolError } from './tool';
++
++const CAL_INTENT = /(일정|스케[줄쥴]|캘린더|달력|약속|미팅|회의|calendar|schedule|agenda|meeting)/i;
++const DAY = 86_400_000;
++const MAX_IN_CONTEXT = 30;
++const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
++
++export interface DayRange {
++  label: string;
++  /** 오늘 기준 시작 일 오프셋 */
++  from: number;
++  /** 일 수 */
++  days: number;
++  /** 특정 날짜 (M월 D일) */
++  date?: { month: number; day: number };
++}
++
++/** 문장에서 조회 기간을 추출. 기본: 오늘부터 7일. */
++export function parseRange(text: string, todayDow: number): DayRange {
++  const md = /(\d{1,2})\s*월\s*(\d{1,2})\s*일/.exec(text);
++  if (md) return { label: `${md[1]}월 ${md[2]}일`, from: 0, days: 1, date: { month: +md[1], day: +md[2] } };
++  if (/(내일\s*모레|모레)/.test(text)) return { label: '모레', from: 2, days: 1 };
++  if (/글피/.test(text)) return { label: '글피', from: 3, days: 1 };
++  if (/(내일|tomorrow)/i.test(text)) return { label: '내일', from: 1, days: 1 };
++  if (/(오늘|today)/i.test(text)) return { label: '오늘', from: 0, days: 1 };
++  const toMonday = (8 - todayDow) % 7 || 7; // 다음 월요일까지 일 수
++  if (/(다음\s*주|담주|차주|next\s*week)/i.test(text)) return { label: '다음 주', from: toMonday, days: 7 };
++  if (/(이번\s*주|금주|this\s*week)/i.test(text)) return { label: '이번 주', from: 0, days: toMonday };
++  const n = /(\d{1,2})\s*일\s*(?:간|동안)|앞으로\s*(\d{1,2})\s*일/.exec(text);
++  if (n) {
++    const days = Math.min(Math.max(Number(n[1] ?? n[2]), 1), 31);
++    return { label: `앞으로 ${days}일`, from: 0, days };
++  }
++  return { label: '앞으로 7일', from: 0, days: 7 };
++}
++
++/** tz 기준 날짜 성분 */
++function localParts(d: Date, tz: string) {
++  const p = Object.fromEntries(
++    new Intl.DateTimeFormat('en-US', {
++      timeZone: tz,
++      hourCycle: 'h23',
++      year: 'numeric',
++      month: 'numeric',
++      day: 'numeric',
++      hour: 'numeric',
++      minute: 'numeric',
++      second: 'numeric',
++    })
++      .formatToParts(d)
++      .filter((x) => x.type !== 'literal')
++      .map((x) => [x.type, Number(x.value)]),
++  ) as Record<'year' | 'month' | 'day' | 'hour' | 'minute' | 'second', number>;
++  return p;
++}
++
++/** tz 기준 y-m-d 00:00 의 UTC 시각 */
++export function startOfLocalDay(y: number, m: number, d: number, tz: string): Date {
++  const guess = Date.UTC(y, m - 1, d);
++  const p = localParts(new Date(guess), tz);
++  const offset = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - guess;
++  return new Date(guess - offset);
++}
++
++/** 채팅에서 일정 관련 질문이 오면 Outlook 일정을 읽어 프롬프트에 주입한다. 읽기 전용. */
++@Injectable()
++export class CalendarTool implements ContextTool {
++  readonly name = 'outlook-calendar';
++  readonly readOnly = true as const;
++
++  constructor(
++    private readonly calendar: CalendarService,
++    private readonly auth: MailAuthService,
++    private readonly config: ConfigService<EnvVars, true>,
++  ) {}
++
++  matches(text: string): boolean {
++    return CAL_INTENT.test(text);
++  }
++
++  async run(text: string, signal?: AbortSignal, now: Date = new Date()): Promise<string> {
++    if (!this.auth.configured) {
++      throw new ToolError('Outlook 설정 없음 (MS_CLIENT_ID, TOKEN_ENC_KEY). 사용자에게 backend/README.md 설정을 안내한다.');
++    }
++    const tz = this.config.get('TIMEZONE', { infer: true });
++    const t = localParts(now, tz);
++    const dow = new Date(Date.UTC(t.year, t.month - 1, t.day)).getUTCDay();
++    const r = parseRange(text, dow);
++
++    let start: Date;
++    if (r.date) {
++      let year = t.year;
++      if (Date.UTC(year, r.date.month - 1, r.date.day) < Date.UTC(t.year, t.month - 1, t.day) - 30 * DAY) year++;
++      start = startOfLocalDay(year, r.date.month, r.date.day, tz);
++    } else {
++      start = startOfLocalDay(t.year, t.month, t.day + r.from, tz);
++    }
++    const end = new Date(start.getTime() + r.days * DAY);
++
++    try {
++      const list = await this.calendar.between(start, end, signal);
++      return this.format(list, r, start, end, tz);
++    } catch (e) {
++      if (e instanceof MailError) {
++        if (e.code === 'NOT_CONNECTED') {
++          throw new ToolError('Outlook 미연결 또는 일정 권한(Calendars.Read) 없음. 사용자에게 Outlook 재로그인을 안내한다.', e);
++        }
++        throw new ToolError(`일정 조회 실패: ${e.message}`, e);
++      }
++      throw e;
++    }
++  }
++
++  private format(list: CalendarEvent[], r: DayRange, start: Date, end: Date, tz: string): string {
++    const day = (d: Date) => {
++      const p = localParts(d, tz);
++      const w = WEEKDAY[new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay()];
++      return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}(${w})`;
++    };
++    const flat = (s: string) => escapeTags(s).replace(/\s*\n\s*/g, ' ');
++    const last = new Date(end.getTime() - 1);
++    const span = r.days === 1 ? day(start) : `${day(start)} ~ ${day(last)}`;
++    const head = `Outlook 일정 ${r.label} (${span}) ${list.length}건. 시각은 ${tz} 기준.`;
++    if (list.length === 0) return `${head}\n일정 없음.`;
++
++    const rows = list.slice(0, MAX_IN_CONTEXT).map((e, i) => {
++      const date = e.start.slice(0, 10);
++      const time = e.isAllDay ? '종일' : `${e.start.slice(11, 16)}~${e.end.slice(11, 16)}`;
++      const loc = e.location ? ` | 장소: ${flat(e.location)}` : '';
++      return `${i + 1}. ${date} ${time} | ${flat(e.subject)}${loc}`;
++    });
++    if (list.length > MAX_IN_CONTEXT) rows.push(`… 외 ${list.length - MAX_IN_CONTEXT}건 생략`);
++    return [head, ...rows].join('\n');
++  }
++}
+diff --git a/backend/src/ai/tools/tool-registry.service.ts b/backend/src/ai/tools/tool-registry.service.ts
+index 6091cb0..ca0c7c1 100644
+--- a/backend/src/ai/tools/tool-registry.service.ts
++++ b/backend/src/ai/tools/tool-registry.service.ts
+@@ -1,4 +1,5 @@
+ import { Injectable, Logger } from '@nestjs/common';
++import { CalendarTool } from './calendar.tool';
+ import { MailTool } from './mail.tool';
+ import { ContextTool, ToolContextProvider, ToolError } from './tool';
+ 
+@@ -10,9 +11,9 @@ export class ToolRegistry extends ToolContextProvider {
+   private readonly log = new Logger(ToolRegistry.name);
+   private readonly tools: ContextTool[];
+ 
+-  constructor(mail: MailTool) {
++  constructor(mail: MailTool, calendar: CalendarTool) {
+     super();
+-    this.tools = [mail];
++    this.tools = [mail, calendar];
+   }
+ 
+   async contextFor(text: string, signal?: AbortSignal): Promise<string | null> {
+diff --git a/backend/src/ai/tools/tools.module.ts b/backend/src/ai/tools/tools.module.ts
+index 06d687e..c304ca1 100644
+--- a/backend/src/ai/tools/tools.module.ts
++++ b/backend/src/ai/tools/tools.module.ts
+@@ -1,12 +1,14 @@
+ import { Module } from '@nestjs/common';
++import { CalendarModule } from '../../calendar/calendar.module';
+ import { MailModule } from '../../mail/mail.module';
++import { CalendarTool } from './calendar.tool';
+ import { MailTool } from './mail.tool';
+ import { ToolRegistry } from './tool-registry.service';
+ import { ToolContextProvider } from './tool';
+ 
+ @Module({
+-  imports: [MailModule],
+-  providers: [MailTool, ToolRegistry, { provide: ToolContextProvider, useExisting: ToolRegistry }],
++  imports: [MailModule, CalendarModule],
++  providers: [MailTool, CalendarTool, ToolRegistry, { provide: ToolContextProvider, useExisting: ToolRegistry }],
+   exports: [ToolContextProvider],
+ })
+ export class ToolsModule {}
+diff --git a/backend/src/calendar/calendar.service.ts b/backend/src/calendar/calendar.service.ts
+index bfabe80..f1b7c43 100644
+--- a/backend/src/calendar/calendar.service.ts
++++ b/backend/src/calendar/calendar.service.ts
+@@ -27,10 +27,14 @@ export class CalendarService {
+     private readonly config: ConfigService<EnvVars, true>,
+   ) {}
+ 
+-  async upcoming(days: number, signal?: AbortSignal, now: Date = new Date()): Promise<CalendarEvent[]> {
+-    const end = new Date(now.getTime() + days * 86_400_000);
++  upcoming(days: number, signal?: AbortSignal, now: Date = new Date()): Promise<CalendarEvent[]> {
++    return this.between(now, new Date(now.getTime() + days * 86_400_000), signal);
++  }
++
++  /** [start, end) 구간 일정 */
++  async between(start: Date, end: Date, signal?: AbortSignal): Promise<CalendarEvent[]> {
+     const qs = new URLSearchParams({
+-      startDateTime: now.toISOString(),
++      startDateTime: start.toISOString(),
+       endDateTime: end.toISOString(),
+       $select: 'id,subject,start,end,isAllDay,location',
+       $orderby: 'start/dateTime',
+diff --git a/backend/src/common/errors.ts b/backend/src/common/errors.ts
+new file mode 100644
+index 0000000..73b2fab
+--- /dev/null
++++ b/backend/src/common/errors.ts
+@@ -0,0 +1,71 @@
++import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger } from '@nestjs/common';
++import { Prisma } from '@prisma/client';
++import type { Response } from 'express';
++import { ModelError } from '../ai/models/base-model';
++
++/** 프론트가 원인을 구분해 안내하기 위한 오류 코드 */
++export type AppErrorCode =
++  | 'DB_DOWN'
++  | 'OLLAMA_DOWN'
++  | 'MODEL_NOT_FOUND'
++  | 'MODEL_TIMEOUT'
++  | 'MODEL_ERROR'
++  | 'NOT_FOUND'
++  | 'BAD_REQUEST'
++  | 'INTERNAL';
++
++export function isDbDown(e: unknown): boolean {
++  if (e instanceof Prisma.PrismaClientInitializationError) return true;
++  if (e instanceof Prisma.PrismaClientRustPanicError) return true;
++  return e instanceof Prisma.PrismaClientKnownRequestError && /^P10\d\d$/.test(e.code);
++}
++
++const MODEL_CODE: Record<ModelError['code'], AppErrorCode> = {
++  UNAVAILABLE: 'OLLAMA_DOWN',
++  NOT_FOUND: 'MODEL_NOT_FOUND',
++  TIMEOUT: 'MODEL_TIMEOUT',
++  BAD_RESPONSE: 'MODEL_ERROR',
++  ABORTED: 'MODEL_ERROR',
++};
++
++/** 예외 → { code, message, status } */
++export function describeError(e: unknown): { code: AppErrorCode; message: string; status: number } {
++  if (isDbDown(e)) return { code: 'DB_DOWN', message: 'database unavailable', status: 503 };
++  if (e instanceof ModelError) return { code: MODEL_CODE[e.code], message: e.message, status: 503 };
++  if (e instanceof HttpException) {
++    const body = e.getResponse() as { code?: AppErrorCode; message?: string | string[] } | string;
++    const status = e.getStatus();
++    const code =
++      typeof body === 'object' && body.code
++        ? body.code
++        : status === 404
++          ? 'NOT_FOUND'
++          : status < 500
++            ? 'BAD_REQUEST'
++            : 'INTERNAL';
++    const m = typeof body === 'string' ? body : body.message;
++    return { code, message: Array.isArray(m) ? m.join(', ') : (m ?? e.message), status };
++  }
++  return { code: 'INTERNAL', message: 'internal error', status: 500 };
++}
++
++/** Prisma 연결 오류를 503 DB_DOWN 으로 변환 */
++@Catch(Prisma.PrismaClientInitializationError, Prisma.PrismaClientKnownRequestError, Prisma.PrismaClientRustPanicError)
++export class PrismaErrorFilter implements ExceptionFilter {
++  private readonly log = new Logger(PrismaErrorFilter.name);
++
++  catch(e: Error, host: ArgumentsHost): void {
++    const res = host.switchToHttp().getResponse<Response>();
++    if (isDbDown(e)) {
++      this.log.error(`db: ${e.message.split('\n')[0]}`);
++      res.status(503).json({ statusCode: 503, code: 'DB_DOWN', message: 'database unavailable' });
++      return;
++    }
++    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
++      res.status(404).json({ statusCode: 404, code: 'NOT_FOUND', message: 'not found' });
++      return;
++    }
++    this.log.error(e.message);
++    res.status(500).json({ statusCode: 500, code: 'INTERNAL', message: 'internal error' });
++  }
++}
+diff --git a/backend/src/conversation/conversation.controller.ts b/backend/src/conversation/conversation.controller.ts
+index 3e3270e..495b195 100644
+--- a/backend/src/conversation/conversation.controller.ts
++++ b/backend/src/conversation/conversation.controller.ts
+@@ -1,7 +1,23 @@
+-import { Body, Controller, Get, HttpException, Logger, Param, ParseUUIDPipe, Post, Res } from '@nestjs/common';
++import {
++  Body,
++  Controller,
++  Delete,
++  Get,
++  HttpCode,
++  Logger,
++  Param,
++  ParseUUIDPipe,
++  Patch,
++  Post,
++  Query,
++  Res,
++} from '@nestjs/common';
+ import type { Response } from 'express';
+-import { CreateConversationDto, CreateMessageDto } from './conversation.dto';
+-import { ConversationService } from './conversation.service';
++import { describeError } from '../common/errors';
++import { CreateConversationDto, CreateMessageDto, ListConversationsDto, UpdateConversationDto } from './conversation.dto';
++import { ConversationService, StreamPhase } from './conversation.service';
++
++type StreamFactory = (signal: AbortSignal, onStatus: (p: StreamPhase) => void) => AsyncIterable<string>;
+ 
+ @Controller('conversations')
+ export class ConversationController {
+@@ -15,8 +31,19 @@ export class ConversationController {
+   }
+ 
+   @Get()
+-  list() {
+-    return this.conversations.list();
++  list(@Query() q: ListConversationsDto) {
++    return this.conversations.list(q.q);
++  }
++
++  @Patch(':id')
++  rename(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateConversationDto) {
++    return this.conversations.rename(id, dto.title);
++  }
++
++  @Delete(':id')
++  @HttpCode(204)
++  remove(@Param('id', ParseUUIDPipe) id: string) {
++    return this.conversations.remove(id);
+   }
+ 
+   @Get(':id/messages')
+@@ -29,15 +56,28 @@ export class ConversationController {
+     return this.conversations.postMessage(id, dto.content);
+   }
+ 
+-  /** SSE: `data: {"token":"..."}` 반복, 종료 시 `event: done`. */
++  /** SSE: `event: status` {phase}, `data: {"token"}` 반복, 종료 `event: done`, 오류 `event: error` {code,message}. */
+   @Post(':id/messages/stream')
+-  async stream(
+-    @Param('id', ParseUUIDPipe) id: string,
+-    @Body() dto: CreateMessageDto,
+-    @Res() res: Response,
+-  ): Promise<void> {
++  async stream(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateMessageDto, @Res() res: Response) {
++    await this.conversations.assertExists(id);
++    await this.sse(res, (signal, onStatus) => this.conversations.stream(id, dto.content, signal, onStatus));
++  }
++
++  /** 마지막 응답 재생성 (SSE) */
++  @Post(':id/regenerate/stream')
++  async regenerate(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response) {
++    await this.conversations.assertExists(id);
++    await this.sse(res, (signal, onStatus) => this.conversations.regenerate(id, signal, onStatus));
++  }
++
++  /** 마지막 사용자 메시지 수정 후 재생성 (SSE) */
++  @Post(':id/edit-last/stream')
++  async editLast(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateMessageDto, @Res() res: Response) {
+     await this.conversations.assertExists(id);
++    await this.sse(res, (signal, onStatus) => this.conversations.editLast(id, dto.content, signal, onStatus));
++  }
+ 
++  private async sse(res: Response, run: StreamFactory): Promise<void> {
+     const abort = new AbortController();
+     res.on('close', () => {
+       if (!res.writableEnded) abort.abort();
+@@ -48,17 +88,19 @@ export class ConversationController {
+       Connection: 'keep-alive',
+     });
+     res.flushHeaders();
++    const send = (event: string | null, data: unknown) =>
++      res.write(`${event ? `event: ${event}\n` : ''}data: ${JSON.stringify(data)}\n\n`);
+ 
+     try {
+-      for await (const token of this.conversations.stream(id, dto.content, abort.signal)) {
+-        res.write(`data: ${JSON.stringify({ token })}\n\n`);
++      for await (const token of run(abort.signal, (phase) => send('status', { phase }))) {
++        send(null, { token });
+       }
+-      res.write('event: done\ndata: {}\n\n');
++      send('done', {});
+     } catch (e) {
+       if (!abort.signal.aborted) {
+-        this.log.error(e instanceof Error ? e.message : String(e));
+-        const message = e instanceof HttpException ? e.message : 'internal error';
+-        res.write(`event: error\ndata: ${JSON.stringify({ message })}\n\n`);
++        const err = describeError(e);
++        if (err.code === 'INTERNAL') this.log.error(e instanceof Error ? e.message : String(e));
++        send('error', { code: err.code, message: err.message });
+       }
+     } finally {
+       res.end();
+diff --git a/backend/src/conversation/conversation.dto.ts b/backend/src/conversation/conversation.dto.ts
+index 1a26e23..c93884f 100644
+--- a/backend/src/conversation/conversation.dto.ts
++++ b/backend/src/conversation/conversation.dto.ts
+@@ -13,3 +13,17 @@ export class CreateMessageDto {
+   @MaxLength(8000)
+   content!: string;
+ }
++
++export class UpdateConversationDto {
++  @IsString()
++  @IsNotEmpty()
++  @MaxLength(200)
++  title!: string;
++}
++
++export class ListConversationsDto {
++  @IsOptional()
++  @IsString()
++  @MaxLength(100)
++  q?: string;
++}
+diff --git a/backend/src/conversation/conversation.service.ts b/backend/src/conversation/conversation.service.ts
+index 0ded4c6..d9e358e 100644
+--- a/backend/src/conversation/conversation.service.ts
++++ b/backend/src/conversation/conversation.service.ts
+@@ -1,5 +1,6 @@
+ import {
+   BadGatewayException,
++  BadRequestException,
+   GatewayTimeoutException,
+   HttpException,
+   Injectable,
+@@ -10,10 +11,15 @@ import { ConfigService } from '@nestjs/config';
+ import { MessageRole } from '@prisma/client';
+ import { BaseModel, ChatMessage, ModelError } from '../ai/models/base-model';
+ import { ToolContextProvider } from '../ai/tools/tool';
++import { describeError } from '../common/errors';
+ import { Mutex } from '../common/mutex';
+ import { EnvVars } from '../config/env';
+ import { PrismaService } from '../prisma/prisma.service';
+ 
++/** tools: 도구 조회, queued: 다른 응답 대기, loading: 모델 메모리 적재, generating: 생성 중 */
++export type StreamPhase = 'tools' | 'queued' | 'loading' | 'generating';
++type StatusFn = (phase: StreamPhase) => void;
++
+ @Injectable()
+ export class ConversationService {
+   /** 한 번에 하나의 추론만 실행 (16GB RAM 제약) */
+@@ -30,8 +36,29 @@ export class ConversationService {
+     return this.prisma.conversation.create({ data: { title } });
+   }
+ 
+-  list() {
+-    return this.prisma.conversation.findMany({ orderBy: { updatedAt: 'desc' }, take: 100 });
++  /** q: 제목 또는 메시지 본문 부분 일치 (대소문자 무시) */
++  list(q?: string) {
++    const term = q?.trim();
++    const where = term
++      ? {
++          OR: [
++            { title: { contains: term, mode: 'insensitive' as const } },
++            { messages: { some: { content: { contains: term, mode: 'insensitive' as const } } } },
++          ],
++        }
++      : undefined;
++    return this.prisma.conversation.findMany({ where, orderBy: { updatedAt: 'desc' }, take: 100 });
++  }
++
++  async rename(id: string, title: string) {
++    await this.assertExists(id);
++    return this.prisma.conversation.update({ where: { id }, data: { title: title.trim() } });
++  }
++
++  /** 메시지는 onDelete: Cascade 로 함께 삭제 */
++  async remove(id: string): Promise<void> {
++    await this.assertExists(id);
++    await this.prisma.conversation.delete({ where: { id } });
+   }
+ 
+   async assertExists(id: string): Promise<void> {
+@@ -74,16 +101,68 @@ export class ConversationService {
+   }
+ 
+   /** 토큰 스트림. 종료(취소 포함) 시 누적된 응답을 저장한다. */
+-  async *stream(id: string, content: string, signal?: AbortSignal): AsyncGenerator<string> {
++  async *stream(id: string, content: string, signal?: AbortSignal, onStatus?: StatusFn): AsyncGenerator<string> {
++    await this.assertExists(id);
++    yield* this.run(id, content, signal, onStatus, async () => {
++      await this.prisma.message.create({ data: { conversationId: id, role: MessageRole.USER, content } });
++    });
++  }
++
++  /** 마지막 사용자 메시지에 대한 응답을 다시 생성한다. 이전 응답은 삭제. */
++  async *regenerate(id: string, signal?: AbortSignal, onStatus?: StatusFn): AsyncGenerator<string> {
++    const last = await this.lastUserMessage(id);
++    yield* this.run(id, last.content, signal, onStatus, () => this.dropAfter(id, last.createdAt));
++  }
++
++  /** 마지막 사용자 메시지를 수정하고 응답을 다시 생성한다. */
++  async *editLast(id: string, content: string, signal?: AbortSignal, onStatus?: StatusFn): AsyncGenerator<string> {
++    const last = await this.lastUserMessage(id);
++    yield* this.run(id, content, signal, onStatus, async () => {
++      await this.prisma.message.update({ where: { id: last.id }, data: { content } });
++      await this.dropAfter(id, last.createdAt);
++    });
++  }
++
++  private async lastUserMessage(id: string) {
+     await this.assertExists(id);
+-    const extra = await this.tools.contextFor(content, signal);
++    const last = await this.prisma.message.findFirst({
++      where: { conversationId: id, role: MessageRole.USER },
++      orderBy: { createdAt: 'desc' },
++    });
++    if (!last) throw new BadRequestException('no user message to regenerate');
++    return last;
++  }
++
++  private async dropAfter(id: string, at: Date): Promise<void> {
++    await this.prisma.message.deleteMany({ where: { conversationId: id, createdAt: { gt: at } } });
++  }
++
++  /** 공통 실행: 도구 → 대기열 → (모델 적재) → 생성. mutate는 모델 슬롯을 잡은 뒤 DB를 바꾼다. */
++  private async *run(
++    id: string,
++    userText: string,
++    signal: AbortSignal | undefined,
++    onStatus: StatusFn | undefined,
++    mutate: () => Promise<void>,
++  ): AsyncGenerator<string> {
++    onStatus?.('tools');
++    const extra = await this.tools.contextFor(userText, signal);
++    onStatus?.('queued');
+     const release = await this.mutex.acquire();
+     try {
+-      const { messages } = await this.prepare(id, content, extra);
++      await mutate();
++      const messages = await this.buildMessages(id, extra);
++      let cold = false;
++      if (onStatus) {
++        cold = this.model.state !== 'ready' || (await this.model.probe()).loaded === false;
++        onStatus(cold ? 'loading' : 'generating');
++      }
+       const started = Date.now();
+       let full = '';
+       try {
+         for await (const token of this.model.stream({ messages, signal })) {
++          if (cold) onStatus?.('generating');
++          cold = false;
+           full += token;
+           yield token;
+         }
+@@ -112,6 +191,10 @@ export class ConversationService {
+     const userMessage = await this.prisma.message.create({
+       data: { conversationId: id, role: MessageRole.USER, content },
+     });
++    return { userMessage, messages: await this.buildMessages(id, extra) };
++  }
++
++  private async buildMessages(id: string, extra: string | null): Promise<ChatMessage[]> {
+     const recent = await this.prisma.message.findMany({
+       where: { conversationId: id },
+       orderBy: { createdAt: 'desc' },
+@@ -121,21 +204,21 @@ export class ConversationService {
+       .reverse()
+       .map((m) => ({ role: m.role.toLowerCase() as ChatMessage['role'], content: m.content }));
+     const system = [this.config.get('SYSTEM_PROMPT', { infer: true }), extra].filter(Boolean).join('\n\n');
+-    const messages: ChatMessage[] = system ? [{ role: 'system', content: system }, ...history] : history;
+-    return { userMessage, messages };
++    return system ? [{ role: 'system', content: system }, ...history] : history;
+   }
+ 
+   private toHttpError(e: unknown): Error {
+     if (!(e instanceof ModelError)) return e as Error;
++    const { code } = describeError(e);
+     switch (e.code) {
+       case 'TIMEOUT':
+-        return new GatewayTimeoutException(e.message);
++        return new GatewayTimeoutException({ code, message: e.message });
+       case 'BAD_RESPONSE':
+-        return new BadGatewayException(e.message);
++        return new BadGatewayException({ code, message: e.message });
+       case 'ABORTED':
+         return new HttpException('client closed request', 499);
+       default:
+-        return new ServiceUnavailableException(e.message);
++        return new ServiceUnavailableException({ code, message: e.message });
+     }
+   }
+ }
+diff --git a/backend/src/health/health.controller.ts b/backend/src/health/health.controller.ts
+index 622a747..4a2ece1 100644
+--- a/backend/src/health/health.controller.ts
++++ b/backend/src/health/health.controller.ts
+@@ -1,20 +1,39 @@
+-import { Controller, Get } from '@nestjs/common';
++import { Controller, Get, HttpCode, Logger, Post } from '@nestjs/common';
+ import { BaseModel } from '../ai/models/base-model';
+ import { PrismaService } from '../prisma/prisma.service';
+ 
+ @Controller('health')
+ export class HealthController {
++  private readonly log = new Logger(HealthController.name);
++
+   constructor(
+     private readonly prisma: PrismaService,
+     private readonly model: BaseModel,
+   ) {}
+ 
++  /** db: ok|down, model.reachable: Ollama 접속, installed: pull 여부, loaded: 메모리 적재 */
+   @Get()
+   async check() {
+-    const db = await this.prisma.$queryRaw`SELECT 1`.then(
+-      () => 'ok',
+-      () => 'down',
+-    );
+-    return { status: db === 'ok' ? 'ok' : 'degraded', db, model: { name: this.model.name, state: this.model.state } };
++    const [db, probe] = await Promise.all([
++      this.prisma.$queryRaw`SELECT 1`.then(
++        () => 'ok',
++        () => 'down',
++      ),
++      this.model.probe(),
++    ]);
++    const ok = db === 'ok' && probe.reachable && probe.installed !== false;
++    return { status: ok ? 'ok' : 'degraded', db, model: { name: this.model.name, state: this.model.state, ...probe } };
++  }
++
++  /** 모델을 미리 메모리에 올린다. 즉시 202 응답, 적재는 백그라운드. */
++  @Post('warmup')
++  @HttpCode(202)
++  async warmup() {
++    if (this.model.state === 'loading') return { state: 'loading' };
++    const probe = await this.model.probe();
++    if (probe.loaded === true && this.model.state === 'ready') return { state: 'ready' };
++    if (!probe.reachable || probe.installed === false) return { state: 'error' };
++    this.model.load(true).catch((e: unknown) => this.log.warn(`warmup failed: ${e instanceof Error ? e.message : e}`));
++    return { state: 'loading' };
+   }
+ }
+diff --git a/backend/src/main.ts b/backend/src/main.ts
+index 2cee704..45e1580 100644
+--- a/backend/src/main.ts
++++ b/backend/src/main.ts
+@@ -3,11 +3,13 @@ import { Logger, ValidationPipe } from '@nestjs/common';
+ import { ConfigService } from '@nestjs/config';
+ import { NestFactory } from '@nestjs/core';
+ import { AppModule } from './app.module';
++import { PrismaErrorFilter } from './common/errors';
+ import { EnvVars } from './config/env';
+ 
+ async function bootstrap(): Promise<void> {
+   const app = await NestFactory.create(AppModule);
+   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
++  app.useGlobalFilters(new PrismaErrorFilter());
+   app.enableShutdownHooks();
+ 
+   const config = app.get(ConfigService<EnvVars, true>);
+diff --git a/backend/test/unit/calendar.tool.spec.ts b/backend/test/unit/calendar.tool.spec.ts
+new file mode 100644
+index 0000000..c80208f
+--- /dev/null
++++ b/backend/test/unit/calendar.tool.spec.ts
+@@ -0,0 +1,67 @@
++import { CalendarTool, parseRange, startOfLocalDay } from '../../src/ai/tools/calendar.tool';
++import { ToolError } from '../../src/ai/tools/tool';
++import { MailError } from '../../src/mail/mail.errors';
++
++function make(configured = true) {
++  const calendar: any = { between: jest.fn().mockResolvedValue([]) };
++  const auth: any = { configured };
++  const config: any = { get: (k: string) => ({ TIMEZONE: 'Asia/Seoul' })[k] };
++  return { calendar, tool: new CalendarTool(calendar, auth, config) };
++}
++
++// 2026-11-22(일) 21:00 UTC = 2026-11-23(월) 06:00 KST
++const NOW = new Date('2026-11-22T21:00:00Z');
++
++describe('CalendarTool', () => {
++  it('일정 관련 문장만 감지', () => {
++    const { tool } = make();
++    for (const t of ['내일 일정 알려줘', '이번 주 스케줄', '캘린더 확인', 'my schedule today']) {
++      expect(tool.matches(t)).toBe(true);
++    }
++    expect(tool.matches('메일 보여줘')).toBe(false);
++  });
++
++  it('parseRange', () => {
++    expect(parseRange('내일 일정', 1)).toMatchObject({ from: 1, days: 1 });
++    expect(parseRange('내일모레 약속', 1)).toMatchObject({ from: 2, days: 1 });
++    expect(parseRange('오늘 회의', 1)).toMatchObject({ from: 0, days: 1 });
++    expect(parseRange('이번 주 일정', 3)).toMatchObject({ from: 0, days: 5 });
++    expect(parseRange('다음 주 일정', 1)).toMatchObject({ from: 7, days: 7 });
++    expect(parseRange('앞으로 3일 일정', 1)).toMatchObject({ from: 0, days: 3 });
++    expect(parseRange('12월 5일 일정', 1)).toMatchObject({ date: { month: 12, day: 5 } });
++    expect(parseRange('일정', 1)).toMatchObject({ from: 0, days: 7 });
++  });
++
++  it('startOfLocalDay: KST 자정', () => {
++    expect(startOfLocalDay(2026, 11, 24, 'Asia/Seoul').toISOString()).toBe('2026-11-23T15:00:00.000Z');
++  });
++
++  it('"내일 일정": KST 기준 내일 하루 조회, 목록 포맷', async () => {
++    const { tool, calendar } = make();
++    calendar.between.mockResolvedValue([
++      { id: 'e1', subject: '주간 회의', start: '2026-11-24T10:00:00', end: '2026-11-24T11:00:00', isAllDay: false, location: '회의실 A' },
++      { id: 'e2', subject: '휴가', start: '2026-11-24T00:00:00', end: '2026-11-25T00:00:00', isAllDay: true, location: '' },
++    ]);
++
++    const out = await tool.run('내일 일정 알려줘', undefined, NOW);
++
++    const [start, end] = calendar.between.mock.calls[0];
++    expect(start.toISOString()).toBe('2026-11-23T15:00:00.000Z');
++    expect(end.toISOString()).toBe('2026-11-24T15:00:00.000Z');
++    expect(out).toContain('내일 (2026-11-24(화)) 2건');
++    expect(out).toContain('2026-11-24 10:00~11:00 | 주간 회의 | 장소: 회의실 A');
++    expect(out).toContain('종일 | 휴가');
++  });
++
++  it('일정 없으면 안내', async () => {
++    const { tool } = make();
++    expect(await tool.run('오늘 일정', undefined, NOW)).toContain('일정 없음');
++  });
++
++  it('설정 없음·미연결 → ToolError', async () => {
++    await expect(make(false).tool.run('일정')).rejects.toBeInstanceOf(ToolError);
++    const { tool, calendar } = make();
++    calendar.between.mockRejectedValue(new MailError('NOT_CONNECTED', 'x'));
++    await expect(tool.run('일정', undefined, NOW)).rejects.toThrow('Calendars.Read');
++  });
++});
+diff --git a/backend/test/unit/conversation.service.spec.ts b/backend/test/unit/conversation.service.spec.ts
+index 6ba2f0b..ad9bde1 100644
+--- a/backend/test/unit/conversation.service.spec.ts
++++ b/backend/test/unit/conversation.service.spec.ts
+@@ -17,11 +17,17 @@ function setup() {
+     conversation: { findUnique: jest.fn().mockResolvedValue({ id: 'c1' }) },
+     message: {
+       create: jest.fn(async ({ data }) => {
+-        const row = { id: String(stored.length + 1), createdAt: new Date(), ...data };
++        const row = { id: String(stored.length + 1), createdAt: new Date(Date.now() + stored.length), ...data };
+         stored.push(row);
+         return row;
+       }),
+       findMany: jest.fn(async () => [...stored].reverse()), // createdAt desc
++      findFirst: jest.fn(async () => [...stored].reverse().find((m) => m.role === 'USER') ?? null),
++      update: jest.fn(async ({ where, data }) => Object.assign(stored.find((m) => m.id === where.id), data)),
++      deleteMany: jest.fn(async ({ where }) => {
++        const keep = stored.filter((m) => !(m.createdAt > where.createdAt.gt));
++        stored.splice(0, stored.length, ...keep);
++      }),
+     },
+   };
+   const model = new FakeModel();
+@@ -111,4 +117,44 @@ describe('ConversationService', () => {
+     expect(tools.contextFor).toHaveBeenCalledWith('hi', ac.signal);
+     expect(model.stream.mock.calls[0][0].messages[0].content).toBe('sys\n\nCTX');
+   });
++
++  it('stream: 상태 이벤트 순서', async () => {
++    const { service, model } = setup();
++    model.stream.mockImplementation(async function* () {
++      yield 'a';
++    });
++    const phases: string[] = [];
++    for await (const _ of service.stream('c1', 'hi', undefined, (p) => phases.push(p))) void _;
++    expect(phases).toEqual(['tools', 'queued', 'generating']);
++  });
++
++  it('regenerate: 마지막 응답 삭제 후 같은 질문으로 재생성', async () => {
++    const { service, model, stored } = setup();
++    const replies = ['first', 'second'];
++    model.stream.mockImplementation(async function* () {
++      yield replies.shift()!;
++    });
++    for await (const _ of service.stream('c1', 'q')) void _;
++    for await (const _ of service.regenerate('c1')) void _;
++    expect(stored.map((m) => [m.role, m.content])).toEqual([
++      ['USER', 'q'],
++      ['ASSISTANT', 'second'],
++    ]);
++    expect(model.stream.mock.calls[1][0].messages.at(-1)).toEqual({ role: 'user', content: 'q' });
++  });
++
++  it('editLast: 마지막 질문 수정 후 재생성', async () => {
++    const { service, model, stored } = setup();
++    model.stream.mockImplementation(async function* () {
++      yield 'r';
++    });
++    for await (const _ of service.stream('c1', 'old')) void _;
++    for await (const _ of service.editLast('c1', 'new')) void _;
++    expect(stored.map((m) => m.content)).toEqual(['new', 'r']);
++  });
++
++  it('regenerate: 사용자 메시지 없으면 400', async () => {
++    const { service } = setup();
++    await expect(service.regenerate('c1').next()).rejects.toThrow('no user message');
++  });
+ });
+diff --git a/backend/test/unit/tool-registry.spec.ts b/backend/test/unit/tool-registry.spec.ts
+index 61eba93..de27d3f 100644
+--- a/backend/test/unit/tool-registry.spec.ts
++++ b/backend/test/unit/tool-registry.spec.ts
+@@ -3,7 +3,7 @@ import { TOOL_PREAMBLE, ToolRegistry } from '../../src/ai/tools/tool-registry.se
+ 
+ function make(tool: Partial<{ matches: (t: string) => boolean; run: jest.Mock }>) {
+   const fake: any = { name: 'fake', readOnly: true, matches: () => true, run: jest.fn(), ...tool };
+-  return { fake, registry: new ToolRegistry(fake) };
++  return { fake, registry: new ToolRegistry(fake, { name: "outlook-calendar", matches: () => false } as any) };
+ }
+ 
+ describe('ToolRegistry', () => {
+diff --git a/frontend/package-lock.json b/frontend/package-lock.json
+index e11ad41..59db551 100644
+--- a/frontend/package-lock.json
++++ b/frontend/package-lock.json
+@@ -9,9 +9,12 @@
+       "version": "0.1.0",
+       "dependencies": {
+         "react": "^19.0.0",
+-        "react-dom": "^19.0.0"
++        "react-dom": "^19.0.0",
++        "react-markdown": "^9.1.0",
++        "remark-gfm": "^4.0.1"
+       },
+       "devDependencies": {
++        "@types/node": "^22.20.5",
+         "@types/react": "^19.0.0",
+         "@types/react-dom": "^19.0.0",
+         "@vitejs/plugin-react": "^4.3.0",
+@@ -1212,18 +1215,68 @@
+         "@babel/types": "^7.28.2"
+       }
+     },
++    "node_modules/@types/debug": {
++      "version": "4.1.13",
++      "resolved": "https://registry.npmjs.org/@types/debug/-/debug-4.1.13.tgz",
++      "integrity": "sha512-KSVgmQmzMwPlmtljOomayoR89W4FynCAi3E8PPs7vmDVPe84hT+vGPKkJfThkmXs0x0jAaa9U8uW8bbfyS2fWw==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/ms": "*"
++      }
++    },
+     "node_modules/@types/estree": {
+       "version": "1.0.10",
+       "resolved": "https://registry.npmjs.org/@types/estree/-/estree-1.0.10.tgz",
+       "integrity": "sha512-lTyOMnOcmRBzdCv6/4zUZCrEhV0xrqQiUZBZtVcbmLHBXKLnN8q89v/wKRF/Q0HbwVsqbIG3o5HDoFl9sduM+g==",
+-      "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/@types/estree-jsx": {
++      "version": "1.0.5",
++      "resolved": "https://registry.npmjs.org/@types/estree-jsx/-/estree-jsx-1.0.5.tgz",
++      "integrity": "sha512-52CcUVNFyfb1A2ALocQw/Dd1BQFNmSdkuC3BkZ6iqhdMfQz7JWOFRuJFloOzjk+6WijU56m9oKXFAXc7o3Towg==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/estree": "*"
++      }
++    },
++    "node_modules/@types/hast": {
++      "version": "3.0.5",
++      "resolved": "https://registry.npmjs.org/@types/hast/-/hast-3.0.5.tgz",
++      "integrity": "sha512-rp/ezSWaD1m44dPKICGhiskI13nVr7qTloFwDa/IYkhhf5nzwP+zIQcIJh3WIFSBOy/H1PzB40jPjMDksN4F+g==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "*"
++      }
++    },
++    "node_modules/@types/mdast": {
++      "version": "4.0.4",
++      "resolved": "https://registry.npmjs.org/@types/mdast/-/mdast-4.0.4.tgz",
++      "integrity": "sha512-kGaNbPh1k7AFzgpud/gMdvIm5xuECykRR+JnWKQno9TAXVa6WIVCGTPvYGekIDL4uwCZQSYbUxNBSb1aUo79oA==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "*"
++      }
++    },
++    "node_modules/@types/ms": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/@types/ms/-/ms-2.1.0.tgz",
++      "integrity": "sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==",
++      "license": "MIT"
++    },
++    "node_modules/@types/node": {
++      "version": "22.20.5",
++      "resolved": "https://registry.npmjs.org/@types/node/-/node-22.20.5.tgz",
++      "integrity": "sha512-U2+DNr+wSjpsTS/wZGYHq7GcwfuSmKiKvoPvK22zwTlRhU91yOniN4qRR5KhIjvif7ysw/dz/hKmfDH0Ris4aA==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "undici-types": "~6.21.0"
++      }
++    },
+     "node_modules/@types/react": {
+       "version": "19.3.0",
+       "resolved": "https://registry.npmjs.org/@types/react/-/react-19.3.0.tgz",
+       "integrity": "sha512-N0rFCuH9YoxG9/m61l9MfpJKfmLOVU0em7ipIz6TRgSSkvReLB9vL85GB+yr8Bs5leqpvg96JSwF4ZS1s4viQg==",
+-      "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "csstype": "^3.2.2"
+@@ -1239,6 +1292,18 @@
+         "@types/react": "^19.3.0"
+       }
+     },
++    "node_modules/@types/unist": {
++      "version": "3.0.3",
++      "resolved": "https://registry.npmjs.org/@types/unist/-/unist-3.0.3.tgz",
++      "integrity": "sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==",
++      "license": "MIT"
++    },
++    "node_modules/@ungap/structured-clone": {
++      "version": "1.4.0",
++      "resolved": "https://registry.npmjs.org/@ungap/structured-clone/-/structured-clone-1.4.0.tgz",
++      "integrity": "sha512-1mEZtMKPM09vDmQt5y7YvmN2+DFTP7Tg0EWXdic8/C6VRnpb33e4ghisCIE3WZjsE2N8mf+QV1Zqh7ZFYLWInQ==",
++      "license": "ISC"
++    },
+     "node_modules/@vitejs/plugin-react": {
+       "version": "4.7.0",
+       "resolved": "https://registry.npmjs.org/@vitejs/plugin-react/-/plugin-react-4.7.0.tgz",
+@@ -1260,6 +1325,16 @@
+         "vite": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0"
+       }
+     },
++    "node_modules/bail": {
++      "version": "2.0.2",
++      "resolved": "https://registry.npmjs.org/bail/-/bail-2.0.2.tgz",
++      "integrity": "sha512-0xO6mYd7JB2YesxDKplafRpsiOzPt9V02ddPCLbY1xYGPOX24NTyN50qnUxgCPcSoYMhKpAuBTjQoRZCAkUDRw==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
+     "node_modules/baseline-browser-mapping": {
+       "version": "2.11.39",
+       "resolved": "https://registry.npmjs.org/baseline-browser-mapping/-/baseline-browser-mapping-2.11.39.tgz",
+@@ -1328,6 +1403,66 @@
+       ],
+       "license": "CC-BY-4.0"
+     },
++    "node_modules/ccount": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/ccount/-/ccount-2.0.1.tgz",
++      "integrity": "sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/character-entities": {
++      "version": "2.0.2",
++      "resolved": "https://registry.npmjs.org/character-entities/-/character-entities-2.0.2.tgz",
++      "integrity": "sha512-shx7oQ0Awen/BRIdkjkvz54PnEEI/EjwXDSIZp86/KKdbafHh1Df/RYGBhn4hbe2+uKC9FnT5UCEdyPz3ai9hQ==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/character-entities-html4": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/character-entities-html4/-/character-entities-html4-2.1.0.tgz",
++      "integrity": "sha512-1v7fgQRj6hnSwFpq1Eu0ynr/CDEw0rXo2B61qXrLNdHZmPKgb7fqS1a2JwF0rISo9q77jDI8VMEHoApn8qDoZA==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/character-entities-legacy": {
++      "version": "3.0.0",
++      "resolved": "https://registry.npmjs.org/character-entities-legacy/-/character-entities-legacy-3.0.0.tgz",
++      "integrity": "sha512-RpPp0asT/6ufRm//AJVwpViZbGM/MkjQFxJccQRHmISF/22NBtsHqAWmL+/pmkPWoIUJdWyeVleTl1wydHATVQ==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/character-reference-invalid": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/character-reference-invalid/-/character-reference-invalid-2.0.1.tgz",
++      "integrity": "sha512-iBZ4F4wRbyORVsu0jPV7gXkOsGYjGHPmAyv+HiHG8gi5PtC9KI2j1+v8/tlibRvjoWX027ypmG/n0HtO5t7unw==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/comma-separated-tokens": {
++      "version": "2.0.3",
++      "resolved": "https://registry.npmjs.org/comma-separated-tokens/-/comma-separated-tokens-2.0.3.tgz",
++      "integrity": "sha512-Fu4hJdvzeylCfQPp9SGWidpzrMs7tTrlu6Vb8XGaRGck8QSNZJJp538Wrb60Lax4fPwR64ViY468OIUTbRlGZg==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
+     "node_modules/convert-source-map": {
+       "version": "2.0.0",
+       "resolved": "https://registry.npmjs.org/convert-source-map/-/convert-source-map-2.0.0.tgz",
+@@ -1339,14 +1474,12 @@
+       "version": "3.2.4",
+       "resolved": "https://registry.npmjs.org/csstype/-/csstype-3.2.4.tgz",
+       "integrity": "sha512-PoKaoPzQapnEoqUSnHx1u6W6ku8CVEgKsnpmmzU3m1nwkidpPBQ8V/Zq2+bWNrsOKoKLwTGdbx6xF7BXP1zLVQ==",
+-      "dev": true,
+       "license": "MIT"
+     },
+     "node_modules/debug": {
+       "version": "4.4.3",
+       "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+       "integrity": "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==",
+-      "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "ms": "^2.1.3"
+@@ -1360,6 +1493,41 @@
+         }
+       }
+     },
++    "node_modules/decode-named-character-reference": {
++      "version": "1.3.0",
++      "resolved": "https://registry.npmjs.org/decode-named-character-reference/-/decode-named-character-reference-1.3.0.tgz",
++      "integrity": "sha512-GtpQYB283KrPp6nRw50q3U9/VfOutZOe103qlN7BPP6Ad27xYnOIWv4lPzo8HCAL+mMZofJ9KEy30fq6MfaK6Q==",
++      "license": "MIT",
++      "dependencies": {
++        "character-entities": "^2.0.0"
++      },
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/dequal": {
++      "version": "2.0.3",
++      "resolved": "https://registry.npmjs.org/dequal/-/dequal-2.0.3.tgz",
++      "integrity": "sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=6"
++      }
++    },
++    "node_modules/devlop": {
++      "version": "1.1.0",
++      "resolved": "https://registry.npmjs.org/devlop/-/devlop-1.1.0.tgz",
++      "integrity": "sha512-RWmIqhcFf1lRYBvNmr7qTNuyCt/7/ns2jbpp1+PalgE/rDQcBT0fioSMUpJ93irlUhC5hrg4cYqe6U+0ImW0rA==",
++      "license": "MIT",
++      "dependencies": {
++        "dequal": "^2.0.0"
++      },
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
+     "node_modules/electron-to-chromium": {
+       "version": "1.5.492",
+       "resolved": "https://registry.npmjs.org/electron-to-chromium/-/electron-to-chromium-1.5.492.tgz",
+@@ -1419,6 +1587,34 @@
+         "node": ">=6"
+       }
+     },
++    "node_modules/escape-string-regexp": {
++      "version": "5.0.0",
++      "resolved": "https://registry.npmjs.org/escape-string-regexp/-/escape-string-regexp-5.0.0.tgz",
++      "integrity": "sha512-/veY75JbMK4j1yjvuUxuVsiS/hr/4iHs9FTT6cgTexxdE0Ly/glccBAkloH/DofkjRbZU3bnoj38mOmhkZ0lHw==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=12"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/sindresorhus"
++      }
++    },
++    "node_modules/estree-util-is-identifier-name": {
++      "version": "3.0.0",
++      "resolved": "https://registry.npmjs.org/estree-util-is-identifier-name/-/estree-util-is-identifier-name-3.0.0.tgz",
++      "integrity": "sha512-hFtqIDZTIUZ9BXLb8y4pYGyk6+wekIivNVTcmvk8NoOh+VeRn5y6cEHzbURrWbfp1fIqdVipilzj+lfaadNZmg==",
++      "license": "MIT",
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/extend": {
++      "version": "3.0.2",
++      "resolved": "https://registry.npmjs.org/extend/-/extend-3.0.2.tgz",
++      "integrity": "sha512-fjquC59cD7CyW6urNXK0FBufkZcoiGG80wTuPujX590cB5Ttln20E2UB4S/WARVqhXffZl2LNgS+gQdPIIim/g==",
++      "license": "MIT"
++    },
+     "node_modules/fdir": {
+       "version": "6.5.0",
+       "resolved": "https://registry.npmjs.org/fdir/-/fdir-6.5.0.tgz",
+@@ -1448,68 +1644,1057 @@
+       "os": [
+         "darwin"
+       ],
+-      "engines": {
+-        "node": "^8.16.0 || ^10.6.0 || >=11.0.0"
++      "engines": {
++        "node": "^8.16.0 || ^10.6.0 || >=11.0.0"
++      }
++    },
++    "node_modules/gensync": {
++      "version": "1.0.0-beta.2",
++      "resolved": "https://registry.npmjs.org/gensync/-/gensync-1.0.0-beta.2.tgz",
++      "integrity": "sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=6.9.0"
++      }
++    },
++    "node_modules/hast-util-to-jsx-runtime": {
++      "version": "2.3.7",
++      "resolved": "https://registry.npmjs.org/hast-util-to-jsx-runtime/-/hast-util-to-jsx-runtime-2.3.7.tgz",
++      "integrity": "sha512-F7DNV2NMcTxA4GqPVHnXzX+mpoPHAIY9rJAVH3CZ1FdBZOcBUEjUuvMkMpHVs/sicEtznh9tMGj5WUR9S4E2rg==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/estree": "^1.0.0",
++        "@types/hast": "^3.0.0",
++        "@types/unist": "^3.0.0",
++        "comma-separated-tokens": "^2.0.0",
++        "devlop": "^1.0.0",
++        "estree-util-is-identifier-name": "^3.0.0",
++        "hast-util-whitespace": "^3.0.0",
++        "mdast-util-mdx-expression": "^2.0.0",
++        "mdast-util-mdx-jsx": "^3.0.0",
++        "mdast-util-mdxjs-esm": "^2.0.0",
++        "property-information": "^7.0.0",
++        "space-separated-tokens": "^2.0.0",
++        "style-to-object": "^2.0.0",
++        "unist-util-position": "^5.0.0",
++        "vfile-message": "^4.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/hast-util-whitespace": {
++      "version": "3.0.0",
++      "resolved": "https://registry.npmjs.org/hast-util-whitespace/-/hast-util-whitespace-3.0.0.tgz",
++      "integrity": "sha512-88JUN06ipLwsnv+dVn+OIYOvAuvBMy/Qoi6O7mQHxdPXpjy+Cd6xRkWwux7DKO+4sYILtLBRIKgsdpS2gQc7qw==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/hast": "^3.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/html-url-attributes": {
++      "version": "3.0.1",
++      "resolved": "https://registry.npmjs.org/html-url-attributes/-/html-url-attributes-3.0.1.tgz",
++      "integrity": "sha512-ol6UPyBWqsrO6EJySPz2O7ZSr856WDrEzM5zMqp+FJJLGMW35cLYmmZnl0vztAZxRUoNZJFTCohfjuIJ8I4QBQ==",
++      "license": "MIT",
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/inline-style-parser": {
++      "version": "0.2.9",
++      "resolved": "https://registry.npmjs.org/inline-style-parser/-/inline-style-parser-0.2.9.tgz",
++      "integrity": "sha512-IttN8BqKLxzUrnTqHI+/hwAJQItBAUjdoHERCDv+oOuX48VP6bzW8+QjOXSfoevzq3YrYAwX1uLHp8TqO9yIeg==",
++      "license": "MIT"
++    },
++    "node_modules/is-alphabetical": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/is-alphabetical/-/is-alphabetical-2.0.1.tgz",
++      "integrity": "sha512-FWyyY60MeTNyeSRpkM2Iry0G9hpr7/9kD40mD/cGQEuilcZYS4okz8SN2Q6rLCJ8gbCt6fN+rC+6tMGS99LaxQ==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/is-alphanumerical": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/is-alphanumerical/-/is-alphanumerical-2.0.1.tgz",
++      "integrity": "sha512-hmbYhX/9MUMF5uh7tOXyK/n0ZvWpad5caBA17GsC6vyuCqaWliRG5K1qS9inmUhEMaOBIW7/whAnSwveW/LtZw==",
++      "license": "MIT",
++      "dependencies": {
++        "is-alphabetical": "^2.0.0",
++        "is-decimal": "^2.0.0"
++      },
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/is-decimal": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/is-decimal/-/is-decimal-2.0.1.tgz",
++      "integrity": "sha512-AAB9hiomQs5DXWcRB1rqsxGUstbRroFOPPVAomNk/3XHR5JyEZChOyTWe2oayKnsSsr/kcGqF+z6yuH6HHpN0A==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/is-hexadecimal": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/is-hexadecimal/-/is-hexadecimal-2.0.1.tgz",
++      "integrity": "sha512-DgZQp241c8oO6cA1SbTEWiXeoxV42vlcJxgH+B3hi1AiqqKruZR3ZGF8In3fj4+/y/7rHvlOZLZtgJ/4ttYGZg==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/is-plain-obj": {
++      "version": "4.1.0",
++      "resolved": "https://registry.npmjs.org/is-plain-obj/-/is-plain-obj-4.1.0.tgz",
++      "integrity": "sha512-+Pgi+vMuUNkJyExiMBt5IlFoMyKnr5zhJ4Uspz58WOhBF5QoIZkFyNHIbBAtHwzVAgk5RtndVNsDRN61/mmDqg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=12"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/sindresorhus"
++      }
++    },
++    "node_modules/js-tokens": {
++      "version": "4.0.0",
++      "resolved": "https://registry.npmjs.org/js-tokens/-/js-tokens-4.0.0.tgz",
++      "integrity": "sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==",
++      "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/jsesc": {
++      "version": "3.1.0",
++      "resolved": "https://registry.npmjs.org/jsesc/-/jsesc-3.1.0.tgz",
++      "integrity": "sha512-/sM3dO2FOzXjKQhJuo0Q173wf2KOo8t4I8vHy6lF9poUp7bKT0/NHE8fPX23PwfhnykfqnC2xRxOnVw5XuGIaA==",
++      "dev": true,
++      "license": "MIT",
++      "bin": {
++        "jsesc": "bin/jsesc"
++      },
++      "engines": {
++        "node": ">=6"
++      }
++    },
++    "node_modules/json5": {
++      "version": "2.2.3",
++      "resolved": "https://registry.npmjs.org/json5/-/json5-2.2.3.tgz",
++      "integrity": "sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg==",
++      "dev": true,
++      "license": "MIT",
++      "bin": {
++        "json5": "lib/cli.js"
++      },
++      "engines": {
++        "node": ">=6"
++      }
++    },
++    "node_modules/longest-streak": {
++      "version": "3.1.0",
++      "resolved": "https://registry.npmjs.org/longest-streak/-/longest-streak-3.1.0.tgz",
++      "integrity": "sha512-9Ri+o0JYgehTaVBBDoMqIl8GXtbWg711O3srftcHhZ0dqnETqLaoIK0x17fUw9rFSlK/0NlsKe0Ahhyl5pXE2g==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/lru-cache": {
++      "version": "5.1.1",
++      "resolved": "https://registry.npmjs.org/lru-cache/-/lru-cache-5.1.1.tgz",
++      "integrity": "sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==",
++      "dev": true,
++      "license": "ISC",
++      "dependencies": {
++        "yallist": "^3.0.2"
++      }
++    },
++    "node_modules/markdown-table": {
++      "version": "3.1.0",
++      "resolved": "https://registry.npmjs.org/markdown-table/-/markdown-table-3.1.0.tgz",
++      "integrity": "sha512-xpeSCdM+B+6P3ncfgaB7FoDbtJ30xAe6Z18TGT7AgXJsHqCElCICZovQqdRMm7kHgpTyYv36EupqewoFFSB8vw==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/mdast-util-find-and-replace": {
++      "version": "3.0.5",
++      "resolved": "https://registry.npmjs.org/mdast-util-find-and-replace/-/mdast-util-find-and-replace-3.0.5.tgz",
++      "integrity": "sha512-of3wZLEBWpK8mSYy8wmKnwyxfUKjhCkXxGLz45DVBqfcahTP37LscCK+0oAZh+ReZ5OunPDkB2zdGMIxrojLhw==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/mdast": "^4.0.0",
++        "escape-string-regexp": "^5.0.0",
++        "unist-util-is": "^6.0.0",
++        "unist-util-visit-parents": "^6.1.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/mdast-util-from-markdown": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/mdast-util-from-markdown/-/mdast-util-from-markdown-2.1.0.tgz",
++      "integrity": "sha512-KRLgmPaP2H1ul2bpoJkOS+9pAcDAAj9Nu1mqLnh8NLeJG5tlvj42TH80PIGBpROWlRXLk0lDrWNuZCFy/tsB4A==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/mdast": "^4.0.0",
++        "@types/unist": "^3.0.0",
++        "decode-named-character-reference": "^1.0.0",
++        "devlop": "^1.0.0",
++        "mdast-util-to-string": "^4.0.0",
++        "micromark": "^4.0.0",
++        "micromark-util-decode-numeric-character-reference": "^2.0.0",
++        "micromark-util-decode-string": "^2.0.0",
++        "micromark-util-normalize-identifier": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0",
++        "unist-util-stringify-position": "^4.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/mdast-util-gfm": {
++      "version": "3.1.0",
++      "resolved": "https://registry.npmjs.org/mdast-util-gfm/-/mdast-util-gfm-3.1.0.tgz",
++      "integrity": "sha512-0ulfdQOM3ysHhCJ1p06l0b0VKlhU0wuQs3thxZQagjcjPrlFRqY215uZGHHJan9GEAXd9MbfPjFJz+qMkVR6zQ==",
++      "license": "MIT",
++      "dependencies": {
++        "mdast-util-from-markdown": "^2.0.0",
++        "mdast-util-gfm-autolink-literal": "^2.0.0",
++        "mdast-util-gfm-footnote": "^2.0.0",
++        "mdast-util-gfm-strikethrough": "^2.0.0",
++        "mdast-util-gfm-table": "^2.0.0",
++        "mdast-util-gfm-task-list-item": "^2.0.0",
++        "mdast-util-to-markdown": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/mdast-util-gfm-autolink-literal": {
++      "version": "2.1.2",
++      "resolved": "https://registry.npmjs.org/mdast-util-gfm-autolink-literal/-/mdast-util-gfm-autolink-literal-2.1.2.tgz",
++      "integrity": "sha512-rAlbZBGZfv2YRr6lSFGHTN305KkNawOYRRlbldFyPHnTlHJZwlGdzVwyIDvr3fxbhRbmJOSZc06c8H5Fgfu8Ng==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/mdast": "^4.0.0",
++        "ccount": "^2.0.0",
++        "devlop": "^1.0.0",
++        "mdast-util-find-and-replace": "^3.0.0",
++        "micromark-util-character": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/mdast-util-gfm-footnote": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/mdast-util-gfm-footnote/-/mdast-util-gfm-footnote-2.1.0.tgz",
++      "integrity": "sha512-sqpDWlsHn7Ac9GNZQMeUzPQSMzR6Wv0WKRNvQRg0KqHh02fpTz69Qc1QSseNX29bhz1ROIyNyxExfawVKTm1GQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/mdast": "^4.0.0",
++        "devlop": "^1.1.0",
++        "mdast-util-from-markdown": "^2.0.0",
++        "mdast-util-to-markdown": "^2.0.0",
++        "micromark-util-normalize-identifier": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/mdast-util-gfm-strikethrough": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/mdast-util-gfm-strikethrough/-/mdast-util-gfm-strikethrough-2.0.1.tgz",
++      "integrity": "sha512-OuJHqvr455pwu2OaOrir7dbzqs4jlWKOtlu9L6GjcIjjQwNyw02VntQsr/Ek6/A13vgnXfUhBekWRUP1OkNivw==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/mdast": "^4.0.0",
++        "mdast-util-from-markdown": "^2.0.0",
++        "mdast-util-to-markdown": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/mdast-util-gfm-table": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/mdast-util-gfm-table/-/mdast-util-gfm-table-2.0.1.tgz",
++      "integrity": "sha512-fiIjPrAy4kz68/eFbPHhsiWDGHhqUSVoU1XsfLM5DsEPXw7MxgiVVyulUggFRckVWeT1KXQXkg5vm3kv4oMSOA==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/mdast": "^4.0.0",
++        "devlop": "^1.0.0",
++        "markdown-table": "^3.0.0",
++        "mdast-util-from-markdown": "^2.0.0",
++        "mdast-util-to-markdown": "^2.0.0",
++        "mdast-util-to-string": "^4.0.0",
++        "unist-util-visit": "^5.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/mdast-util-gfm-task-list-item": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/mdast-util-gfm-task-list-item/-/mdast-util-gfm-task-list-item-2.0.1.tgz",
++      "integrity": "sha512-jXVO1hvB2hs82g1esi7I9nIJDqiijbQLIyH2jDUb5s7jIAZMr/79h0VHSq7XHKTqpLARRm+DDNjduB7S9+6XZA==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/mdast": "^4.0.0",
++        "devlop": "^1.0.0",
++        "mdast-util-from-markdown": "^2.0.0",
++        "mdast-util-to-markdown": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/mdast-util-mdx-expression": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/mdast-util-mdx-expression/-/mdast-util-mdx-expression-2.0.1.tgz",
++      "integrity": "sha512-J6f+9hUp+ldTZqKRSg7Vw5V6MqjATc+3E4gf3CFNcuZNWD8XdyI6zQ8GqH7f8169MM6P7hMBRDVGnn7oHB9kXQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/estree-jsx": "^1.0.0",
++        "@types/hast": "^3.0.0",
++        "@types/mdast": "^4.0.0",
++        "devlop": "^1.0.0",
++        "mdast-util-from-markdown": "^2.0.0",
++        "mdast-util-to-markdown": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/mdast-util-mdx-jsx": {
++      "version": "3.2.2",
++      "resolved": "https://registry.npmjs.org/mdast-util-mdx-jsx/-/mdast-util-mdx-jsx-3.2.2.tgz",
++      "integrity": "sha512-/0FHaZMv2fSjIL3z/NYmXnQTSdzYyamPpI1BXpSCngTUqpSvMNIlERa26ABz+Z6UFQbrh3I5Yhzp448WZsPfMA==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/estree-jsx": "^1.0.0",
++        "@types/hast": "^3.0.0",
++        "@types/mdast": "^4.0.0",
++        "@types/unist": "^3.0.0",
++        "ccount": "^2.0.0",
++        "devlop": "^1.1.0",
++        "mdast-util-from-markdown": "^2.0.0",
++        "mdast-util-to-markdown": "^2.0.0",
++        "parse-entities": "^4.0.0",
++        "stringify-entities": "^4.0.0",
++        "unist-util-stringify-position": "^4.0.0",
++        "vfile-message": "^4.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/mdast-util-mdxjs-esm": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/mdast-util-mdxjs-esm/-/mdast-util-mdxjs-esm-2.0.1.tgz",
++      "integrity": "sha512-EcmOpxsZ96CvlP03NghtH1EsLtr0n9Tm4lPUJUBccV9RwUOneqSycg19n5HGzCf+10LozMRSObtVr3ee1WoHtg==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/estree-jsx": "^1.0.0",
++        "@types/hast": "^3.0.0",
++        "@types/mdast": "^4.0.0",
++        "devlop": "^1.0.0",
++        "mdast-util-from-markdown": "^2.0.0",
++        "mdast-util-to-markdown": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/mdast-util-phrasing": {
++      "version": "4.1.0",
++      "resolved": "https://registry.npmjs.org/mdast-util-phrasing/-/mdast-util-phrasing-4.1.0.tgz",
++      "integrity": "sha512-TqICwyvJJpBwvGAMZjj4J2n0X8QWp21b9l0o7eXyVJ25YNWYbJDVIyD1bZXE6WtV6RmKJVYmQAKWa0zWOABz2w==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/mdast": "^4.0.0",
++        "unist-util-is": "^6.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/mdast-util-to-hast": {
++      "version": "13.2.2",
++      "resolved": "https://registry.npmjs.org/mdast-util-to-hast/-/mdast-util-to-hast-13.2.2.tgz",
++      "integrity": "sha512-l2pnmOuqs+SGLVpTVXnRLQu5v1AzvDe181404fbXzzqObVxrAnnVxapAP27pUwzLBL/ABIkgUhGlPVU7QSvIFg==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/hast": "^3.0.0",
++        "@types/mdast": "^4.0.0",
++        "@ungap/structured-clone": "^1.0.0",
++        "devlop": "^1.0.0",
++        "micromark-util-sanitize-uri": "^2.0.0",
++        "trim-lines": "^3.0.0",
++        "unist-util-position": "^5.0.0",
++        "unist-util-visit": "^5.0.0",
++        "vfile": "^6.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/mdast-util-to-markdown": {
++      "version": "2.2.4",
++      "resolved": "https://registry.npmjs.org/mdast-util-to-markdown/-/mdast-util-to-markdown-2.2.4.tgz",
++      "integrity": "sha512-aCsogoZ2Oz1EItAlC12A+/uGuzp+CWlDU0xZ3o5jbJaepLsOu2tlxpvHslnX5dRhspD1gxNVkBtYG0yMiIpXoQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/mdast": "^4.0.0",
++        "@types/unist": "^3.0.0",
++        "longest-streak": "^3.0.0",
++        "mdast-util-phrasing": "^4.0.0",
++        "mdast-util-to-string": "^4.0.0",
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-classify-character": "^2.0.0",
++        "micromark-util-decode-string": "^2.0.0",
++        "micromark-util-html-tag-name": "^2.0.0",
++        "unist-util-visit": "^5.0.0",
++        "zwitch": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/mdast-util-to-string": {
++      "version": "4.0.0",
++      "resolved": "https://registry.npmjs.org/mdast-util-to-string/-/mdast-util-to-string-4.0.0.tgz",
++      "integrity": "sha512-0H44vDimn51F0YwvxSJSm0eCDOJTRlmN0R1yBh4HLj9wiV1Dn0QoXGbvFAWj2hSItVTlCmBF1hqKlIyUBVFLPg==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/mdast": "^4.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/micromark": {
++      "version": "4.0.3",
++      "resolved": "https://registry.npmjs.org/micromark/-/micromark-4.0.3.tgz",
++      "integrity": "sha512-oGYfQzHSG5dOMovQcJ3fyTmZlWAWpi0XA0sJwJs+i6OT88o1+Jtw/8z0CmdowSLxGhhFK89rQ/oXph/wN02PNw==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "@types/debug": "^4.0.0",
++        "debug": "^4.0.0",
++        "decode-named-character-reference": "^1.0.0",
++        "devlop": "^1.0.0",
++        "micromark-core-commonmark": "^2.0.0",
++        "micromark-factory-space": "^2.0.0",
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-chunked": "^2.0.0",
++        "micromark-util-combine-extensions": "^2.0.0",
++        "micromark-util-decode-numeric-character-reference": "^2.0.0",
++        "micromark-util-edit-map": "^1.0.0",
++        "micromark-util-encode": "^2.0.0",
++        "micromark-util-normalize-identifier": "^2.0.0",
++        "micromark-util-resolve-all": "^2.0.0",
++        "micromark-util-sanitize-uri": "^2.0.0",
++        "micromark-util-subtokenize": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-core-commonmark": {
++      "version": "2.0.4",
++      "resolved": "https://registry.npmjs.org/micromark-core-commonmark/-/micromark-core-commonmark-2.0.4.tgz",
++      "integrity": "sha512-wxEeE8v8XVvOrxn1TZj74qYhAtTQsSqufHVS3uNVyT1MupXxhyaHk8/9xDNPh9BmL77QNDgWTkZ3RsYHB2ry7w==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "decode-named-character-reference": "^1.0.0",
++        "devlop": "^1.0.0",
++        "micromark-factory-destination": "^2.0.0",
++        "micromark-factory-label": "^2.0.0",
++        "micromark-factory-space": "^2.1.0",
++        "micromark-factory-title": "^2.0.0",
++        "micromark-factory-whitespace": "^2.0.0",
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-chunked": "^2.0.0",
++        "micromark-util-classify-character": "^2.0.0",
++        "micromark-util-edit-map": "^1.0.0",
++        "micromark-util-html-tag-name": "^2.0.0",
++        "micromark-util-normalize-identifier": "^2.0.0",
++        "micromark-util-resolve-all": "^2.0.0",
++        "micromark-util-subtokenize": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.3"
++      }
++    },
++    "node_modules/micromark-extension-gfm": {
++      "version": "3.0.0",
++      "resolved": "https://registry.npmjs.org/micromark-extension-gfm/-/micromark-extension-gfm-3.0.0.tgz",
++      "integrity": "sha512-vsKArQsicm7t0z2GugkCKtZehqUm31oeGBV/KVSorWSy8ZlNAv7ytjFhvaryUiCUJYqs+NoE6AFhpQvBTM6Q4w==",
++      "license": "MIT",
++      "dependencies": {
++        "micromark-extension-gfm-autolink-literal": "^2.0.0",
++        "micromark-extension-gfm-footnote": "^2.0.0",
++        "micromark-extension-gfm-strikethrough": "^2.0.0",
++        "micromark-extension-gfm-table": "^2.0.0",
++        "micromark-extension-gfm-tagfilter": "^2.0.0",
++        "micromark-extension-gfm-task-list-item": "^2.0.0",
++        "micromark-util-combine-extensions": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/micromark-extension-gfm-autolink-literal": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/micromark-extension-gfm-autolink-literal/-/micromark-extension-gfm-autolink-literal-2.1.0.tgz",
++      "integrity": "sha512-oOg7knzhicgQ3t4QCjCWgTmfNhvQbDDnJeVu9v81r7NltNCVmhPy1fJRX27pISafdjL+SVc4d3l48Gb6pbRypw==",
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-sanitize-uri": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/micromark-extension-gfm-footnote": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/micromark-extension-gfm-footnote/-/micromark-extension-gfm-footnote-2.1.0.tgz",
++      "integrity": "sha512-/yPhxI1ntnDNsiHtzLKYnE3vf9JZ6cAisqVDauhp4CEHxlb4uoOTxOCJ+9s51bIB8U1N1FJ1RXOKTIlD5B/gqw==",
++      "license": "MIT",
++      "dependencies": {
++        "devlop": "^1.0.0",
++        "micromark-core-commonmark": "^2.0.0",
++        "micromark-factory-space": "^2.0.0",
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-normalize-identifier": "^2.0.0",
++        "micromark-util-sanitize-uri": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/micromark-extension-gfm-strikethrough": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/micromark-extension-gfm-strikethrough/-/micromark-extension-gfm-strikethrough-2.1.0.tgz",
++      "integrity": "sha512-ADVjpOOkjz1hhkZLlBiYA9cR2Anf8F4HqZUO6e5eDcPQd0Txw5fxLzzxnEkSkfnD0wziSGiv7sYhk/ktvbf1uw==",
++      "license": "MIT",
++      "dependencies": {
++        "devlop": "^1.0.0",
++        "micromark-util-chunked": "^2.0.0",
++        "micromark-util-classify-character": "^2.0.0",
++        "micromark-util-resolve-all": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/micromark-extension-gfm-table": {
++      "version": "2.1.2",
++      "resolved": "https://registry.npmjs.org/micromark-extension-gfm-table/-/micromark-extension-gfm-table-2.1.2.tgz",
++      "integrity": "sha512-pRzm4kDTu0MjlmBkxmS9yYhw60nncfcEwu9NNdPFSQEFXS95ZKyIIyTSHu/o3ReBUrLKYEq+7YaXCRn/bPB4MA==",
++      "license": "MIT",
++      "dependencies": {
++        "devlop": "^1.0.0",
++        "micromark-factory-space": "^2.0.0",
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/micromark-extension-gfm-tagfilter": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/micromark-extension-gfm-tagfilter/-/micromark-extension-gfm-tagfilter-2.0.0.tgz",
++      "integrity": "sha512-xHlTOmuCSotIA8TW1mDIM6X2O1SiX5P9IuDtqGonFhEK0qgRI4yeC6vMxEV2dgyr2TiD+2PQ10o+cOhdVAcwfg==",
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-types": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/micromark-extension-gfm-task-list-item": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/micromark-extension-gfm-task-list-item/-/micromark-extension-gfm-task-list-item-2.1.0.tgz",
++      "integrity": "sha512-qIBZhqxqI6fjLDYFTBIa4eivDMnP+OZqsNwmQ3xNLE4Cxwc+zfQEfbs6tzAo2Hjq+bh6q5F+Z8/cksrLFYWQQw==",
++      "license": "MIT",
++      "dependencies": {
++        "devlop": "^1.0.0",
++        "micromark-factory-space": "^2.0.0",
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/micromark-factory-destination": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-factory-destination/-/micromark-factory-destination-2.0.1.tgz",
++      "integrity": "sha512-Xe6rDdJlkmbFRExpTOmRj9N3MaWmbAgdpSrBQvCFqhezUn4AHqJHbaEnfbVYYiexVSs//tqOdY/DxhjdCiJnIA==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-factory-label": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-factory-label/-/micromark-factory-label-2.0.1.tgz",
++      "integrity": "sha512-VFMekyQExqIW7xIChcXn4ok29YE3rnuyveW3wZQWWqF4Nv9Wk5rgJ99KzPvHjkmPXF93FXIbBp6YdW3t71/7Vg==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "devlop": "^1.0.0",
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-factory-space": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/micromark-factory-space/-/micromark-factory-space-2.1.0.tgz",
++      "integrity": "sha512-fS8hnLIjnjvdQIj39Geug8wWsR0HrYZ43KShKxNfwT7t2LOHo/LbWZEzEaSOjwtjdCsjoE6syHhonEzW0zv0+Q==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-factory-title": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-factory-title/-/micromark-factory-title-2.0.1.tgz",
++      "integrity": "sha512-5bZ+3CjhAd9eChYTHsjy6TGxpOFSKgKKJPJxr293jTbfry2KDoWkhBb6TcPVB4NmzaPhMs1Frm9AZH7OD4Cjzw==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-factory-space": "^2.0.0",
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-factory-whitespace": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-factory-whitespace/-/micromark-factory-whitespace-2.0.1.tgz",
++      "integrity": "sha512-Ob0nuZ3PKt/n0hORHyvoD9uZhr+Za8sFoP+OnMcnWK5lngSzALgQYKMr9RJVOWLqQYuyn6ulqGWSXdwf6F80lQ==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-factory-space": "^2.0.0",
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-character": {
++      "version": "2.1.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-character/-/micromark-util-character-2.1.1.tgz",
++      "integrity": "sha512-wv8tdUTJ3thSFFFJKtpYKOYiGP2+v96Hvk4Tu8KpCAsTMs6yi+nVmGh1syvSCsaxz45J6Jbw+9DD6g97+NV67Q==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-chunked": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-chunked/-/micromark-util-chunked-2.0.1.tgz",
++      "integrity": "sha512-QUNFEOPELfmvv+4xiNg2sRYeS/P84pTW0TCgP5zc9FpXetHY0ab7SxKyAQCNCc1eK0459uoLI1y5oO5Vc1dbhA==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-symbol": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-classify-character": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-classify-character/-/micromark-util-classify-character-2.0.1.tgz",
++      "integrity": "sha512-K0kHzM6afW/MbeWYWLjoHQv1sgg2Q9EccHEDzSkxiP/EaagNzCm7T/WMKZ3rjMbvIpvBiZgwR3dKMygtA4mG1Q==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-combine-extensions": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-combine-extensions/-/micromark-util-combine-extensions-2.0.1.tgz",
++      "integrity": "sha512-OnAnH8Ujmy59JcyZw8JSbK9cGpdVY44NKgSM7E9Eh7DiLS2E9RNQf0dONaGDzEG9yjEl5hcqeIsj4hfRkLH/Bg==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-chunked": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-decode-numeric-character-reference": {
++      "version": "2.0.2",
++      "resolved": "https://registry.npmjs.org/micromark-util-decode-numeric-character-reference/-/micromark-util-decode-numeric-character-reference-2.0.2.tgz",
++      "integrity": "sha512-ccUbYk6CwVdkmCQMyr64dXz42EfHGkPQlBj5p7YVGzq8I7CtjXZJrubAYezf7Rp+bjPseiROqe7G6foFd+lEuw==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "micromark-util-symbol": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-decode-string": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-decode-string/-/micromark-util-decode-string-2.0.1.tgz",
++      "integrity": "sha512-nDV/77Fj6eH1ynwscYTOsbK7rR//Uj0bZXBwJZRfaLEJ1iGBR6kIfNmlNqaqJf649EP0F3NWNdeJi03elllNUQ==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "decode-named-character-reference": "^1.0.0",
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-decode-numeric-character-reference": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0"
+       }
+     },
+-    "node_modules/gensync": {
+-      "version": "1.0.0-beta.2",
+-      "resolved": "https://registry.npmjs.org/gensync/-/gensync-1.0.0-beta.2.tgz",
+-      "integrity": "sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==",
+-      "dev": true,
++    "node_modules/micromark-util-edit-map": {
++      "version": "1.0.0",
++      "resolved": "https://registry.npmjs.org/micromark-util-edit-map/-/micromark-util-edit-map-1.0.0.tgz",
++      "integrity": "sha512-Pa2ljlsEL6sVwFaYeyrOLSYbQt73JvGbPOYFq+9AElXiSnfI5Q4465RRZ1sHv7lDjDOnGRDDaqPXqClqWK/q1Q==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
+       "license": "MIT",
+-      "engines": {
+-        "node": ">=6.9.0"
++      "dependencies": {
++        "micromark-util-types": "^2.0.0"
+       }
+     },
+-    "node_modules/js-tokens": {
+-      "version": "4.0.0",
+-      "resolved": "https://registry.npmjs.org/js-tokens/-/js-tokens-4.0.0.tgz",
+-      "integrity": "sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==",
+-      "dev": true,
++    "node_modules/micromark-util-encode": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-encode/-/micromark-util-encode-2.0.1.tgz",
++      "integrity": "sha512-c3cVx2y4KqUnwopcO9b/SCdo2O67LwJJ/UyqGfbigahfegL9myoEFoDYZgkT7f36T0bLrM9hZTAaAyH+PCAXjw==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
+       "license": "MIT"
+     },
+-    "node_modules/jsesc": {
+-      "version": "3.1.0",
+-      "resolved": "https://registry.npmjs.org/jsesc/-/jsesc-3.1.0.tgz",
+-      "integrity": "sha512-/sM3dO2FOzXjKQhJuo0Q173wf2KOo8t4I8vHy6lF9poUp7bKT0/NHE8fPX23PwfhnykfqnC2xRxOnVw5XuGIaA==",
+-      "dev": true,
++    "node_modules/micromark-util-html-tag-name": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-html-tag-name/-/micromark-util-html-tag-name-2.0.1.tgz",
++      "integrity": "sha512-2cNEiYDhCWKI+Gs9T0Tiysk136SnR13hhO8yW6BGNyhOC4qYFnwF1nKfD3HFAIXA5c45RrIG1ub11GiXeYd1xA==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT"
++    },
++    "node_modules/micromark-util-normalize-identifier": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-normalize-identifier/-/micromark-util-normalize-identifier-2.0.1.tgz",
++      "integrity": "sha512-sxPqmo70LyARJs0w2UclACPUUEqltCkJ6PhKdMIDuJ3gSf/Q+/GIe3WKl0Ijb/GyH9lOpUkRAO2wp0GVkLvS9Q==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
+       "license": "MIT",
+-      "bin": {
+-        "jsesc": "bin/jsesc"
+-      },
+-      "engines": {
+-        "node": ">=6"
++      "dependencies": {
++        "micromark-util-symbol": "^2.0.0"
+       }
+     },
+-    "node_modules/json5": {
+-      "version": "2.2.3",
+-      "resolved": "https://registry.npmjs.org/json5/-/json5-2.2.3.tgz",
+-      "integrity": "sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg==",
+-      "dev": true,
++    "node_modules/micromark-util-resolve-all": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-resolve-all/-/micromark-util-resolve-all-2.0.1.tgz",
++      "integrity": "sha512-VdQyxFWFT2/FGJgwQnJYbe1jjQoNTS4RjglmSjTUlpUMa95Htx9NHeYW4rGDJzbjvCsl9eLjMQwGeElsqmzcHg==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
+       "license": "MIT",
+-      "bin": {
+-        "json5": "lib/cli.js"
+-      },
+-      "engines": {
+-        "node": ">=6"
++      "dependencies": {
++        "micromark-util-types": "^2.0.0"
+       }
+     },
+-    "node_modules/lru-cache": {
+-      "version": "5.1.1",
+-      "resolved": "https://registry.npmjs.org/lru-cache/-/lru-cache-5.1.1.tgz",
+-      "integrity": "sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==",
+-      "dev": true,
+-      "license": "ISC",
++    "node_modules/micromark-util-sanitize-uri": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-sanitize-uri/-/micromark-util-sanitize-uri-2.0.1.tgz",
++      "integrity": "sha512-9N9IomZ/YuGGZZmQec1MbgxtlgougxTodVwDzzEouPKo3qFWvymFHWcnDi2vzV1ff6kas9ucW+o3yzJK9YB1AQ==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
+       "dependencies": {
+-        "yallist": "^3.0.2"
++        "micromark-util-character": "^2.0.0",
++        "micromark-util-encode": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0"
++      }
++    },
++    "node_modules/micromark-util-subtokenize": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/micromark-util-subtokenize/-/micromark-util-subtokenize-2.1.0.tgz",
++      "integrity": "sha512-XQLu552iSctvnEcgXw6+Sx75GflAPNED1qx7eBJ+wydBb2KCbRZe+NwvIEEMM83uml1+2WSXpBAcp9IUCgCYWA==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "devlop": "^1.0.0",
++        "micromark-util-chunked": "^2.0.0",
++        "micromark-util-symbol": "^2.0.0",
++        "micromark-util-types": "^2.0.0"
+       }
+     },
++    "node_modules/micromark-util-symbol": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/micromark-util-symbol/-/micromark-util-symbol-2.0.1.tgz",
++      "integrity": "sha512-vs5t8Apaud9N28kgCrRUdEed4UJ+wWNvicHLPxCa9ENlYuAY31M0ETy5y1vA33YoNPDFTghEbnh6efaE8h4x0Q==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT"
++    },
++    "node_modules/micromark-util-types": {
++      "version": "2.0.3",
++      "resolved": "https://registry.npmjs.org/micromark-util-types/-/micromark-util-types-2.0.3.tgz",
++      "integrity": "sha512-oxB2Ik03hI0gv+VNn9tnh1t1YEe9MDPptViAEgfdf3YQHsn0pzGTgCdlSCJXcwhqm8phaEuM7zeEu3QQzVBrPg==",
++      "funding": [
++        {
++          "type": "GitHub Sponsors",
++          "url": "https://github.com/sponsors/unifiedjs"
++        },
++        {
++          "type": "OpenCollective",
++          "url": "https://opencollective.com/unified"
++        }
++      ],
++      "license": "MIT"
++    },
+     "node_modules/ms": {
+       "version": "2.1.3",
+       "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+       "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==",
+-      "dev": true,
+       "license": "MIT"
+     },
+     "node_modules/nanoid": {
+@@ -1541,6 +2726,31 @@
+         "node": ">=18"
+       }
+     },
++    "node_modules/parse-entities": {
++      "version": "4.0.2",
++      "resolved": "https://registry.npmjs.org/parse-entities/-/parse-entities-4.0.2.tgz",
++      "integrity": "sha512-GG2AQYWoLgL877gQIKeRPGO1xF9+eG1ujIb5soS5gPvLQ1y2o8FL90w2QWNdf9I361Mpp7726c+lj3U0qK1uGw==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^2.0.0",
++        "character-entities-legacy": "^3.0.0",
++        "character-reference-invalid": "^2.0.0",
++        "decode-named-character-reference": "^1.0.0",
++        "is-alphanumerical": "^2.0.0",
++        "is-decimal": "^2.0.0",
++        "is-hexadecimal": "^2.0.0"
++      },
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/parse-entities/node_modules/@types/unist": {
++      "version": "2.0.11",
++      "resolved": "https://registry.npmjs.org/@types/unist/-/unist-2.0.11.tgz",
++      "integrity": "sha512-CmBKiL6NNo/OqgmMn95Fk9Whlp2mtvIv+KNpQKN2F4SjvrEesubTRWGYSg+BnWZOnlCaSTU1sMpsBOzgbYhnsA==",
++      "license": "MIT"
++    },
+     "node_modules/picocolors": {
+       "version": "1.1.1",
+       "resolved": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+@@ -1590,6 +2800,16 @@
+         "node": "^10 || ^12 || >=14"
+       }
+     },
++    "node_modules/property-information": {
++      "version": "7.2.0",
++      "resolved": "https://registry.npmjs.org/property-information/-/property-information-7.2.0.tgz",
++      "integrity": "sha512-IAtzIB6sUiWaJYrX9smp3V46pBGbBeLFRGdh25kg1334VcBlD8HzhPeNIWQH9zhGmo2itIe25EHt9dQP7G5hmg==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
+     "node_modules/react": {
+       "version": "19.3.1",
+       "resolved": "https://registry.npmjs.org/react/-/react-19.3.1.tgz",
+@@ -1611,6 +2831,33 @@
+         "react": "^19.3.1"
+       }
+     },
++    "node_modules/react-markdown": {
++      "version": "9.1.0",
++      "resolved": "https://registry.npmjs.org/react-markdown/-/react-markdown-9.1.0.tgz",
++      "integrity": "sha512-xaijuJB0kzGiUdG7nc2MOMDUDBWPyGAjZtUrow9XxUeua8IqeP+VlIfAZ3bphpcLTnSZXz6z9jcVC/TCwbfgdw==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/hast": "^3.0.0",
++        "@types/mdast": "^4.0.0",
++        "devlop": "^1.0.0",
++        "hast-util-to-jsx-runtime": "^2.0.0",
++        "html-url-attributes": "^3.0.0",
++        "mdast-util-to-hast": "^13.0.0",
++        "remark-parse": "^11.0.0",
++        "remark-rehype": "^11.0.0",
++        "unified": "^11.0.0",
++        "unist-util-visit": "^5.0.0",
++        "vfile": "^6.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      },
++      "peerDependencies": {
++        "@types/react": ">=18",
++        "react": ">=18"
++      }
++    },
+     "node_modules/react-refresh": {
+       "version": "0.17.0",
+       "resolved": "https://registry.npmjs.org/react-refresh/-/react-refresh-0.17.0.tgz",
+@@ -1621,6 +2868,72 @@
+         "node": ">=0.10.0"
+       }
+     },
++    "node_modules/remark-gfm": {
++      "version": "4.0.1",
++      "resolved": "https://registry.npmjs.org/remark-gfm/-/remark-gfm-4.0.1.tgz",
++      "integrity": "sha512-1quofZ2RQ9EWdeN34S79+KExV1764+wCUGop5CPL1WGdD0ocPpu91lzPGbwWMECpEpd42kJGQwzRfyov9j4yNg==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/mdast": "^4.0.0",
++        "mdast-util-gfm": "^3.0.0",
++        "micromark-extension-gfm": "^3.0.0",
++        "remark-parse": "^11.0.0",
++        "remark-stringify": "^11.0.0",
++        "unified": "^11.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/remark-parse": {
++      "version": "11.0.0",
++      "resolved": "https://registry.npmjs.org/remark-parse/-/remark-parse-11.0.0.tgz",
++      "integrity": "sha512-FCxlKLNGknS5ba/1lmpYijMUzX2esxW5xQqjWxw2eHFfS2MSdaHVINFmhjo+qN1WhZhNimq0dZATN9pH0IDrpA==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/mdast": "^4.0.0",
++        "mdast-util-from-markdown": "^2.0.0",
++        "micromark-util-types": "^2.0.0",
++        "unified": "^11.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/remark-rehype": {
++      "version": "11.1.2",
++      "resolved": "https://registry.npmjs.org/remark-rehype/-/remark-rehype-11.1.2.tgz",
++      "integrity": "sha512-Dh7l57ianaEoIpzbp0PC9UKAdCSVklD8E5Rpw7ETfbTl3FqcOOgq5q2LVDhgGCkaBv7p24JXikPdvhhmHvKMsw==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/hast": "^3.0.0",
++        "@types/mdast": "^4.0.0",
++        "mdast-util-to-hast": "^13.0.0",
++        "unified": "^11.0.0",
++        "vfile": "^6.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/remark-stringify": {
++      "version": "11.0.0",
++      "resolved": "https://registry.npmjs.org/remark-stringify/-/remark-stringify-11.0.0.tgz",
++      "integrity": "sha512-1OSmLd3awB/t8qdoEOMazZkNsfVTeY4fTsgzcQFdXNq8ToTN4ZGwrMnlda4K6smTFKD+GRV6O48i6Z4iKgPPpw==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/mdast": "^4.0.0",
++        "mdast-util-to-markdown": "^2.0.0",
++        "unified": "^11.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
+     "node_modules/rollup": {
+       "version": "4.68.8",
+       "resolved": "https://registry.npmjs.org/rollup/-/rollup-4.68.8.tgz",
+@@ -1693,6 +3006,39 @@
+         "node": ">=6.0.0"
+       }
+     },
++    "node_modules/space-separated-tokens": {
++      "version": "2.0.2",
++      "resolved": "https://registry.npmjs.org/space-separated-tokens/-/space-separated-tokens-2.0.2.tgz",
++      "integrity": "sha512-PEGlAwrG8yXGXRjW32fGbg66JAlOAwbObuqVoJpv/mRgoWDQfgH1wDPvtzWyUSNAXBGSk8h755YDbbcEy3SH2Q==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/stringify-entities": {
++      "version": "4.0.5",
++      "resolved": "https://registry.npmjs.org/stringify-entities/-/stringify-entities-4.0.5.tgz",
++      "integrity": "sha512-jNuI2fNNw5ecxrWmgm90R3iH0Kc/94AQwoQWoSUYphWzvmUA2pjFG34H56Z7Z3FkvH3FpYwwewKAa97oQnPFhw==",
++      "license": "MIT",
++      "dependencies": {
++        "character-entities-html4": "^2.0.0",
++        "character-entities-legacy": "^3.0.0"
++      },
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/style-to-object": {
++      "version": "2.0.2",
++      "resolved": "https://registry.npmjs.org/style-to-object/-/style-to-object-2.0.2.tgz",
++      "integrity": "sha512-QmbXPUylqU80HAgTOJeEOdbA40W9KtxmjMhQy+tq+b8F2aoh3aQLuy82hh2jm2qsC9hR9eI0+eQidTMydKcqRA==",
++      "license": "MIT",
++      "dependencies": {
++        "inline-style-parser": "0.2.9"
++      }
++    },
+     "node_modules/tinyglobby": {
+       "version": "0.2.17",
+       "resolved": "https://registry.npmjs.org/tinyglobby/-/tinyglobby-0.2.17.tgz",
+@@ -1710,6 +3056,26 @@
+         "url": "https://github.com/sponsors/SuperchupuDev"
+       }
+     },
++    "node_modules/trim-lines": {
++      "version": "3.0.1",
++      "resolved": "https://registry.npmjs.org/trim-lines/-/trim-lines-3.0.1.tgz",
++      "integrity": "sha512-kRj8B+YHZCc9kQYdWfJB2/oUl9rA99qbowYYBtr4ui4mZyAQ2JpvVBd/6U2YloATfqBhBTSMhTpgBHtU0Mf3Rg==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
++    "node_modules/trough": {
++      "version": "2.2.0",
++      "resolved": "https://registry.npmjs.org/trough/-/trough-2.2.0.tgz",
++      "integrity": "sha512-tmMpK00BjZiUyVyvrBK7knerNgmgvcV/KLVyuma/SC+TQN167GrMRciANTz09+k3zW8L8t60jWO1GpfkZdjTaw==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
++    },
+     "node_modules/typescript": {
+       "version": "5.9.3",
+       "resolved": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+@@ -1724,6 +3090,100 @@
+         "node": ">=14.17"
+       }
+     },
++    "node_modules/undici-types": {
++      "version": "6.21.0",
++      "resolved": "https://registry.npmjs.org/undici-types/-/undici-types-6.21.0.tgz",
++      "integrity": "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==",
++      "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/unified": {
++      "version": "11.0.5",
++      "resolved": "https://registry.npmjs.org/unified/-/unified-11.0.5.tgz",
++      "integrity": "sha512-xKvGhPWw3k84Qjh8bI3ZeJjqnyadK+GEFtazSfZv/rKeTkTjOJho6mFqh2SM96iIcZokxiOpg78GazTSg8+KHA==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^3.0.0",
++        "bail": "^2.0.0",
++        "devlop": "^1.0.0",
++        "extend": "^3.0.0",
++        "is-plain-obj": "^4.0.0",
++        "trough": "^2.0.0",
++        "vfile": "^6.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/unist-util-is": {
++      "version": "6.0.1",
++      "resolved": "https://registry.npmjs.org/unist-util-is/-/unist-util-is-6.0.1.tgz",
++      "integrity": "sha512-LsiILbtBETkDz8I9p1dQ0uyRUWuaQzd/cuEeS1hoRSyW5E5XGmTzlwY1OrNzzakGowI9Dr/I8HVaw4hTtnxy8g==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^3.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/unist-util-position": {
++      "version": "5.0.0",
++      "resolved": "https://registry.npmjs.org/unist-util-position/-/unist-util-position-5.0.0.tgz",
++      "integrity": "sha512-fucsC7HjXvkB5R3kTCO7kUjRdrS0BJt3M/FPxmHMBOm8JQi2BsHAHFsy27E0EolP8rp0NzXsJ+jNPyDWvOJZPA==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^3.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/unist-util-stringify-position": {
++      "version": "4.0.0",
++      "resolved": "https://registry.npmjs.org/unist-util-stringify-position/-/unist-util-stringify-position-4.0.0.tgz",
++      "integrity": "sha512-0ASV06AAoKCDkS2+xw5RXJywruurpbC4JZSm7nr7MOt1ojAzvyyaO+UxZf18j8FCF6kmzCZKcAgN/yu2gm2XgQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^3.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/unist-util-visit": {
++      "version": "5.2.0",
++      "resolved": "https://registry.npmjs.org/unist-util-visit/-/unist-util-visit-5.2.0.tgz",
++      "integrity": "sha512-fpsYs/VVoZxfGY9/j3FQpZmN8wdLJaV1Pt38AaJNZu9uKIHcFU3halCdBveEq1HGKO1OEfJY65w1zvoFV1b3qQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^3.0.0",
++        "unist-util-is": "^6.0.0",
++        "unist-util-visit-parents": "^6.1.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/unist-util-visit-parents": {
++      "version": "6.1.0",
++      "resolved": "https://registry.npmjs.org/unist-util-visit-parents/-/unist-util-visit-parents-6.1.0.tgz",
++      "integrity": "sha512-vKXxz6O38sKDj1mtx/k2cWvkkFBuYGx6uGrlzBkVeWCRF/F8sdI0j3Wbkz/5rVNRRuVc8UrgRdbCxNhmYXgP3w==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^3.0.0",
++        "unist-util-is": "^6.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
+     "node_modules/update-browserslist-db": {
+       "version": "1.4.0",
+       "resolved": "https://registry.npmjs.org/update-browserslist-db/-/update-browserslist-db-1.4.0.tgz",
+@@ -1755,6 +3215,34 @@
+         "browserslist": ">= 4.21.0"
+       }
+     },
++    "node_modules/vfile": {
++      "version": "6.0.3",
++      "resolved": "https://registry.npmjs.org/vfile/-/vfile-6.0.3.tgz",
++      "integrity": "sha512-KzIbH/9tXat2u30jf+smMwFCsno4wHVdNmzFyL+T/L3UGqqk6JKfVqOFOZEpZSHADH1k40ab6NUIXZq422ov3Q==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^3.0.0",
++        "vfile-message": "^4.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
++    "node_modules/vfile-message": {
++      "version": "4.0.4",
++      "resolved": "https://registry.npmjs.org/vfile-message/-/vfile-message-4.0.4.tgz",
++      "integrity": "sha512-66ycRswIkNmHH9PHku7ADtv5RVwgIrOcuv3J8Svz6h4qgGRrKVa+9/neuKyJZUXyOpYwLTvS+whZ4R2urHHgQg==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/unist": "^3.0.0",
++        "unist-util-stringify-position": "^4.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/unified"
++      }
++    },
+     "node_modules/vite": {
+       "version": "6.4.6",
+       "resolved": "https://registry.npmjs.org/vite/-/vite-6.4.6.tgz",
+@@ -1836,6 +3324,16 @@
+       "integrity": "sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==",
+       "dev": true,
+       "license": "ISC"
++    },
++    "node_modules/zwitch": {
++      "version": "2.0.4",
++      "resolved": "https://registry.npmjs.org/zwitch/-/zwitch-2.0.4.tgz",
++      "integrity": "sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==",
++      "license": "MIT",
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/wooorm"
++      }
+     }
+   }
+ }
+diff --git a/frontend/package.json b/frontend/package.json
+index 7163bb0..1a6a0db 100644
+--- a/frontend/package.json
++++ b/frontend/package.json
+@@ -4,7 +4,9 @@
+   "private": true,
+   "type": "module",
+   "description": "AURA frontend (React + Vite + TypeScript)",
+-  "engines": { "node": ">=20" },
++  "engines": {
++    "node": ">=20"
++  },
+   "scripts": {
+     "dev": "vite",
+     "build": "tsc --noEmit && vite build",
+@@ -12,9 +14,12 @@
+   },
+   "dependencies": {
+     "react": "^19.0.0",
+-    "react-dom": "^19.0.0"
++    "react-dom": "^19.0.0",
++    "react-markdown": "^9.1.0",
++    "remark-gfm": "^4.0.1"
+   },
+   "devDependencies": {
++    "@types/node": "^22.20.5",
+     "@types/react": "^19.0.0",
+     "@types/react-dom": "^19.0.0",
+     "@vitejs/plugin-react": "^4.3.0",
+diff --git a/frontend/src/Chat.tsx b/frontend/src/Chat.tsx
+index 1c3931b..692df20 100644
+--- a/frontend/src/Chat.tsx
++++ b/frontend/src/Chat.tsx
+@@ -1,70 +1,171 @@
+ import { KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
+-import { api, Conversation, Health, Message, streamMessage } from './api';
++import {
++  api,
++  ApiError,
++  Conversation,
++  Health,
++  Message,
++  StreamHandlers,
++  streamEditLast,
++  streamMessage,
++  streamRegenerate,
++  StreamPhase,
++} from './api';
++import { CopyButton } from './CopyButton';
+ import { MailPanel } from './MailPanel';
++import { Markdown } from './Markdown';
++import { diagnoseError, diagnoseHealth, Diagnosis, NoticeBox, PHASE_TEXT } from './Notice';
+ 
+ const tmpId = () => `tmp-${crypto.randomUUID()}`;
+ const label = (c: Conversation) => c.title || '새 대화';
+ 
++type Retry = () => Promise<void>;
++
+ export function Chat(props: { onBack: () => void }) {
+   const [convs, setConvs] = useState<Conversation[]>([]);
++  const [query, setQuery] = useState('');
+   const [activeId, setActiveId] = useState<string | null>(null);
+   const [messages, setMessages] = useState<Message[]>([]);
+   const [input, setInput] = useState('');
+   const [busy, setBusy] = useState(false);
+-  const [error, setError] = useState('');
++  const [phase, setPhase] = useState<StreamPhase | null>(null);
++  const [elapsed, setElapsed] = useState(0);
++  const [error, setError] = useState<{ d: Diagnosis; retry?: Retry } | null>(null);
+   const [health, setHealth] = useState<Health | null>(null);
++  const [healthLoaded, setHealthLoaded] = useState(false);
+   const [menu, setMenu] = useState(false);
++  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
++  const [editing, setEditing] = useState<string | null>(null);
+   const abortRef = useRef<AbortController | null>(null);
+   const bottomRef = useRef<HTMLDivElement>(null);
+   const loadSeq = useRef(0);
++  const warmed = useRef(false);
+ 
+-  const loadConvs = useCallback(() => api.conversations().then(setConvs).catch(() => undefined), []);
++  const modelName = health?.model.name ?? '모델';
+ 
+-  useEffect(() => {
+-    void loadConvs();
+-  }, [loadConvs]);
++  const loadConvs = useCallback(
++    (q = query) =>
++      api
++        .conversations(q.trim() || undefined)
++        .then(setConvs)
++        .catch(() => undefined),
++    [query],
++  );
+ 
++  // 검색어 디바운스
+   useEffect(() => {
+-    const poll = () =>
++    const t = setTimeout(() => void loadConvs(query), 250);
++    return () => clearTimeout(t);
++  }, [query, loadConvs]);
++
++  const pollHealth = useCallback(
++    () =>
+       api
+         .health()
+-        .then(setHealth)
+-        .catch(() => setHealth(null));
+-    poll();
+-    const t = setInterval(poll, 10_000);
++        .then((h) => {
++          setHealth(h);
++          // 모델이 메모리에 없으면 미리 올려 첫 응답 지연을 줄인다
++          if (!warmed.current && h.model.reachable && h.model.installed !== false && h.model.loaded === false) {
++            warmed.current = true;
++            void api.warmup().catch(() => undefined);
++          }
++        })
++        .catch(() => setHealth(null))
++        .finally(() => setHealthLoaded(true)),
++    [],
++  );
++
++  useEffect(() => {
++    void pollHealth();
++    const t = setInterval(() => void pollHealth(), busy ? 3_000 : 10_000);
+     return () => clearInterval(t);
+-  }, []);
++  }, [pollHealth, busy]);
+ 
+   useEffect(() => {
+     bottomRef.current?.scrollIntoView({ block: 'end' });
+-  }, [messages]);
++  }, [messages, phase]);
++
++  // 응답 대기 시간 표시
++  useEffect(() => {
++    if (!busy) return setElapsed(0);
++    const started = Date.now();
++    const t = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
++    return () => clearInterval(t);
++  }, [busy]);
++
++  const showError = (e: unknown, retry?: Retry) => {
++    const code = e instanceof ApiError ? e.code : 'INTERNAL';
++    const msg = e instanceof Error ? e.message : String(e);
++    setError({ d: diagnoseError(code, msg, modelName), retry });
++    void pollHealth();
++  };
++
++  const refresh = async (id: string) => {
++    const seq = loadSeq.current;
++    const list = await api.messages(id);
++    if (seq === loadSeq.current) setMessages(list.filter((m) => m.role !== 'SYSTEM'));
++  };
+ 
+   const open = async (id: string | null) => {
+     abortRef.current?.abort();
+     setActiveId(id);
+-    setError('');
++    setError(null);
+     setMenu(false);
+-    const seq = ++loadSeq.current;
++    setEditing(null);
++    ++loadSeq.current;
+     if (!id) return setMessages([]);
+     try {
+-      const list = await api.messages(id);
+-      if (seq === loadSeq.current) setMessages(list.filter((m) => m.role !== 'SYSTEM'));
++      await refresh(id);
+     } catch (e) {
+-      setError(e instanceof Error ? e.message : String(e));
++      showError(e, () => open(id));
+     }
+   };
+ 
+-  const send = async () => {
+-    const content = input.trim();
+-    if (!content || busy) return;
+-    setInput('');
+-    setError('');
++  /** 스트림 공통 처리. prepare: 화면 메시지 목록 갱신, run: 실제 요청 */
++  const runStream = async (
++    id: string,
++    prepare: (prev: Message[], aiId: string) => Message[],
++    run: (h: StreamHandlers, signal: AbortSignal) => Promise<void>,
++    retry: Retry,
++  ) => {
++    setError(null);
+     setBusy(true);
+-
++    setPhase(null);
+     const ac = new AbortController();
+     abortRef.current = ac;
+-    const now = new Date().toISOString();
+     const aiId = tmpId();
++    setMessages((prev) => prepare(prev, aiId));
++    try {
++      await run(
++        {
++          onToken: (t) =>
++            setMessages((prev) => prev.map((m) => (m.id === aiId ? { ...m, content: m.content + t } : m))),
++          onStatus: setPhase,
++        },
++        ac.signal,
++      );
++    } catch (e) {
++      if (!ac.signal.aborted) showError(e, retry);
++    } finally {
++      setBusy(false);
++      setPhase(null);
++      abortRef.current = null;
++      await refresh(id).catch(() => undefined);
++      void loadConvs();
++    }
++  };
++
++  const aiPlaceholder = (aiId: string): Message => ({
++    id: aiId,
++    role: 'ASSISTANT',
++    content: '',
++    createdAt: new Date().toISOString(),
++  });
++
++  const send = async (text = input): Promise<void> => {
++    const content = text.trim();
++    if (!content || busy) return;
++    setInput('');
+     let id = activeId;
+     try {
+       if (!id) {
+@@ -73,23 +174,83 @@ export function Chat(props: { onBack: () => void }) {
+         setActiveId(id);
+         setConvs((prev) => [c, ...prev]);
+       }
+-      setMessages((prev) => [
++    } catch (e) {
++      setInput(content);
++      return showError(e, () => send(content));
++    }
++    const cid = id;
++    await runStream(
++      cid,
++      (prev, aiId) => [
+         ...prev,
+-        { id: tmpId(), role: 'USER', content, createdAt: now },
+-        { id: aiId, role: 'ASSISTANT', content: '', createdAt: now },
+-      ]);
+-      await streamMessage(
+-        id,
+-        content,
+-        (t) => setMessages((prev) => prev.map((m) => (m.id === aiId ? { ...m, content: m.content + t } : m))),
+-        ac.signal,
+-      );
++        { id: tmpId(), role: 'USER', content, createdAt: new Date().toISOString() },
++        aiPlaceholder(aiId),
++      ],
++      (h, s) => streamMessage(cid, content, h, s),
++      async () => {
++        // 질문이 저장됐으면 재생성, 아니면 다시 전송
++        const last = (await api.messages(cid)).at(-1);
++        if (last?.role === 'USER' && last.content === content) await regenerate(cid);
++        else await send(content);
++      },
++    );
++  };
++
++  /** 마지막 사용자 메시지 뒤를 잘라낸 목록 */
++  const cutAfterLastUser = (prev: Message[], replace?: string) => {
++    const idx = prev.map((m) => m.role).lastIndexOf('USER');
++    if (idx < 0) return prev;
++    const head = prev.slice(0, idx + 1);
++    if (replace !== undefined) head[idx] = { ...head[idx], content: replace };
++    return head;
++  };
++
++  const regenerate = async (id = activeId): Promise<void> => {
++    if (!id || busy) return;
++    const cid = id;
++    await runStream(
++      cid,
++      (prev, aiId) => [...cutAfterLastUser(prev), aiPlaceholder(aiId)],
++      (h, s) => streamRegenerate(cid, h, s),
++      () => regenerate(cid),
++    );
++  };
++
++  const saveEdit = async (content: string) => {
++    const text = content.trim();
++    if (!activeId || !text || busy) return;
++    setEditing(null);
++    const cid = activeId;
++    await runStream(
++      cid,
++      (prev, aiId) => [...cutAfterLastUser(prev, text), aiPlaceholder(aiId)],
++      (h, s) => streamEditLast(cid, text, h, s),
++      () => regenerate(cid),
++    );
++  };
++
++  const rename = async () => {
++    if (!renaming) return;
++    const title = renaming.title.trim();
++    const { id } = renaming;
++    setRenaming(null);
++    if (!title) return;
++    try {
++      const c = await api.renameConversation(id, title);
++      setConvs((prev) => prev.map((x) => (x.id === id ? c : x)));
+     } catch (e) {
+-      if (!ac.signal.aborted) setError(e instanceof Error ? e.message : String(e));
+-    } finally {
+-      setBusy(false);
+-      abortRef.current = null;
+-      void loadConvs();
++      showError(e);
++    }
++  };
++
++  const remove = async (c: Conversation) => {
++    if (!window.confirm(`"${label(c)}" 대화를 삭제할까요? 되돌릴 수 없습니다.`)) return;
++    try {
++      await api.deleteConversation(c.id);
++      setConvs((prev) => prev.filter((x) => x.id !== c.id));
++      if (c.id === activeId) void open(null);
++    } catch (e) {
++      showError(e);
+     }
+   };
+ 
+@@ -100,7 +261,11 @@ export function Chat(props: { onBack: () => void }) {
+     }
+   };
+ 
+-  const modelOk = health?.model.state === 'ready' || health?.model.state === 'unloaded';
++  const status = diagnoseHealth(health);
++  const showStatusBanner = healthLoaded && (status.level === 'down' || status.level === 'warn');
++  const lastUserIdx = messages.map((m) => m.role).lastIndexOf('USER');
++  const lastIdx = messages.length - 1;
++  const activeConv = convs.find((c) => c.id === activeId);
+ 
+   return (
+     <div className="app">
+@@ -112,18 +277,58 @@ export function Chat(props: { onBack: () => void }) {
+         <button className="primary" onClick={() => void open(null)}>
+           새 대화
+         </button>
++        <input
++          className="search"
++          type="search"
++          value={query}
++          onChange={(e) => setQuery(e.target.value)}
++          placeholder="대화 검색 (제목·내용)"
++          aria-label="대화 검색"
++        />
+         <nav className="convs" aria-label="대화 목록">
+-          {convs.map((c) => (
+-            <button key={c.id} className={c.id === activeId ? 'conv on' : 'conv'} onClick={() => void open(c.id)}>
+-              {label(c)}
+-            </button>
+-          ))}
+-          {convs.length === 0 && <p className="muted">대화 없음</p>}
++          {convs.map((c) =>
++            renaming?.id === c.id ? (
++              <input
++                key={c.id}
++                className="rename"
++                autoFocus
++                value={renaming.title}
++                maxLength={200}
++                onChange={(e) => setRenaming({ id: c.id, title: e.target.value })}
++                onBlur={() => void rename()}
++                onKeyDown={(e) => {
++                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) void rename();
++                  if (e.key === 'Escape') setRenaming(null);
++                }}
++                aria-label="대화 제목"
++              />
++            ) : (
++              <div key={c.id} className={c.id === activeId ? 'conv-row on' : 'conv-row'}>
++                <button className="conv" onClick={() => void open(c.id)} title={label(c)}>
++                  {label(c)}
++                </button>
++                <span className="conv-acts">
++                  <button
++                    className="icon"
++                    onClick={() => setRenaming({ id: c.id, title: c.title ?? '' })}
++                    aria-label="제목 수정"
++                    title="제목 수정"
++                  >
++                    ✎
++                  </button>
++                  <button className="icon" onClick={() => void remove(c)} aria-label="삭제" title="삭제">
++                    🗑
++                  </button>
++                </span>
++              </div>
++            ),
++          )}
++          {convs.length === 0 && <p className="muted">{query ? '검색 결과 없음' : '대화 없음'}</p>}
+         </nav>
+         <MailPanel />
+-        <div className="status" role="status">
+-          <span className={health ? (health.db === 'ok' && modelOk ? 'dot ok' : 'dot warn') : 'dot down'} />
+-          {health ? `DB ${health.db} · ${health.model.name} ${health.model.state}` : '백엔드 연결 안 됨'}
++        <div className="status" role="status" title={status.hint}>
++          <span className={`dot ${status.level === 'ok' ? 'ok' : status.level === 'down' ? 'down' : 'warn'}`} />
++          {healthLoaded ? status.title : '상태 확인 중…'}
+         </div>
+       </aside>
+ 
+@@ -132,28 +337,83 @@ export function Chat(props: { onBack: () => void }) {
+           <button className="ghost menu" onClick={() => setMenu((v) => !v)} aria-label="메뉴">
+             ☰
+           </button>
+-          <h1>{activeId ? label(convs.find((c) => c.id === activeId) ?? ({ title: null } as Conversation)) : '새 대화'}</h1>
++          <h1>{activeConv ? label(activeConv) : '새 대화'}</h1>
+         </header>
+ 
++        {showStatusBanner && <NoticeBox d={status} onRetry={() => void pollHealth()} />}
++        {healthLoaded && status.level === 'info' && !busy && <NoticeBox d={status} />}
++
+         <div className="log">
+           {messages.length === 0 && (
+             <div className="empty">
+               <p>무엇을 도와줄까요?</p>
+-              <p className="muted">예: &quot;안 읽은 메일 3통 요약해줘&quot;</p>
++              <p className="muted">예: &quot;안 읽은 메일 3통 요약해줘&quot;, &quot;내일 일정 알려줘&quot;</p>
+             </div>
+           )}
+-          {messages.map((m) => (
+-            <div key={m.id} className={m.role === 'USER' ? 'msg user' : 'msg ai'}>
+-              <div className="bubble">{m.content || (busy ? '…' : '')}</div>
++          {messages.map((m, i) => {
++            const isUser = m.role === 'USER';
++            const streamingThis = busy && i === lastIdx && !isUser;
++            if (isUser && editing === m.id) {
++              return <EditBox key={m.id} initial={m.content} onSave={saveEdit} onCancel={() => setEditing(null)} />;
++            }
++            return (
++              <div key={m.id} className={isUser ? 'msg user' : 'msg ai'}>
++                <div className="bubble">
++                  {isUser ? (
++                    <div className="plain">{m.content}</div>
++                  ) : m.content ? (
++                    <Markdown text={m.content} />
++                  ) : streamingThis ? (
++                    <div className="phase" role="status">
++                      <span className="spinner" aria-hidden />
++                      {phase ? PHASE_TEXT[phase] : '요청 중…'}
++                      {elapsed >= 3 && <span className="muted"> · {elapsed}초</span>}
++                    </div>
++                  ) : null}
++                  {streamingThis && m.content && phase === 'generating' && <span className="caret" aria-hidden />}
++                </div>
++                {!streamingThis && m.content && (
++                  <div className="msg-acts">
++                    <CopyButton text={m.content} />
++                    {isUser && i === lastUserIdx && !busy && !m.id.startsWith('tmp-') && (
++                      <button className="tool" onClick={() => setEditing(m.id)}>
++                        편집
++                      </button>
++                    )}
++                    {!isUser && i === lastIdx && !busy && (
++                      <button className="tool" onClick={() => void regenerate()}>
++                        재생성
++                      </button>
++                    )}
++                  </div>
++                )}
++              </div>
++            );
++          })}
++          {!busy && lastIdx >= 0 && messages[lastIdx].role === 'USER' && editing !== messages[lastIdx].id && (
++            <div className="msg ai">
++              <button className="ghost" onClick={() => void regenerate()}>
++                응답 생성
++              </button>
+             </div>
+-          ))}
++          )}
+           <div ref={bottomRef} />
+         </div>
+ 
+         {error && (
+-          <p className="error banner" role="alert">
+-            {error}
+-          </p>
++          <NoticeBox
++            d={error.d}
++            onRetry={
++              error.retry
++                ? () => {
++                    const r = error.retry!;
++                    setError(null);
++                    void r();
++                  }
++                : undefined
++            }
++            onClose={() => setError(null)}
++          />
+         )}
+ 
+         <div className="composer">
+@@ -179,3 +439,36 @@ export function Chat(props: { onBack: () => void }) {
+     </div>
+   );
+ }
++
++function EditBox(props: { initial: string; onSave: (t: string) => void; onCancel: () => void }) {
++  const [text, setText] = useState(props.initial);
++  return (
++    <div className="msg user">
++      <div className="editbox">
++        <textarea
++          autoFocus
++          value={text}
++          rows={3}
++          maxLength={8000}
++          onChange={(e) => setText(e.target.value)}
++          onKeyDown={(e) => {
++            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
++              e.preventDefault();
++              props.onSave(text);
++            }
++            if (e.key === 'Escape') props.onCancel();
++          }}
++          aria-label="메시지 편집"
++        />
++        <div className="msg-acts">
++          <button className="ghost" onClick={props.onCancel}>
++            취소
++          </button>
++          <button className="primary" onClick={() => props.onSave(text)} disabled={!text.trim()}>
++            저장 후 재생성
++          </button>
++        </div>
++      </div>
++    </div>
++  );
++}
+diff --git a/frontend/src/CopyButton.tsx b/frontend/src/CopyButton.tsx
+new file mode 100644
+index 0000000..55aec53
+--- /dev/null
++++ b/frontend/src/CopyButton.tsx
+@@ -0,0 +1,20 @@
++import { useState } from 'react';
++import { copyText } from './copy';
++
++export function CopyButton(props: { text: string; label?: string; className?: string }) {
++  const [done, setDone] = useState(false);
++  const onClick = async () => {
++    try {
++      await copyText(props.text);
++      setDone(true);
++      setTimeout(() => setDone(false), 1500);
++    } catch {
++      /* 무시 */
++    }
++  };
++  return (
++    <button type="button" className={props.className ?? 'tool'} onClick={() => void onClick()} aria-live="polite">
++      {done ? '복사됨' : (props.label ?? '복사')}
++    </button>
++  );
++}
+diff --git a/frontend/src/Markdown.tsx b/frontend/src/Markdown.tsx
+new file mode 100644
+index 0000000..cfe46ca
+--- /dev/null
++++ b/frontend/src/Markdown.tsx
+@@ -0,0 +1,47 @@
++import { isValidElement, memo, ReactNode } from 'react';
++import ReactMarkdown, { Components } from 'react-markdown';
++import remarkGfm from 'remark-gfm';
++import { CopyButton } from './CopyButton';
++
++function textOf(node: ReactNode): string {
++  if (typeof node === 'string' || typeof node === 'number') return String(node);
++  if (Array.isArray(node)) return node.map(textOf).join('');
++  if (isValidElement<{ children?: ReactNode }>(node)) return textOf(node.props.children);
++  return '';
++}
++
++const components: Components = {
++  pre({ children }) {
++    const child = Array.isArray(children) ? children[0] : children;
++    const cls = isValidElement<{ className?: string }>(child) ? (child.props.className ?? '') : '';
++    const lang = /language-([\w+-]+)/.exec(cls)?.[1] ?? '';
++    const code = textOf(children).replace(/\n$/, '');
++    return (
++      <div className="codeblock">
++        <div className="codehead">
++          <span>{lang || 'code'}</span>
++          <CopyButton text={code} />
++        </div>
++        <pre>{children}</pre>
++      </div>
++    );
++  },
++  a({ href, children }) {
++    return (
++      <a href={href} target="_blank" rel="noreferrer noopener">
++        {children}
++      </a>
++    );
++  },
++};
++
++/** 모델 응답 렌더링. raw HTML은 렌더링하지 않는다 (react-markdown 기본값). */
++export const Markdown = memo(function Markdown(props: { text: string }) {
++  return (
++    <div className="md">
++      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
++        {props.text}
++      </ReactMarkdown>
++    </div>
++  );
++});
+diff --git a/frontend/src/Notice.tsx b/frontend/src/Notice.tsx
+new file mode 100644
+index 0000000..ca9d083
+--- /dev/null
++++ b/frontend/src/Notice.tsx
+@@ -0,0 +1,118 @@
++import { ErrorCode, Health, StreamPhase } from './api';
++
++export interface Diagnosis {
++  level: 'ok' | 'info' | 'warn' | 'down';
++  title: string;
++  hint: string;
++}
++
++const OLLAMA_DOWN: Diagnosis = {
++  level: 'down',
++  title: 'Ollama 연결 안 됨',
++  hint: 'Ollama 앱이 실행 중인지 확인. 터미널에서 `ollama serve` 실행 후 다시 시도. 주소는 backend/.env 의 OLLAMA_BASE_URL.',
++};
++const DB_DOWN: Diagnosis = {
++  level: 'down',
++  title: '데이터베이스(PostgreSQL) 연결 안 됨',
++  hint: 'Docker Desktop 실행 후 backend 폴더에서 `docker compose up -d`. DATABASE_URL 확인.',
++};
++const BACKEND_DOWN: Diagnosis = {
++  level: 'down',
++  title: '백엔드 서버 연결 안 됨',
++  hint: 'backend 폴더에서 `npm run start:dev` 실행 (또는 start-aura.bat). 포트 3000 사용 여부 확인.',
++};
++const notFound = (name: string): Diagnosis => ({
++  level: 'down',
++  title: `모델 ${name} 미설치`,
++  hint: `터미널에서 \`ollama pull ${name}\` 실행.`,
++});
++
++/** 서버 상태 요약. null health = 백엔드 응답 없음. */
++export function diagnoseHealth(h: Health | null): Diagnosis {
++  if (!h) return BACKEND_DOWN;
++  if (h.db !== 'ok') return DB_DOWN;
++  if (!h.model.reachable) return OLLAMA_DOWN;
++  if (h.model.installed === false) return notFound(h.model.name);
++  if (h.model.state === 'loading') {
++    return { level: 'info', title: `${h.model.name} 메모리에 올리는 중`, hint: '보통 10초~1분. 완료되면 바로 답변 가능.' };
++  }
++  if (h.model.loaded === false || h.model.state === 'unloaded') {
++    return {
++      level: 'info',
++      title: `${h.model.name} 대기 중 (메모리 미적재)`,
++      hint: '첫 응답은 모델을 메모리에 올리느라 느림. 일정 시간 미사용 시 자동으로 내려감.',
++    };
++  }
++  if (h.model.state === 'error') return { level: 'warn', title: '모델 적재 실패', hint: 'Ollama 로그 확인 후 다시 시도.' };
++  return { level: 'ok', title: `${h.model.name} 준비됨`, hint: '' };
++}
++
++/** 요청 오류 → 안내 */
++export function diagnoseError(code: ErrorCode, message: string, model: string): Diagnosis {
++  switch (code) {
++    case 'BACKEND_DOWN':
++      return BACKEND_DOWN;
++    case 'DB_DOWN':
++      return DB_DOWN;
++    case 'OLLAMA_DOWN':
++      return OLLAMA_DOWN;
++    case 'MODEL_NOT_FOUND':
++      return notFound(model);
++    case 'MODEL_TIMEOUT':
++      return {
++        level: 'warn',
++        title: '모델 응답 시간 초과',
++        hint: 'PC 메모리 부족 또는 긴 대화일 수 있음. 다른 프로그램 종료 후 재생성. MODEL_TIMEOUT_MS 조정 가능.',
++      };
++    case 'MODEL_ERROR':
++      return { level: 'warn', title: '모델 응답 오류', hint: message };
++    case 'NOT_FOUND':
++      return { level: 'warn', title: '대화를 찾을 수 없음', hint: '삭제된 대화일 수 있음. 새 대화로 시작.' };
++    default:
++      return { level: 'warn', title: '요청 실패', hint: message };
++  }
++}
++
++export const PHASE_TEXT: Record<StreamPhase, string> = {
++  tools: '메일·일정 확인 중…',
++  queued: '앞선 응답이 끝나길 기다리는 중…',
++  loading: '모델을 메모리에 올리는 중… 첫 응답은 30초~1분 걸릴 수 있음',
++  generating: '생각 중…',
++};
++
++/** 백틱(`) 구간을 <code>로 */
++function Hint(props: { text: string }) {
++  return (
++    <>
++      {props.text.split(/(`[^`]+`)/).map((p, i) =>
++        p.startsWith('`') && p.endsWith('`') ? <code key={i}>{p.slice(1, -1)}</code> : <span key={i}>{p}</span>,
++      )}
++    </>
++  );
++}
++
++export function NoticeBox(props: { d: Diagnosis; onRetry?: () => void; onClose?: () => void }) {
++  const { d } = props;
++  return (
++    <div className={`notice ${d.level}`} role={d.level === 'down' || d.level === 'warn' ? 'alert' : 'status'}>
++      <div className="notice-body">
++        <strong>{d.title}</strong>
++        {d.hint && (
++          <p>
++            <Hint text={d.hint} />
++          </p>
++        )}
++      </div>
++      {props.onRetry && (
++        <button className="ghost" onClick={props.onRetry}>
++          다시 시도
++        </button>
++      )}
++      {props.onClose && (
++        <button className="ghost" onClick={props.onClose} aria-label="닫기">
++          ✕
++        </button>
++      )}
++    </div>
++  );
++}
+diff --git a/frontend/src/api.ts b/frontend/src/api.ts
+index 42fb909..67c114e 100644
+--- a/frontend/src/api.ts
++++ b/frontend/src/api.ts
+@@ -16,10 +16,33 @@ export interface Message {
+ 
+ export interface Health {
+   status: string;
+-  db: string;
+-  model: { name: string; state: string };
++  db: 'ok' | 'down';
++  model: {
++    name: string;
++    state: 'unloaded' | 'loading' | 'ready' | 'error';
++    /** Ollama 접속 가능 */
++    reachable: boolean;
++    /** 모델 pull 여부 (null: 모름) */
++    installed: boolean | null;
++    /** 메모리 적재 여부 (null: 모름) */
++    loaded: boolean | null;
++  };
+ }
+ 
++/** 백엔드 오류 코드 + 프론트 전용 BACKEND_DOWN */
++export type ErrorCode =
++  | 'BACKEND_DOWN'
++  | 'DB_DOWN'
++  | 'OLLAMA_DOWN'
++  | 'MODEL_NOT_FOUND'
++  | 'MODEL_TIMEOUT'
++  | 'MODEL_ERROR'
++  | 'NOT_FOUND'
++  | 'BAD_REQUEST'
++  | 'INTERNAL';
++
++export type StreamPhase = 'tools' | 'queued' | 'loading' | 'generating';
++
+ export interface MailStatus {
+   configured: boolean;
+   connected: boolean;
+@@ -58,20 +81,35 @@ export class ApiError extends Error {
+   constructor(
+     public readonly status: number,
+     message: string,
++    public readonly code: ErrorCode = 'INTERNAL',
+   ) {
+     super(message);
+     this.name = 'ApiError';
+   }
+ }
+ 
++const backendDown = () => new ApiError(0, '백엔드 서버에 연결할 수 없음', 'BACKEND_DOWN');
++
+ async function failure(res: Response): Promise<ApiError> {
+-  const body = (await res.json().catch(() => null)) as { message?: string | string[] } | null;
++  const body = (await res.json().catch(() => null)) as { message?: string | string[]; code?: ErrorCode } | null;
++  // Vite 프록시가 백엔드에 못 붙으면 JSON 없는 5xx를 돌려준다
++  if (!body && res.status >= 500) return backendDown();
+   const m = body?.message;
+-  return new ApiError(res.status, Array.isArray(m) ? m.join(', ') : (m ?? `HTTP ${res.status}`));
++  const code = body?.code ?? (res.status === 404 ? 'NOT_FOUND' : res.status < 500 ? 'BAD_REQUEST' : 'INTERNAL');
++  return new ApiError(res.status, Array.isArray(m) ? m.join(', ') : (m ?? `HTTP ${res.status}`), code);
++}
++
++async function call(path: string, init?: RequestInit): Promise<Response> {
++  try {
++    return await fetch(BASE + path, init);
++  } catch (e) {
++    if (init?.signal?.aborted) throw e;
++    throw backendDown();
++  }
+ }
+ 
+ async function req<T>(path: string, init?: RequestInit): Promise<T> {
+-  const res = await fetch(BASE + path, {
++  const res = await call(path, {
+     ...init,
+     headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
+   });
+@@ -81,7 +119,12 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
+ 
+ export const api = {
+   health: () => req<Health>('/health'),
+-  conversations: () => req<Conversation[]>('/conversations'),
++  warmup: () => req<{ state: string }>('/health/warmup', { method: 'POST' }),
++  conversations: (q?: string) =>
++    req<Conversation[]>(q ? `/conversations?q=${encodeURIComponent(q)}` : '/conversations'),
++  renameConversation: (id: string, title: string) =>
++    req<Conversation>(`/conversations/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
++  deleteConversation: (id: string) => req<void>(`/conversations/${id}`, { method: 'DELETE' }),
+   createConversation: (title?: string) =>
+     req<Conversation>('/conversations', { method: 'POST', body: JSON.stringify({ title }) }),
+   messages: (id: string) => req<Message[]>(`/conversations/${id}/messages`),
+@@ -92,17 +135,29 @@ export const api = {
+   events: (days: number) => req<CalendarEvent[]>(`/calendar/events?days=${days}`),
+ };
+ 
+-/** SSE(POST)를 fetch로 읽는다. data:{"token"} → onToken, event:error → throw. */
+-export async function streamMessage(
+-  id: string,
+-  content: string,
+-  onToken: (t: string) => void,
+-  signal: AbortSignal,
+-): Promise<void> {
+-  const res = await fetch(`${BASE}/conversations/${id}/messages/stream`, {
++export interface StreamHandlers {
++  onToken: (t: string) => void;
++  onStatus?: (p: StreamPhase) => void;
++}
++
++/** 새 메시지 전송 */
++export const streamMessage = (id: string, content: string, h: StreamHandlers, signal: AbortSignal) =>
++  streamSse(`/conversations/${id}/messages/stream`, { content }, h, signal);
++
++/** 마지막 응답 재생성 */
++export const streamRegenerate = (id: string, h: StreamHandlers, signal: AbortSignal) =>
++  streamSse(`/conversations/${id}/regenerate/stream`, undefined, h, signal);
++
++/** 마지막 질문 수정 후 재생성 */
++export const streamEditLast = (id: string, content: string, h: StreamHandlers, signal: AbortSignal) =>
++  streamSse(`/conversations/${id}/edit-last/stream`, { content }, h, signal);
++
++/** SSE(POST)를 fetch로 읽는다. data:{"token"} → onToken, event:status → onStatus, event:error → throw. */
++async function streamSse(path: string, body: unknown, h: StreamHandlers, signal: AbortSignal): Promise<void> {
++  const res = await call(path, {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/json' },
+-    body: JSON.stringify({ content }),
++    body: body === undefined ? undefined : JSON.stringify(body),
+     signal,
+   });
+   if (!res.ok || !res.body) throw await failure(res);
+@@ -111,9 +166,15 @@ export async function streamMessage(
+   const decoder = new TextDecoder();
+   let buf = '';
+   for (;;) {
+-    const { done, value } = await reader.read();
+-    if (done) break;
+-    buf += decoder.decode(value, { stream: true });
++    let chunk: ReadableStreamReadResult<Uint8Array>;
++    try {
++      chunk = await reader.read();
++    } catch (e) {
++      if (signal.aborted) throw e;
++      throw backendDown();
++    }
++    if (chunk.done) break;
++    buf += decoder.decode(chunk.value, { stream: true });
+     let sep: number;
+     while ((sep = buf.indexOf('\n\n')) >= 0) {
+       const block = buf.slice(0, sep);
+@@ -125,10 +186,16 @@ export async function streamMessage(
+         else if (line.startsWith('data:')) data += line.slice(5).trim();
+       }
+       if (!data) continue;
+-      const parsed = JSON.parse(data) as { token?: string; message?: string };
+-      if (event === 'error') throw new Error(parsed.message ?? 'stream error');
++      const parsed = JSON.parse(data) as { token?: string; message?: string; code?: ErrorCode; phase?: StreamPhase };
++      if (event === 'error') throw new ApiError(500, parsed.message ?? 'stream error', parsed.code ?? 'INTERNAL');
+       if (event === 'done') return;
+-      if (parsed.token) onToken(parsed.token);
++      if (event === 'status') {
++        if (parsed.phase) h.onStatus?.(parsed.phase);
++        continue;
++      }
++      if (parsed.token) h.onToken(parsed.token);
+     }
+   }
++  // done 없이 끊김 = 백엔드 중단
++  if (!signal.aborted) throw backendDown();
+ }
+diff --git a/frontend/src/copy.ts b/frontend/src/copy.ts
+new file mode 100644
+index 0000000..a952110
+--- /dev/null
++++ b/frontend/src/copy.ts
+@@ -0,0 +1,12 @@
++/** 클립보드 복사. http(비보안 컨텍스트)에서는 textarea 폴백. */
++export async function copyText(text: string): Promise<void> {
++  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
++  const ta = document.createElement('textarea');
++  ta.value = text;
++  ta.style.position = 'fixed';
++  ta.style.opacity = '0';
++  document.body.appendChild(ta);
++  ta.select();
++  document.execCommand('copy');
++  ta.remove();
++}
+diff --git a/frontend/src/styles.css b/frontend/src/styles.css
+index 834bfcd..8fd4754 100644
+--- a/frontend/src/styles.css
++++ b/frontend/src/styles.css
+@@ -123,3 +123,65 @@ code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-weight:
+   .cols { grid-template-columns: 1fr; gap: 28px; }
+   .title { font-size: 34px; }
+ }
++
++/* 대화 목록: 검색·제목 수정·삭제 */
++.search, .rename { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; font: inherit; color: inherit; }
++.conv-row { display: flex; align-items: center; border-radius: 6px; }
++.conv-row .conv { flex: 1; min-width: 0; }
++.conv-row:hover, .conv-row.on { background: var(--bg); }
++.conv-row.on { box-shadow: inset 3px 0 0 var(--accent); }
++.conv-row.on .conv { font-weight: 600; }
++.conv-row .conv:hover, .conv-row .conv.on { background: none; }
++.conv-acts { display: none; gap: 2px; padding-right: 4px; }
++.conv-row:hover .conv-acts, .conv-row:focus-within .conv-acts, .conv-row.on .conv-acts { display: flex; }
++.icon { background: none; border: 0; border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 13px; color: var(--muted); }
++.icon:hover { background: var(--line); color: var(--ink); }
++@media (hover: none) { .conv-acts { display: flex; } }
++
++/* 메시지: 마크다운·액션 */
++.msg { flex-direction: column; }
++.msg.user { align-items: flex-end; }
++.msg.ai { align-items: flex-start; }
++.bubble { white-space: normal; }
++.plain { white-space: pre-wrap; }
++.md > :first-child { margin-top: 0; }
++.md > :last-child { margin-bottom: 0; }
++.md p, .md ul, .md ol, .md blockquote, .md table { margin: 0 0 10px; }
++.md ul, .md ol { padding-left: 22px; }
++.md h1, .md h2, .md h3, .md h4 { margin: 14px 0 8px; line-height: 1.3; }
++.md h1 { font-size: 20px; } .md h2 { font-size: 18px; } .md h3 { font-size: 16px; }
++.md code { font-weight: 400; font-family: ui-monospace, 'D2Coding', Consolas, monospace; font-size: 0.92em; }
++.md blockquote { border-left: 3px solid var(--line); padding-left: 12px; color: var(--muted); }
++.md table { border-collapse: collapse; display: block; overflow-x: auto; }
++.md th, .md td { border: 1px solid var(--line); padding: 4px 10px; text-align: left; }
++.md a { color: var(--accent); }
++.codeblock { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 0 0 10px; background: var(--bg); }
++.codehead { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px 4px 12px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); }
++.codeblock pre { margin: 0; padding: 12px; overflow-x: auto; white-space: pre; }
++.codeblock pre code { background: none; padding: 0; }
++.msg-acts { display: flex; gap: 4px; margin-top: 4px; opacity: 0.55; }
++.msg:hover .msg-acts, .msg-acts:focus-within { opacity: 1; }
++.tool { background: none; border: 1px solid transparent; border-radius: 5px; padding: 2px 8px; font-size: 12px; color: var(--muted); cursor: pointer; }
++.tool:hover { border-color: var(--line); color: var(--ink); }
++.editbox { width: 85%; display: flex; flex-direction: column; gap: 6px; }
++.editbox textarea { width: 100%; resize: vertical; background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; }
++.editbox .msg-acts { justify-content: flex-end; opacity: 1; }
++
++/* 로딩 단계 표시 */
++.phase { display: flex; align-items: center; gap: 8px; color: var(--muted); }
++.spinner { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; flex: none; }
++.caret { display: inline-block; width: 7px; height: 1em; background: var(--muted); vertical-align: text-bottom; animation: blink 1s steps(2) infinite; }
++@keyframes spin { to { transform: rotate(360deg); } }
++@keyframes blink { 50% { opacity: 0; } }
++@media (prefers-reduced-motion: reduce) { .spinner, .caret { animation: none; } }
++
++/* 상태·오류 안내 */
++.notice { display: flex; gap: 12px; align-items: flex-start; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--panel); font-size: 14px; }
++.notice-body { flex: 1; min-width: 0; }
++.notice-body p { margin: 2px 0 0; color: var(--muted); }
++.notice strong { display: block; }
++.notice.down { box-shadow: inset 4px 0 0 var(--err); }
++.notice.down strong { color: var(--err); }
++.notice.warn { box-shadow: inset 4px 0 0 var(--warn); }
++.notice.info { box-shadow: inset 4px 0 0 var(--accent); }
++.chat > .notice:not(:first-of-type) { border-top: 1px solid var(--line); }
+-- 
+2.43.0
+
