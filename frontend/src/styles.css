@@ -205,3 +205,17 @@ code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-weight:
 .ok-text { color: var(--ok); margin: 0; }
 .chips .muted { align-self: center; }
 @media (max-width: 720px) { .action-card { flex-wrap: wrap; } }
+
+/* 기억 관리 */
+.side-links { display: flex; gap: 6px; }
+.side-links .ghost { flex: 1; }
+.search.narrow { width: 220px; max-width: 100%; }
+.search.grow { flex: 1; min-width: 0; }
+.danger-text { color: var(--err); }
+.mem.off { opacity: 0.6; }
+.mem-row { display: flex; gap: 12px; align-items: flex-start; }
+.mem-text { flex: 1; margin: 0; white-space: pre-wrap; word-break: break-word; }
+.mem-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); }
+.mem-edit { width: 100%; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--accent); border-radius: 6px; padding: 8px 10px; resize: vertical; }
+.tag { display: inline-block; font-size: 12px; background: var(--user); border-radius: 4px; padding: 0 6px; margin-right: 6px; }
+.toggle { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; cursor: pointer; }

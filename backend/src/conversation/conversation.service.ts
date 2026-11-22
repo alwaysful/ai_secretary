@@ -14,6 +14,7 @@ import { ToolContextProvider } from '../ai/tools/tool';
 import { describeError } from '../common/errors';
 import { inferenceMutex } from '../common/mutex';
 import { CalendarActionService, PendingAction } from '../actions/calendar-action.service';
+import { MemoryService } from '../memory/memory.service';
 import { SettingsService } from '../settings/settings.service';
 import { EnvVars } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
@@ -39,6 +40,7 @@ export class ConversationService {
     private readonly tools: ToolContextProvider,
     private readonly settings: SettingsService,
     private readonly actions: CalendarActionService,
+    private readonly memory: MemoryService,
   ) {}
 
   create(title?: string) {
@@ -83,7 +85,7 @@ export class ConversationService {
   async postMessage(id: string, content: string) {
     await this.assertExists(id);
     // 모델 슬롯을 잡기 전에 외부 I/O 수행
-    const [read, plan] = await Promise.all([this.tools.contextFor(content), this.actions.plan(content, id)]);
+    const [read, plan] = await Promise.all([this.tools.contextFor(content), this.planAction(content, id)]);
     const extra = [read, plan?.context].filter(Boolean).join('\n') || null;
     const release = await this.mutex.acquire();
     try {
@@ -134,6 +136,11 @@ export class ConversationService {
     });
   }
 
+  /** 기억 명령이 우선, 아니면 일정 쓰기 */
+  private async planAction(text: string, id: string, signal?: AbortSignal) {
+    return (await this.memory.plan(text, id)) ?? this.actions.plan(text, id, signal);
+  }
+
   private async lastUserMessage(id: string) {
     await this.assertExists(id);
     const last = await this.prisma.message.findFirst({
@@ -160,7 +167,7 @@ export class ConversationService {
     onStatus?.('tools');
     const [read, plan] = await Promise.all([
       this.tools.contextFor(userText, signal),
-      this.actions.plan(userText, id, signal),
+      this.planAction(userText, id, signal),
     ]);
     if (plan?.action) hooks.onAction?.(plan.action);
     const extra = [read, plan?.context].filter(Boolean).join('\n') || null;
@@ -221,7 +228,8 @@ export class ConversationService {
     const history: ChatMessage[] = recent
       .reverse()
       .map((m) => ({ role: m.role.toLowerCase() as ChatMessage['role'], content: m.content }));
-    const system = [this.settings.systemPrompt(), extra].filter(Boolean).join('\n\n');
+    const memory = await this.memory.context();
+    const system = [this.settings.systemPrompt(), memory, extra].filter(Boolean).join('\n\n');
     return system ? [{ role: 'system', content: system }, ...history] : history;
   }
 

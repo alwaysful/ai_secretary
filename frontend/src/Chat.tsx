@@ -22,7 +22,20 @@ const label = (c: Conversation) => c.title || '새 대화';
 
 type Retry = () => Promise<void>;
 
-export function Chat(props: { onBack: () => void; onSettings: () => void }) {
+const ACTION_TITLE: Record<PendingAction['kind'], string> = {
+  'calendar.create': '📅 일정 등록 확인',
+  'calendar.update': '📅 일정 변경 확인',
+  'memory.create': '🧠 기억 추가 확인',
+  'memory.delete': '🧠 기억 삭제 확인',
+};
+const ACTION_OK: Record<PendingAction['kind'], string> = {
+  'calendar.create': 'Outlook에 저장',
+  'calendar.update': 'Outlook에 저장',
+  'memory.create': '기억하기',
+  'memory.delete': '삭제',
+};
+
+export function Chat(props: { onBack: () => void; onSettings: () => void; onMemory: () => void }) {
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [query, setQuery] = useState('');
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -276,8 +289,8 @@ export function Chat(props: { onBack: () => void; onSettings: () => void }) {
     setActionBusy(a.id);
     try {
       if (ok) {
-        const ev = await api.confirmAction(a.id);
-        setInfo(`${a.kind === 'calendar.create' ? '등록' : '변경'} 완료: ${ev.subject}`);
+        await api.confirmAction(a.id);
+        setInfo(`${ACTION_TITLE[a.kind].replace(' 확인', '')} 완료: ${a.summary.replace(/^[^:]+: /, '')}`);
       } else {
         await api.cancelAction(a.id);
       }
@@ -362,9 +375,14 @@ export function Chat(props: { onBack: () => void; onSettings: () => void }) {
           {convs.length === 0 && <p className="muted">{query ? '검색 결과 없음' : '대화 없음'}</p>}
         </nav>
         <MailPanel />
-        <button className="ghost" onClick={props.onSettings}>
-          ⚙ 설정 (모델·프롬프트)
-        </button>
+        <div className="side-links">
+          <button className="ghost" onClick={props.onMemory}>
+            🧠 기억
+          </button>
+          <button className="ghost" onClick={props.onSettings}>
+            ⚙ 설정
+          </button>
+        </div>
         <div className="status" role="status" title={status.hint}>
           <span className={`dot ${status.level === 'ok' ? 'ok' : status.level === 'down' ? 'down' : 'warn'}`} />
           {healthLoaded ? status.title : '상태 확인 중…'}
@@ -452,14 +470,14 @@ export function Chat(props: { onBack: () => void; onSettings: () => void }) {
             {actions.map((a) => (
               <div key={a.id} className="action-card">
                 <div className="action-body">
-                  <strong>{a.kind === 'calendar.create' ? '📅 일정 등록 확인' : '📅 일정 변경 확인'}</strong>
-                  <span>{a.summary.replace(/^(등록|변경): /, '')}</span>
+                  <strong>{ACTION_TITLE[a.kind]}</strong>
+                  <span>{a.summary.replace(/^[^:]+: /, '')}</span>
                 </div>
                 <button className="ghost" disabled={actionBusy === a.id} onClick={() => void decide(a, false)}>
                   취소
                 </button>
                 <button className="primary" disabled={actionBusy === a.id} onClick={() => void decide(a, true)}>
-                  {actionBusy === a.id ? '처리 중…' : 'Outlook에 저장'}
+                  {actionBusy === a.id ? '처리 중…' : ACTION_OK[a.kind]}
                 </button>
               </div>
             ))}

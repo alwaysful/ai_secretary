@@ -27,13 +27,24 @@ export interface EventDraft {
 /** 사용자 확인을 기다리는 작업 (일정 등록·변경) */
 export interface PendingAction {
   id: string;
-  kind: 'calendar.create' | 'calendar.update';
+  kind: 'calendar.create' | 'calendar.update' | 'memory.create' | 'memory.delete';
   conversationId: string | null;
   summary: string;
-  draft: EventDraft;
+  draft?: EventDraft;
+  memory?: { id?: string; content: string; category?: string | null };
   eventId?: string;
   before?: CalendarEvent;
   expiresAt: string;
+}
+
+export interface Memory {
+  id: string;
+  content: string;
+  category: string | null;
+  enabled: boolean;
+  source: 'manual' | 'chat';
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Settings {
@@ -181,7 +192,14 @@ export const api = {
     req<Settings>('/settings', { method: 'PUT', body: JSON.stringify(s) }),
   models: () => req<string[]>('/settings/models'),
   actions: (conversationId: string) => req<PendingAction[]>(`/actions?conversationId=${conversationId}`),
-  confirmAction: (id: string) => req<CalendarEvent>(`/actions/${id}/confirm`, { method: 'POST' }),
+  memories: (q?: string) => req<Memory[]>(q ? `/memories?q=${encodeURIComponent(q)}` : '/memories'),
+  createMemory: (m: { content: string; category?: string }) =>
+    req<Memory>('/memories', { method: 'POST', body: JSON.stringify(m) }),
+  updateMemory: (id: string, m: { content?: string; category?: string; enabled?: boolean }) =>
+    req<Memory>(`/memories/${id}`, { method: 'PATCH', body: JSON.stringify(m) }),
+  deleteMemory: (id: string) => req<void>(`/memories/${id}`, { method: 'DELETE' }),
+  deleteAllMemories: () => req<{ deleted: number }>('/memories?confirm=all', { method: 'DELETE' }),
+  confirmAction: (id: string) => req<{ subject?: string; content?: string; deleted?: string }>(`/actions/${id}/confirm`, { method: 'POST' }),
   cancelAction: (id: string) => req<void>(`/actions/${id}`, { method: 'DELETE' }),
   events: (days: number) => req<CalendarEvent[]>(`/calendar/events?days=${days}`),
 };

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { BaseModel } from '../ai/models/base-model';
 import { CalendarService } from '../calendar/calendar.service';
 import { CalendarEvent } from '../calendar/calendar.types';
+import { MemoryService } from '../memory/memory.service';
 import { localNow, shortLabel, startOfLocalDay } from '../calendar/tz';
 import { inferenceMutex } from '../common/mutex';
 import { escapeTags } from '../common/text';
@@ -44,6 +45,7 @@ export class BriefingService {
     private readonly model: BaseModel,
     private readonly settings: SettingsService,
     private readonly config: ConfigService<EnvVars, true>,
+    private readonly memory: MemoryService,
   ) {}
 
   async collect(signal?: AbortSignal, now: Date = new Date()): Promise<BriefingData> {
@@ -80,7 +82,10 @@ export class BriefingService {
     try {
       if (onLoading && (this.model.state !== 'ready' || (await this.model.probe()).loaded === false)) onLoading();
       const messages = [
-        { role: 'system' as const, content: `${this.settings.systemPrompt()}\n\n${BRIEF_INSTRUCTION}` },
+        {
+          role: 'system' as const,
+          content: [this.settings.systemPrompt(), await this.memory.context(), BRIEF_INSTRUCTION].filter(Boolean).join('\n\n'),
+        },
         { role: 'user' as const, content: formatData(data) },
       ];
       yield* this.model.stream({ messages, signal });

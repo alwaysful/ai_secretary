@@ -55,3 +55,17 @@ model AppSettings {
   systemPrompt String?
   updatedAt    DateTime @updatedAt
 }
+
+/// 사용자가 직접 저장·관리하는 장기 기억. 켜진 항목만 대화 프롬프트에 들어간다.
+model Memory {
+  id        String   @id @default(uuid()) @db.Uuid
+  content   String
+  category  String?
+  enabled   Boolean  @default(true)
+  /// manual: 기억 화면, chat: 채팅 "기억해" (사용자 확인 후)
+  source    String   @default("manual")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([enabled, updatedAt])
+}

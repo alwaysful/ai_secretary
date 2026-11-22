@@ -9,29 +9,12 @@ import { escapeTags } from '../common/text';
 import { EnvVars } from '../config/env';
 import { MailAuthService } from '../mail/mail-auth.service';
 import { MailError } from '../mail/mail.errors';
+import { ActionPlan, PendingAction } from './pending-action';
+
+export type { ActionPlan, PendingAction };
 
 const TTL_MS = 30 * 60_000;
 const DAY = 86_400_000;
-
-/** 사용자 확인을 기다리는 일정 쓰기 작업 */
-export interface PendingAction {
-  id: string;
-  kind: 'calendar.create' | 'calendar.update';
-  conversationId: string | null;
-  /** 화면 표시용 한 줄 요약 */
-  summary: string;
-  draft: EventDraft;
-  /** 수정 대상 (update) */
-  eventId?: string;
-  before?: CalendarEvent;
-  expiresAt: string;
-}
-
-export interface ActionPlan {
-  /** 모델 프롬프트에 넣을 설명 */
-  context: string;
-  action?: PendingAction;
-}
 
 const describe = (d: EventDraft) => {
   const when = d.isAllDay
@@ -113,12 +96,16 @@ export class CalendarActionService {
     return [...this.pending.values()].filter((a) => !conversationId || a.conversationId === conversationId);
   }
 
+  has(id: string): boolean {
+    return this.pending.has(id);
+  }
+
   async confirm(id: string, signal?: AbortSignal): Promise<CalendarEvent> {
     const a = this.take(id);
     try {
       return a.kind === 'calendar.create'
-        ? await this.calendar.create(a.draft, signal)
-        : await this.calendar.update(a.eventId!, a.draft, signal);
+        ? await this.calendar.create(a.draft!, signal)
+        : await this.calendar.update(a.eventId!, a.draft!, signal);
     } catch (e) {
       // 실패하면 다시 시도할 수 있게 되돌려 놓는다
       this.pending.set(a.id, a);

@@ -37,13 +37,15 @@ function setup() {
   const tools = { contextFor: jest.fn().mockResolvedValue(null) };
   const settings: any = { systemPrompt: () => 'sys' };
   const actions: any = { plan: jest.fn().mockResolvedValue(null) };
+  const memory: any = { plan: jest.fn().mockResolvedValue(null), context: jest.fn().mockResolvedValue(null) };
   return {
     prisma,
     model,
     stored,
     tools,
     actions,
-    service: new ConversationService(prisma, model, config, tools, settings, actions),
+    memory,
+    service: new ConversationService(prisma, model, config, tools, settings, actions, memory),
   };
 }
 
@@ -194,5 +196,13 @@ describe('ConversationService', () => {
       })(),
     ).rejects.toBeTruthy();
     expect(stored[1]).toMatchObject({ role: 'ASSISTANT', content: 'part', stopped: true });
+  });
+
+  it('켜진 기억은 system 프롬프트에 포함', async () => {
+    const { service, model, memory } = setup();
+    memory.context.mockResolvedValue('MEM');
+    model.generate.mockResolvedValue({ content: 'ok', model: 'fake', durationMs: 1 });
+    await service.postMessage('c1', 'hi');
+    expect(model.generate.mock.calls[0][0].messages[0].content).toBe('sys\n\nMEM');
   });
 });
