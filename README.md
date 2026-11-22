@@ -89,7 +89,7 @@ frontend/public/models/
 └─ efficientdet_lite0.tflite
 ```
 
-- MediaPipe 실행 파일(wasm)은 jsdelivr CDN에서 자동 로드. 인터넷 필요.
+- MediaPipe 실행 파일(wasm)은 `npm install` 시 받은 패키지에서 자동 제공. 별도 다운로드 불필요.
 - 모델 파일은 git에 안 올라감 (`.gitignore`).
 
 ## 5. 패키지 설치 및 DB 테이블 생성
