@@ -1,4 +1,4 @@
-/** 멘트 말투. devil: 기존 비꼬는 멘트, robot: 딱딱한 안내 멘트 */
+/** 멘트 말투. devil(화면 표기 '인간'): 기존 비꼬는 멘트, robot: 딱딱한 안내 멘트 */
 export type Tone = 'devil' | 'robot';
 
 const KEY = 'aura.study.tone';

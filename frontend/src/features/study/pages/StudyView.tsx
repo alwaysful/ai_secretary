@@ -296,6 +296,20 @@ export function StudyPage({ onBack }: { onBack: () => void }) {
         ) : (
           <>
             <div className="analysis-left">
+              <div className="tone-toggle">
+                <span className={tone === 'robot' ? 'on' : undefined}>🤖 로봇</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={tone === 'devil'}
+                  aria-label="멘트 말투: 로봇 또는 인간"
+                  className={tone === 'devil' ? 'tone-switch human' : 'tone-switch'}
+                  onClick={() => changeTone(tone === 'robot' ? 'devil' : 'robot')}
+                >
+                  <i />
+                </button>
+                <span className={tone === 'devil' ? 'on' : undefined}>🧑 인간</span>
+              </div>
               <ErrorMessage message={error} />
               <div className="row">
                 <button
@@ -348,26 +362,6 @@ export function StudyPage({ onBack }: { onBack: () => void }) {
               </div>
               <div className="analysis-hints">
                 <h2>어겼을 때 메시지</h2>
-                <div className="row" role="radiogroup" aria-label="멘트 말투">
-                  {(
-                    [
-                      ['devil', '😈 악마', '비꼬는 멘트'],
-                      ['robot', '🤖 로봇', '딱딱한 안내'],
-                    ] as const
-                  ).map(([id, label, hint]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      role="radio"
-                      aria-checked={tone === id}
-                      className={tone === id ? 'btn btn-primary' : 'btn'}
-                      onClick={() => changeTone(id)}
-                      title={hint}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
                 <div className="row">
                   {hints.map((h) => (
                     <button
