@@ -1,5 +1,10 @@
-export const QUIT_PROMPT = '5분 뒤에 끄는 건 어떤가요?';
-export const QUIT_DONE = '이제 가셔도 됩니다. 아쉽진 않습니다.';
+import { isRobot, pick, ROBOT } from './tone';
+
+const QUIT_PROMPT = '5분 뒤에 끄는 건 어떤가요?';
+const QUIT_DONE = '이제 가셔도 됩니다. 아쉽진 않습니다.';
+
+export const quitPrompt = () => (isRobot() ? ROBOT.quitPrompt : QUIT_PROMPT);
+export const quitDone = () => (isRobot() ? ROBOT.quitDone : QUIT_DONE);
 
 // 단계가 오를수록 깐깐해진다 (0~3)
 const BY_LEVEL: string[][] = [
@@ -22,6 +27,7 @@ const BY_LEVEL: string[][] = [
 ];
 
 export function pickQuitMessage(level: number): string {
+  if (isRobot()) return pick(ROBOT.quit);
   const pool = BY_LEVEL[Math.min(Math.max(level, 0), BY_LEVEL.length - 1)];
   return pool[Math.floor(Math.random() * pool.length)];
 }

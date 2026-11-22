@@ -1,5 +1,4 @@
-const pick = (list: string[]): string =>
-  list[Math.floor(Math.random() * list.length)];
+import { isRobot, pick, ROBOT } from './tone';
 
 const SLEEP_START = [
   '잘 자요. 공부는 제가 대신 못 합니다.',
@@ -22,6 +21,6 @@ const SLACK = [
   '현재 게임 승률보다 과제 제출 확률이 낮아 보입니다.',
 ];
 
-export const pickSleepStart = () => pick(SLEEP_START);
-export const pickPhoneMessage = () => pick(PHONE);
-export const pickSlackMessage = () => pick(SLACK);
+export const pickSleepStart = () => pick(isRobot() ? ROBOT.sleep : SLEEP_START);
+export const pickPhoneMessage = () => pick(isRobot() ? ROBOT.phone : PHONE);
+export const pickSlackMessage = () => pick(isRobot() ? ROBOT.slack : SLACK);
