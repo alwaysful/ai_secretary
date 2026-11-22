@@ -45,12 +45,52 @@ docker compose up -d
 
 ## 4. 모델 받기
 
+AI 모델 4종. 저장 위치가 다름.
+
+| 용도 | 모델 | 받는 곳 | 저장 위치 | 크기 |
+|---|---|---|---|---|
+| 채팅·브리핑 (필수) | `qwen3:4b` | Ollama | Ollama가 자동 관리 (Windows `%USERPROFILE%\.ollama\models`) | 약 2.5GB |
+| 공부 집중: 화면 딴짓 분석 | `gemma4:12b` | Ollama | 위와 같음 | 수 GB |
+| 공부 집중: 자세·졸음 | `pose_landmarker_lite.task`, `face_landmarker.task` | Google MediaPipe | `frontend/public/models/` | 약 10MB |
+| 공부 집중: 폰 감지 | `efficientdet_lite0.tflite` | Google MediaPipe | `frontend/public/models/` | 약 7MB |
+
+### 4-1. Ollama 모델
+
+Ollama 설치: https://ollama.com/download
+
 ```bash
 ollama pull qwen3:4b
+ollama pull gemma4:12b      # 공부 집중 화면 분석 쓸 때만
+ollama list                 # 확인
 ```
 
-- 약 2.5GB.
 - Ollama 앱 실행 중이어야 함. 안 되면 `ollama serve`.
+- 폴더에 직접 넣지 말 것. `ollama pull`이 알아서 저장.
+- 화면 분석 모델 바꾸기: `backend/.env`의 `STUDY_VISION_MODEL`. 이미지 입력 되는 모델만 가능.
+
+### 4-2. MediaPipe 모델 (공부 집중)
+
+저장소 루트(`ai_secretary/`)에서:
+
+```bash
+npm run models
+```
+
+`frontend/public/models/`에 3개 파일 생김. 수동으로 받을 경우 아래 링크를 같은 폴더에 같은 이름으로 저장.
+
+- https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task
+- https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task
+- https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/latest/efficientdet_lite0.tflite
+
+```
+frontend/public/models/
+├─ pose_landmarker_lite.task
+├─ face_landmarker.task
+└─ efficientdet_lite0.tflite
+```
+
+- MediaPipe 실행 파일(wasm)은 jsdelivr CDN에서 자동 로드. 인터넷 필요.
+- 모델 파일은 git에 안 올라감 (`.gitignore`).
 
 ## 5. 패키지 설치 및 DB 테이블 생성
 
@@ -152,6 +192,8 @@ DB, Ollama 없이 실행됨.
 
 ## 문제 해결
 
+> Windows PowerShell에서 `npm` 실행 시 `npm.ps1 ... 스크립트를 실행할 수 없으므로` 오류 → `npm` 대신 `npm.cmd` 사용 (예: `npm.cmd install`, `npm.cmd run dev`).
+
 | 증상 | 해결 |
 |---|---|
 | `/health`에서 `db: "down"` | `docker compose up -d`. Docker Desktop 실행 확인. |
@@ -162,6 +204,8 @@ DB, Ollama 없이 실행됨.
 | `prisma migrate` 실패 | DB 기동 10초 대기 후 재시도. |
 | 포트 3000 사용 중 | `.env`의 `PORT` 변경. |
 | 메일 `NOT_CONNECTED` | 9번 로그인 재수행. |
+| 공부 집중 화면 분석 503 | `ollama pull gemma4:12b` 또는 `STUDY_VISION_MODEL` 확인. |
+| 공부 집중 카메라 분석 안 됨 | `frontend/public/models/`에 모델 3개 확인 (`npm run models`). |
 
 ## 주의
 
