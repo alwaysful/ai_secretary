@@ -10,6 +10,7 @@ import { StudyModule } from './study/study.module';
 import { ShortcutModule } from './shortcut/shortcut.module';
 import { ScrapeModule } from './scrape/scrape.module';
 import { SystemModule } from './system/system.module';
+import { SetupModule } from './setup/setup.module';
 import { PcControlModule } from './pc-control/pc-control.module';
 import { ToolsModule } from './tools/tools.module';
 import { StatsModule } from './stats/stats.module';
@@ -34,6 +35,7 @@ import { PrismaModule } from './prisma/prisma.module';
     ShortcutModule,
     ScrapeModule,
     SystemModule,
+    SetupModule,
     ModelHubModule,
     PcControlModule,
     ToolsModule,

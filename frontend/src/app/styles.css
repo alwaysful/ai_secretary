@@ -610,3 +610,10 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; border: 1
   .card .error { color: #c0392b !important; }
   .card .muted { color: #555 !important; }
 }
+
+.guide-right { display: inline-flex; align-items: center; gap: 10px; }
+.guide-run { padding: 5px 12px; font-size: 13px; }
+.guide-log { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.guide-log.done { border-color: var(--ok); }
+.guide-log.error { border-color: var(--err); }
+.guide-log pre { margin: 0; white-space: pre-wrap; word-break: break-all; color: var(--muted); font-size: 12px; max-height: 120px; overflow: auto; }

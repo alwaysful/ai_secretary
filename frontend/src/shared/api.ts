@@ -292,6 +292,16 @@ export interface HubModel {
   bytes?: number;
 }
 
+export type SetupTask = 'db' | 'ollama' | 'pip' | 'mediapipe';
+
+export interface SetupJob {
+  task: SetupTask;
+  status: 'running' | 'done' | 'error';
+  log: string;
+  startedAt: string;
+  endedAt: string | null;
+}
+
 export interface PullJob {
   name: string;
   status: 'pulling' | 'done' | 'error' | 'canceled';
@@ -513,6 +523,8 @@ export const api = {
   today: () => req<CalendarEvent[]>('/calendar/today'),
   unreadCount: () => req<{ count: number }>('/mail/unread-count'),
   modelHub: () => req<ModelHub>('/model-hub'),
+  setupJobs: () => req<SetupJob[]>('/setup/jobs'),
+  setupRun: (task: SetupTask) => req<SetupJob>(`/setup/run/${task}`, { method: 'POST', headers: { 'X-Aura-Setup': '1' } }),
   pullJobs: () => req<PullJob[]>('/model-hub/jobs'),
   pullModel: (name: string) => req<PullJob>('/model-hub/pull', { method: 'POST', body: JSON.stringify({ name }) }),
   cancelPull: (name: string) => req<void>(`/model-hub/pull/${encodeURIComponent(name)}`, { method: 'DELETE' }),
