@@ -5,6 +5,7 @@ import { api, ApiError, CalendarEvent, Health, NewsUnread } from '../shared/api'
 import { ThemeButton } from '../shared/theme';
 import { WebShortcuts } from './WebShortcuts';
 import { AdminGate } from '../features/admin/AdminGate';
+import { currentToken, setAdminToken } from '../features/admin/session';
 
 interface Item {
   id: PageId | null;
@@ -30,6 +31,9 @@ const MAIN: Item[] = [
   { id: 'info', icon: 'ℹ️', label: '정보', hint: '기능 설명' },
   { id: 'guide', icon: '🚀', label: '시작 가이드', hint: '처음 설정 순서' },
 ];
+
+/** 관리자 모드 추가 카드 */
+const ADMIN: Item[] = [{ id: 'admin', icon: '🖥️', label: '서버 관리하기', hint: '상태·로그·백업·권한' }];
 
 const SOON: Item[] = [
   { id: null, icon: '🎙️', label: '음성', hint: '준비 중' },
@@ -194,6 +198,19 @@ function OffScreen() {
 
 export function Lobby(props: { onNavigate: (p: PageId) => void }) {
   const [off, setOff] = useState(false);
+  const [admin, setAdmin] = useState(() => !!currentToken());
+
+  // 서버 세션 만료 시 일반 로비로
+  useEffect(() => {
+    const t = currentToken();
+    if (!admin || !t) return;
+    api.adminSession(t).catch((e: unknown) => {
+      if (e instanceof ApiError && e.status === 401) {
+        setAdminToken(null);
+        setAdmin(false);
+      }
+    });
+  }, [admin]);
   const [pcOn, setPcOn] = useState(false);
   useEffect(() => {
     if (isNative()) return;
@@ -226,7 +243,7 @@ export function Lobby(props: { onNavigate: (p: PageId) => void }) {
   return (
     <div className="lobby-page">
       <div className="lobby-in">
-        <AdminGate onEnter={() => props.onNavigate('admin')} />
+        <AdminGate admin={admin} onEnter={() => setAdmin(true)} onLock={() => setAdmin(false)} />
         <div className="meta">
           <span className="status">
             <span className={`dot ${dot}`} />
@@ -250,7 +267,7 @@ export function Lobby(props: { onNavigate: (p: PageId) => void }) {
         <WebShortcuts />
         <section className="feats">
           <h2>기능</h2>
-          <Features items={[...(pcOn ? MAIN : MAIN.filter((i) => i.id !== 'pc')), ...SOON]} onNavigate={props.onNavigate} />
+          <Features items={[...(admin ? ADMIN : []), ...(pcOn ? MAIN : MAIN.filter((i) => i.id !== 'pc')), ...SOON]} onNavigate={props.onNavigate} />
         </section>
       </div>
     </div>

@@ -40,6 +40,13 @@ export class AdminController {
     this.auth.logout(bearer(req));
   }
 
+  /** 세션 유효 확인 (관리자 로비 표시용) */
+  @UseGuards(AdminGuard)
+  @Get('session')
+  session() {
+    return { ok: true };
+  }
+
   @UseGuards(AdminGuard)
   @Get('overview')
   overview() {
