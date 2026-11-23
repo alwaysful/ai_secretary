@@ -133,13 +133,16 @@ export function NewsPage(props: { onBack: () => void }) {
             <button className={tag === '' ? 'on' : ''} onClick={() => setTag('')}>
               # 전체 분야
             </button>
-            {allTags
-              .filter((t) => tagCounts.has(t))
-              .map((t) => (
-                <button key={t} className={tag === t ? 'on' : ''} onClick={() => setTag(tag === t ? '' : t)}>
-                  #{t} <small>{tagCounts.get(t)}</small>
-                </button>
-              ))}
+            {/* 글 없는 분야도 항상 표시 */}
+            {allTags.map((t) => (
+              <button
+                key={t}
+                className={`${tag === t ? 'on' : ''}${tagCounts.has(t) ? '' : ' empty'}`}
+                onClick={() => setTag(tag === t ? '' : t)}
+              >
+                #{t} <small>{tagCounts.get(t) ?? 0}</small>
+              </button>
+            ))}
           </div>
         )}
         <div className="news-tools">
