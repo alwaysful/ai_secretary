@@ -1,25 +1,11 @@
 import { load } from 'cheerio';
-import { localParts, startOfLocalDay } from '../../calendar/tz';
-import { clean, ScrapedItem, ScrapeSource } from './source';
+import { parseDday } from './date';
+import { clean, Parser, ScrapedItem } from './types';
 
-const DAY = 86_400_000;
-
-/** "D-8" → 오늘+8일, "D-day"/"오늘마감" → 오늘. 마감·없음 → undefined */
-export function parseDday(text: string, now: Date, tz: string): Date | undefined {
-  const t = localParts(now, tz);
-  const today = startOfLocalDay(t.year, t.month, t.day, tz);
-  if (/d-?day|오늘\s*마감/i.test(text)) return today;
-  const m = /D-(\d{1,3})\b/i.exec(text);
-  return m ? new Date(today.getTime() + Number(m[1]) * DAY) : undefined;
-}
-
-/** 위비티 공모전 목록 (최신순 1페이지). robots.txt: Allow / */
-export const wevity: ScrapeSource = {
+/** 위비티 공모전 목록. robots.txt: Allow / */
+export const wevityParser: Parser = {
   id: 'wevity',
-  name: '위비티 공모전',
-  kind: 'contest',
-  homeUrl: 'https://www.wevity.com/?c=find&s=1',
-  listUrl: 'https://www.wevity.com/?c=find&s=1&gub=1',
+  label: '위비티',
   parse(html, ctx) {
     const $ = load(html);
     const out: ScrapedItem[] = [];

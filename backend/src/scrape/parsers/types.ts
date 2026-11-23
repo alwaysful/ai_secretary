@@ -1,5 +1,3 @@
-export type ScrapeKind = 'notice' | 'contest';
-
 /** 파서가 돌려주는 글 1개 */
 export interface ScrapedItem {
   externalId: string;
@@ -17,20 +15,18 @@ export interface ParseCtx {
   now: Date;
   /** IANA 시간대 */
   tz: string;
+  /** 사용자가 준 글 링크 CSS 선택자 */
+  itemSelector?: string;
 }
 
-/**
- * 스크래핑 소스. 새 사이트 = 이 인터페이스 구현 + sources/index.ts 에 추가.
- * parse 는 순수 함수 (네트워크 없음) → 테스트 쉬움.
- */
-export interface ScrapeSource {
+/** 게시판 형식별 파서. parse 는 순수 함수 (네트워크 없음). 새 형식 = 파일 1개 + index.ts 등록 */
+export interface Parser {
   readonly id: string;
-  readonly name: string;
-  readonly kind: ScrapeKind;
-  /** 사이트 바로가기 */
-  readonly homeUrl: string;
-  readonly listUrl: string;
+  readonly label: string;
   parse(html: string, ctx: ParseCtx): ScrapedItem[];
 }
 
 export const clean = (s: string | undefined | null): string => (s ?? '').replace(/\s+/g, ' ').trim();
+
+/** 같은 글이 상단 고정 + 일반 목록에 두 번 나올 수 있음 */
+export const uniq = (items: ScrapedItem[]): ScrapedItem[] => [...new Map(items.map((i) => [i.externalId, i])).values()];

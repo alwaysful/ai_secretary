@@ -17,7 +17,7 @@ const MAIN: Item[] = [
   { id: 'schedule', icon: '📅', label: '내 일정 보기' },
   { id: 'chat', icon: '💬', label: 'AI 채팅하기' },
   { id: 'mail', icon: '✉️', label: '메일 확인', hint: '읽기 전용' },
-  { id: 'news', icon: '📰', label: '새 소식', hint: '학사공지·공모전' },
+  { id: 'news', icon: '📰', label: '새 소식', hint: '공지·공모전 모음' },
   { id: 'study', icon: '📚', label: '공부 집중', hint: '웹캠·화면 감시' },
   { id: 'phone', icon: '📱', label: '폰 감시', hint: 'Android 앱' },
   { id: 'memory', icon: '🧠', label: '기억 관리', hint: '장기 기억' },
@@ -137,7 +137,7 @@ function Widgets(props: { onNavigate: (p: PageId) => void }) {
               <small>개</small>
             </div>
             <p className="muted">
-              학사공지 {news.value.notice} · 공모전 {news.value.contest}
+              {news.value.byCategory.map((c) => `${c.name} ${c.count}`).join(' · ') || '카테고리 없음'}
             </p>
           </>
         )}
