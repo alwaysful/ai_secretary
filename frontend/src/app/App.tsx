@@ -3,6 +3,8 @@ import { Briefing } from '../features/briefing/Briefing';
 import { Chat } from '../features/chat/Chat';
 import { InfoPage } from '../features/info/InfoPage';
 import { landingSeen } from '../features/landing/seen';
+import { GuidePage } from '../features/guide/GuidePage';
+import { guideDone } from '../features/guide/seen';
 import { Lobby } from './Lobby';
 import { MailPage } from '../features/mail/MailPage';
 import { ModelsPage } from '../features/models/ModelsPage';
@@ -27,7 +29,7 @@ const PhonePage = lazy(() => import('../features/phone/PhonePage').then((m) => (
 /** 공부 집중: mediapipe 포함, 필요할 때만 로드 */
 const StudyPage = lazy(() => import('../features/study/pages/StudyView').then((m) => ({ default: m.StudyPage })));
 
-export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study' | 'phone' | 'info' | 'news' | 'landing' | 'models' | 'pc' | 'tools' | 'stats';
+export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study' | 'phone' | 'info' | 'news' | 'landing' | 'models' | 'pc' | 'tools' | 'stats' | 'guide';
 
 function Page(props: { page: PageId; go: (p: PageId) => void }) {
   const { page, go } = props;
@@ -69,10 +71,12 @@ function Page(props: { page: PageId; go: (p: PageId) => void }) {
       return <ToolsPage onBack={back} />;
     case 'stats':
       return <StatsPage onBack={back} />;
+    case 'guide':
+      return <GuidePage onBack={back} onNavigate={go} />;
     case 'landing':
       return (
         <Suspense fallback={null}>
-          <Landing onEnter={back} onInfo={() => go('info')} />
+          <Landing onEnter={() => go(guideDone() ? 'lobby' : 'guide')} onInfo={() => go('info')} />
         </Suspense>
       );
     default:

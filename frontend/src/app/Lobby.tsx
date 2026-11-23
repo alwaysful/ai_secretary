@@ -27,6 +27,7 @@ const MAIN: Item[] = [
   { id: 'tools', icon: '🛠️', label: '도구', hint: 'STT·OCR·사이트' },
   { id: 'stats', icon: '📊', label: '통계', hint: '공부·채팅·API 비용' },
   { id: 'info', icon: 'ℹ️', label: '정보', hint: '기능 설명' },
+  { id: 'guide', icon: '🚀', label: '시작 가이드', hint: '처음 설정 순서' },
 ];
 
 const SOON: Item[] = [
