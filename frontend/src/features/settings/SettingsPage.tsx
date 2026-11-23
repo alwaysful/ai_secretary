@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { api, ApiError, Settings } from '../../shared/api';
+import { ReactNode, useEffect, useState } from 'react';
+import { AiFeature, AiRoute, api, ApiError, ApiProvider, Settings } from '../../shared/api';
 
 type PermKey = 'screenRead' | 'pcControl' | 'mic' | 'webcam';
 
@@ -33,6 +33,184 @@ function ModelSelect(props: {
   );
 }
 
+const FEATURES: AiFeature[] = ['chat', 'ocr', 'stt'];
+const routeChanged = (a: AiRoute, b: AiRoute) => a.source !== b.source || a.provider !== b.provider || (a.model ?? '') !== (b.model ?? '');
+
+const FEATURE_LABEL: Record<AiFeature, string> = { chat: '💬 AI 채팅', ocr: '🖼️ OCR (이미지 → 글자)', stt: '🎙️ STT (음성 → 글자)' };
+
+/** 기능 하나: 로컬/API → 공급자 → 모델 */
+function FeatureModel(props: {
+  feature: AiFeature;
+  settings: Settings;
+  route: AiRoute;
+  onRoute: (r: AiRoute) => void;
+  local: ReactNode;
+}) {
+  const { feature, settings, route } = props;
+  const providers = settings.providers.filter((p) => p.features.includes(feature));
+  const [list, setList] = useState<{ models: string[]; live: boolean; error?: string } | null>(null);
+  const keySet = route.provider ? settings.apiKeys[route.provider]?.set : false;
+
+  useEffect(() => {
+    if (route.source !== 'api' || !route.provider) return;
+    let alive = true;
+    setList(null);
+    api.apiModels(route.provider, feature).then(
+      (r) => alive && setList(r),
+      () => alive && setList({ models: [], live: false }),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [route.source, route.provider, feature, keySet]);
+
+  const models = list ? (route.model && !list.models.includes(route.model) ? [route.model, ...list.models] : list.models) : [];
+  const setSource = (source: 'local' | 'api') => {
+    if (source === 'api' && !route.provider) props.onRoute({ source, provider: providers[0]?.id ?? null, model: null });
+    else props.onRoute({ ...route, source });
+  };
+
+  return (
+    <div className="feature-model">
+      <div className="feature-head">
+        <strong>{FEATURE_LABEL[feature]}</strong>
+        <div className="seg">
+          <button className={route.source === 'local' ? 'on' : ''} onClick={() => setSource('local')}>
+            로컬
+          </button>
+          <button className={route.source === 'api' ? 'on' : ''} onClick={() => setSource('api')}>
+            API
+          </button>
+        </div>
+      </div>
+      {route.source === 'local' ? (
+        props.local
+      ) : (
+        <>
+          <label className="field">
+            <span>공급자</span>
+            <select
+              value={route.provider ?? ''}
+              onChange={(e) => props.onRoute({ source: 'api', provider: e.target.value as ApiProvider, model: null })}
+            >
+              {providers.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                  {settings.apiKeys[p.id]?.set ? '' : ' (키 없음)'}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>모델</span>
+            <select
+              value={route.model ?? models[0] ?? ''}
+              disabled={!list}
+              onChange={(e) => props.onRoute({ ...route, model: e.target.value })}
+            >
+              {models.map((m, i) => (
+                <option key={m} value={m}>
+                  {m}
+                  {i === 0 && !route.model ? ' (기본)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!keySet && <p className="error">이 공급자 API 키 없음. 아래 API 키에서 입력.</p>}
+          {list && !list.live && keySet && list.error && <p className="error">실시간 목록 실패: {list.error}</p>}
+          {list && !list.live && !keySet && <p className="muted">추천 모델 목록. 키 입력 시 실제 사용 가능 목록 표시.</p>}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** API 키 입력·테스트·삭제. 키 원문은 다시 표시 안 함 */
+function ApiKeys(props: { settings: Settings; onSaved: (s: Settings) => void }) {
+  const [draft, setDraft] = useState<Partial<Record<ApiProvider, string>>>({});
+  const [busy, setBusy] = useState<ApiProvider | null>(null);
+  const [res, setRes] = useState<Partial<Record<ApiProvider, { ok: boolean; text: string }>>>({});
+
+  const run = async (p: ApiProvider, fn: () => Promise<void>) => {
+    setBusy(p);
+    try {
+      await fn();
+    } catch (e) {
+      setRes((r) => ({ ...r, [p]: { ok: false, text: e instanceof Error ? e.message : String(e) } }));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const save = (p: ApiProvider) =>
+    run(p, async () => {
+      const key = draft[p]?.trim() ?? '';
+      const t = await api.testApiKey(p, key);
+      if (!t.ok) {
+        setRes((r) => ({ ...r, [p]: { ok: false, text: `저장 안 함. ${t.message}` } }));
+        return;
+      }
+      props.onSaved(await api.saveApiKey(p, key));
+      setDraft((d) => ({ ...d, [p]: '' }));
+      setRes((r) => ({ ...r, [p]: { ok: true, text: `저장됨. ${t.message}` } }));
+    });
+  const test = (p: ApiProvider) =>
+    run(p, async () => {
+      const t = await api.testApiKey(p);
+      setRes((r) => ({ ...r, [p]: { ok: t.ok, text: t.message } }));
+    });
+  const remove = (p: ApiProvider) =>
+    run(p, async () => {
+      props.onSaved(await api.deleteApiKey(p));
+      setRes((r) => ({ ...r, [p]: { ok: true, text: '삭제됨.' } }));
+    });
+
+  return (
+    <section className="card">
+      <h2>API 키</h2>
+      {props.settings.providers.map((p) => {
+        const k = props.settings.apiKeys[p.id];
+        return (
+          <div className="api-key" key={p.id}>
+            <div className="feature-head">
+              <strong>{p.label}</strong>
+              <span className="muted">{k?.set ? `등록됨 ${k.hint}` : '없음'}</span>
+            </div>
+            <div className="chips">
+              <input
+                type="password"
+                className="rename"
+                autoComplete="off"
+                placeholder={k?.set ? '새 키로 바꾸기' : 'API 키 붙여넣기'}
+                value={draft[p.id] ?? ''}
+                onChange={(e) => setDraft((d) => ({ ...d, [p.id]: e.target.value }))}
+              />
+              <button className="primary" disabled={busy === p.id || !draft[p.id]?.trim()} onClick={() => void save(p.id)}>
+                저장
+              </button>
+              {k?.set && (
+                <>
+                  <button className="ghost" disabled={busy === p.id} onClick={() => void test(p.id)}>
+                    연결 테스트
+                  </button>
+                  <button className="ghost" disabled={busy === p.id} onClick={() => void remove(p.id)}>
+                    삭제
+                  </button>
+                </>
+              )}
+            </div>
+            {busy === p.id && <p className="muted">확인 중…</p>}
+            {res[p.id] && <p className={res[p.id]!.ok ? 'ok-text' : 'error'}>{res[p.id]!.text}</p>}
+          </div>
+        );
+      })}
+      <p className="muted">
+        키는 암호화돼 DB에 저장. 화면엔 앞·뒤 4자리만 표시. 입력은 PC에서만 가능. 저장 전 연결 테스트 자동 실행.
+        {props.settings.providers.some((p) => !p.features.includes('stt')) && ' Anthropic은 STT 미지원.'}
+      </p>
+    </section>
+  );
+}
+
 export function SettingsPage(props: { onBack: () => void; onModels: () => void }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [models, setModels] = useState<string[] | null>(null);
@@ -43,6 +221,7 @@ export function SettingsPage(props: { onBack: () => void; onModels: () => void }
   const [vision, setVision] = useState<string[] | null>(null);
   const [sttList, setSttList] = useState<string[]>([]);
   const [prompt, setPrompt] = useState('');
+  const [routes, setRoutes] = useState<Record<AiFeature, AiRoute> | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -54,6 +233,7 @@ export function SettingsPage(props: { onBack: () => void; onModels: () => void }
         setOcrModel(s.ocrModel);
         setSttModel(s.sttModel);
         setPrompt(s.systemPrompt);
+        setRoutes(s.routes);
       },
       (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) }),
     );
@@ -87,6 +267,12 @@ export function SettingsPage(props: { onBack: () => void; onModels: () => void }
     setSaving(true);
     setMsg(null);
     try {
+      for (const f of FEATURES) {
+        const r = routes?.[f];
+        if (r && routeChanged(r, settings.routes[f])) {
+          await api.saveRoute(f, { source: r.source, ...(r.provider ? { provider: r.provider } : {}), ...(r.model ? { model: r.model } : {}) });
+        }
+      }
       const s = await api.saveSettings({
         ...(model !== settings.model ? { model } : {}),
         ...(prompt !== settings.systemPrompt ? { systemPrompt: prompt } : {}),
@@ -98,9 +284,10 @@ export function SettingsPage(props: { onBack: () => void; onModels: () => void }
       setOcrModel(s.ocrModel);
       setSttModel(s.sttModel);
       setPrompt(s.systemPrompt);
+      setRoutes(s.routes);
       setMsg({
         ok: true,
-        text: model !== settings.model ? `저장됨. ${s.model} 첫 응답은 모델을 메모리에 올리느라 느릴 수 있음.` : '저장됨.',
+        text: model !== settings.model && s.routes.chat.source === 'local' ? `저장됨. ${s.model} 첫 응답은 모델을 메모리에 올리느라 느릴 수 있음.` : '저장됨.',
       });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
@@ -114,7 +301,8 @@ export function SettingsPage(props: { onBack: () => void; onModels: () => void }
     (model !== settings.model ||
       prompt !== settings.systemPrompt ||
       ocrModel !== settings.ocrModel ||
-      sttModel !== settings.sttModel);
+      sttModel !== settings.sttModel ||
+      FEATURES.some((f) => !!routes && routeChanged(routes[f], settings.routes[f])));
   const withCurrent = (list: string[] | null, cur: string) => (list && cur && !list.includes(cur) ? [cur, ...list] : (list ?? []));
   const options = withCurrent(models, model);
   const ocrOptions = withCurrent(vision, ocrModel);
@@ -153,12 +341,30 @@ export function SettingsPage(props: { onBack: () => void; onModels: () => void }
             </section>
             <section className="card">
               <h2>모델</h2>
-              <ModelSelect label="💬 AI 채팅 (Ollama)" value={model} onChange={setModel} options={options} def={settings.defaults.model} loading={models === null} />
-              <ModelSelect label="🖼️ OCR (Ollama 비전 모델)" value={ocrModel} onChange={setOcrModel} options={ocrOptions} def={settings.defaults.ocrModel} loading={vision === null} />
-              <ModelSelect label="🎙️ STT (Whisper 크기)" value={sttModel} onChange={setSttModel} options={sttOptions} def={settings.defaults.sttModel} loading={false} />
+              {routes &&
+                FEATURES.map((f) => (
+                  <FeatureModel
+                    key={f}
+                    feature={f}
+                    settings={settings}
+                    route={routes[f]}
+                    onRoute={(r) => setRoutes((prev) => (prev ? { ...prev, [f]: r } : prev))}
+                    local={
+                      f === 'chat' ? (
+                        <ModelSelect label="Ollama 모델" value={model} onChange={setModel} options={options} def={settings.defaults.model} loading={models === null} />
+                      ) : f === 'ocr' ? (
+                        <ModelSelect label="Ollama 비전 모델" value={ocrModel} onChange={setOcrModel} options={ocrOptions} def={settings.defaults.ocrModel} loading={vision === null} />
+                      ) : (
+                        <ModelSelect label="Whisper 크기" value={sttModel} onChange={setSttModel} options={sttOptions} def={settings.defaults.sttModel} loading={false} />
+                      )
+                    }
+                  />
+                ))}
               {modelsError && <p className="error">{modelsError}</p>}
               <p className="muted">
-                채팅·OCR 목록은 설치된 모델 (OCR은 이미지 지원 모델만). 16GB RAM이면 4B~8B 권장.
+                로컬: 내 PC에서 실행(무료, 사양 필요). API: 외부 서버 실행(빠름, 사용량 과금, 데이터 전송).
+                <br />
+                채팅·OCR 로컬 목록은 설치된 모델 (OCR은 이미지 지원 모델만). 16GB RAM이면 4B~8B 권장.
                 <br />
                 STT: tiny·base 빠름, small 기본, medium·large 정확하지만 느림. 바꾸면 첫 사용 때 자동 다운로드.
               </p>
@@ -168,6 +374,7 @@ export function SettingsPage(props: { onBack: () => void; onModels: () => void }
                 </button>
               </div>
             </section>
+            <ApiKeys settings={settings} onSaved={(s) => setSettings((prev) => (prev ? { ...prev, apiKeys: s.apiKeys } : s))} />
             <section className="card">
               <h2>시스템 프롬프트</h2>
               <label className="field">

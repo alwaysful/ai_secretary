@@ -53,6 +53,10 @@ export class ModelError extends Error {
  */
 export abstract class BaseModel {
   abstract readonly name: string;
+  /** 로컬(Ollama) 모델 이름. API 사용 중이어도 로컬 모델 */
+  get localName(): string {
+    return this.name;
+  }
   abstract get state(): ModelState;
   /** force: 상태가 ready여도 다시 적재 요청 (keep_alive 만료 대비) */
   abstract load(force?: boolean): Promise<void>;

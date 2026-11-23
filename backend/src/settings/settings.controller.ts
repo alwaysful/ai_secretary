@@ -1,5 +1,6 @@
-import { Body, Controller, ForbiddenException, Get, Put, Req } from '@nestjs/common';
-import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, HttpCode, Param, Post, Put, Query, Req } from '@nestjs/common';
+import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { AiFeature, API_PROVIDERS, ApiProvider, isProvider } from '../ai/providers/api-providers';
 import type { Request } from 'express';
 import { isLocalRequest } from '../system/system.controller';
 import { SettingsService, STT_MODELS } from './settings.service';
@@ -35,6 +36,36 @@ export class PermissionsDto {
   webcam?: boolean;
 }
 
+export class RouteDto {
+  @IsIn(['chat', 'ocr', 'stt'])
+  feature!: AiFeature;
+
+  @IsIn(['local', 'api'])
+  source!: 'local' | 'api';
+
+  @IsOptional() @IsIn([...API_PROVIDERS])
+  provider?: ApiProvider;
+
+  @IsOptional() @IsString() @MaxLength(200)
+  model?: string;
+}
+
+export class ApiKeyDto {
+  @IsOptional() @IsString() @MaxLength(500)
+  key?: string;
+}
+
+function provider(p: string): ApiProvider {
+  if (!isProvider(p)) throw new BadRequestException({ code: 'BAD_PROVIDER', message: `알 수 없는 공급자: ${p}` });
+  return p;
+}
+
+function localOnly(req: Request): void {
+  if (!isLocalRequest(req.socket.remoteAddress, req.headers['x-forwarded-for'])) {
+    throw new ForbiddenException({ code: 'LOCAL_ONLY', message: 'API 키는 PC에서만 입력·변경 가능' });
+  }
+}
+
 @Controller('settings')
 export class SettingsController {
   constructor(private readonly settings: SettingsService) {}
@@ -68,6 +99,39 @@ export class SettingsController {
   @Get('vision-models')
   visionModels() {
     return this.settings.visionModels();
+  }
+
+  /** 기능별 로컬/API 선택 */
+  @Put('route')
+  route(@Body() dto: RouteDto) {
+    return this.settings.setRoute(dto.feature, dto.source, dto.provider, dto.model);
+  }
+
+  /** 공급자 모델 목록 (키 있으면 실시간) */
+  @Get('api-models')
+  apiModels(@Query('provider') p: string, @Query('feature') f: string) {
+    if (!['chat', 'ocr', 'stt'].includes(f)) throw new BadRequestException({ code: 'BAD_FEATURE', message: f });
+    return this.settings.apiModels(provider(p), f as AiFeature);
+  }
+
+  /** API 키 저장 (암호화). 응답엔 마스킹만 */
+  @Put('api-keys/:provider')
+  setKey(@Req() req: Request, @Param('provider') p: string, @Body() dto: ApiKeyDto) {
+    localOnly(req);
+    return this.settings.setKey(provider(p), dto.key ?? '');
+  }
+
+  @Delete('api-keys/:provider')
+  deleteKey(@Param('provider') p: string) {
+    return this.settings.deleteKey(provider(p));
+  }
+
+  /** 연결 테스트. body.key 없으면 저장된 키 */
+  @Post('api-keys/:provider/test')
+  @HttpCode(200)
+  testKey(@Req() req: Request, @Param('provider') p: string, @Body() dto: ApiKeyDto) {
+    if (dto.key) localOnly(req);
+    return this.settings.testKey(provider(p), dto.key);
   }
 
   /** faster-whisper 모델 크기 */

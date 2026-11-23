@@ -80,7 +80,7 @@ export class ModelHubService implements OnModuleDestroy {
     const others = installed
       .filter((t) => !CATALOG.some((c) => same(c.name, t.name)))
       .map((t) => ({ name: t.name, bytes: t.size ?? 0 }));
-    return { reachable: tags !== null, current: this.model.name, items, others, jobs: this.listJobs() };
+    return { reachable: tags !== null, current: this.model.localName, items, others, jobs: this.listJobs() };
   }
 
   listJobs(): PullJob[] {
@@ -111,7 +111,7 @@ export class ModelHubService implements OnModuleDestroy {
 
   async remove(name: string): Promise<void> {
     if (!MODEL_NAME_RE.test(name)) throw new BadRequestException({ code: 'BAD_REQUEST', message: `잘못된 모델명: ${name}` });
-    if (same(name, this.model.name)) {
+    if (same(name, this.model.localName)) {
       throw new ConflictException({ code: 'BAD_REQUEST', message: '사용 중인 모델은 삭제 불가. 설정에서 다른 모델로 바꾼 뒤 삭제.' });
     }
     let res: Response;
