@@ -101,7 +101,9 @@ export class ConversationService {
       const { userMessage, messages } = await this.prepare(id, content, extra);
       let result;
       try {
-        result = await this.model.generate({ messages });
+        result = plan?.reply
+          ? { content: plan.reply, model: 'aura', durationMs: 0, promptTokens: undefined, completionTokens: undefined }
+          : await this.model.generate({ messages });
       } catch (e) {
         throw this.toHttpError(e);
       }
@@ -184,6 +186,13 @@ export class ConversationService {
     const release = await this.mutex.acquire();
     try {
       await mutate();
+      if (plan?.reply) {
+        await this.prisma.message.create({
+          data: { conversationId: id, role: MessageRole.ASSISTANT, content: plan.reply, model: 'aura', durationMs: 0 },
+        });
+        yield plan.reply;
+        return;
+      }
       const messages = await this.buildMessages(id, extra);
       let cold = false;
       if (onStatus) {

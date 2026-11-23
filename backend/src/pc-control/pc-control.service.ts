@@ -169,7 +169,8 @@ export class PcControlService implements OnModuleDestroy {
       '중간 취소: Esc, Ctrl+Alt+X, 마우스를 화면 모서리로, 또는 정지 버튼. 짧게 안내한다.',
       '</pc-action>',
     ].join('\n');
-    return { action, context };
+    const reply = `🖱️ PC 조작 준비됨: ${goal}\n아래 카드에서 **시작**을 누르면 실행. 중지: Esc · Ctrl+Alt+X · 마우스를 화면 모서리로 · ■ 정지 버튼.`;
+    return { action, context, reply };
   }
 
   has(id: string): boolean {

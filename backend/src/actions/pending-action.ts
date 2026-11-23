@@ -23,4 +23,6 @@ export interface ActionPlan {
   /** 모델 프롬프트에 넣을 설명 */
   context: string;
   action?: PendingAction;
+  /** 있으면 모델 호출 없이 이 문장으로 답한다 */
+  reply?: string;
 }
