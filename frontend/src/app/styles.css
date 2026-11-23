@@ -588,3 +588,13 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; border: 1
   .card, .card li, .card p { color: #111 !important; }
   kbd { border: 1px solid #999; background: #f3f3f3 !important; color: #111 !important; }
 }
+
+/* 시작 가이드 */
+.guide-step h2 { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.guide-mark { font-size: 13px; font-weight: 600; color: var(--muted); }
+.guide-step.ok { border-color: var(--ok); }
+.guide-step.ok .guide-mark { color: var(--ok); }
+.guide-step.todo { border-color: var(--err); }
+.guide-step.todo .guide-mark { color: var(--err); }
+.guide-cmd { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; overflow-x: auto; }
+.guide-cmd code { flex: 1; white-space: nowrap; font-size: 13px; }
