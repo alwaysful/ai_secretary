@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { BaseModel } from '../../src/ai/models/base-model';
 import { ModelHubService } from '../../src/model-hub/model-hub.service';
+import { CATALOG, MODEL_NAME_RE } from '../../src/model-hub/catalog';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -56,7 +57,7 @@ describe('ModelHubService', () => {
     svc.pull('nope:1b');
     await tick();
     await tick();
-    expect(svc.listJobs()[0]).toMatchObject({ status: 'error', error: 'Ollama에 없는 모델명' });
+    expect(svc.listJobs()[0]).toMatchObject({ status: 'error', error: '없는 모델명 또는 비공개 저장소' });
     svc.onModuleDestroy();
   });
 
@@ -66,5 +67,14 @@ describe('ModelHubService', () => {
 
   it('remove: 사용 중 모델은 거부', async () => {
     await expect(make(jest.fn()).remove('qwen3:4b')).rejects.toThrow();
+  });
+
+  it('MODEL_NAME_RE: Hugging Face GGUF 이름 허용, 이상한 이름 거부', () => {
+    for (const ok of ['qwen3:4b', 'user/model:tag', 'hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M', 'huggingface.co/a/b'])
+      expect(MODEL_NAME_RE.test(ok)).toBe(true);
+    for (const bad of ['a/b/c', '../x', 'a b', 'hf.co/a/b/c'])
+      expect(MODEL_NAME_RE.test(bad)).toBe(false);
+    expect(CATALOG.every((c) => MODEL_NAME_RE.test(c.name))).toBe(true);
+    expect(CATALOG.some((c) => c.source === 'hf')).toBe(true);
   });
 });

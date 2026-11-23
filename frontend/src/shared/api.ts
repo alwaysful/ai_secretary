@@ -261,6 +261,7 @@ export interface MailSummary {
 
 export interface HubModel {
   name: string;
+  source: 'ollama' | 'hf';
   family: string;
   sizeGb: number;
   ramGb: number;
@@ -284,6 +285,7 @@ export interface PullJob {
 export interface ModelHub {
   reachable: boolean;
   current: string;
+  sttModel: string;
   items: HubModel[];
   others: { name: string; bytes: number }[];
   jobs: PullJob[];
