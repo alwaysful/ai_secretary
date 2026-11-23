@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { AiFeature, AiRoute, api, ApiError, ApiProvider, Settings } from '../../shared/api';
+import { TtsCard } from './TtsCard';
 
 type PermKey = 'screenRead' | 'pcControl' | 'mic' | 'webcam';
 
@@ -374,6 +375,7 @@ export function SettingsPage(props: { onBack: () => void; onModels: () => void }
                 </button>
               </div>
             </section>
+            <TtsCard initial={settings.tts} />
             <ApiKeys settings={settings} onSaved={(s) => setSettings((prev) => (prev ? { ...prev, apiKeys: s.apiKeys } : s))} />
             <section className="card">
               <h2>시스템 프롬프트</h2>

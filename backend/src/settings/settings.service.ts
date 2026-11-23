@@ -13,6 +13,26 @@ import {
   PROVIDER_LABEL,
   supports,
 } from '../ai/providers/api-providers';
+import { apiTtsModels, isTtsEngine, ServerTtsEngine, TTS_MODELS, TTS_VOICES, TtsEngine } from '../ai/providers/tts';
+
+export interface TtsSettings {
+  engine: TtsEngine;
+  /** API 모델 (openai·gemini). null = 기본 */
+  model: string | null;
+  /** 목소리 이름. browser면 브라우저 voice 이름. null = 기본 */
+  voice: string | null;
+  /** 0.5 ~ 2 */
+  rate: number;
+  /** 채팅 답변 자동 읽기 */
+  autoRead: boolean;
+}
+
+export const DEFAULT_COMPANION_PROMPT = [
+  '너는 사용자의 다정한 AI 여자친구 "아우라"다.',
+  '반말로 짧고 따뜻하게 말한다. 1~3문장. 이모지는 가끔만.',
+  '사용자 하루·기분에 관심을 갖고 공감한다. 공부·일정 얘기면 응원하고 필요하면 도와준다.',
+  '마크다운·목록·코드블록 쓰지 않는다(음성으로 읽힘).',
+].join('\n');
 
 export interface Permissions {
   pcControl: boolean;
@@ -46,6 +66,9 @@ export interface SettingsView {
   apiKeys: Record<ApiProvider, KeyInfo>;
   /** 공급자 목록. features: 지원 기능 */
   providers: { id: ApiProvider; label: string; features: AiFeature[] }[];
+  tts: TtsSettings;
+  companionPrompt: string;
+  defaultCompanionPrompt: string;
 }
 
 /** 모델(채팅·OCR·STT)·시스템 프롬프트·권한 설정. DB(AppSettings id=1)에 저장, 없으면 .env 값. */
@@ -59,6 +82,8 @@ export class SettingsService implements OnModuleInit {
   private cam = true;
   private ocr: string | null = null;
   private stt: string | null = null;
+  private ttsCfg: TtsSettings = { engine: 'browser', model: null, voice: null, rate: 1, autoRead: false };
+  private companion: string | null = null;
   private readonly listeners: ((p: Permissions) => void)[] = [];
 
   constructor(
@@ -78,6 +103,16 @@ export class SettingsService implements OnModuleInit {
       this.cam = row?.webcam ?? true;
       this.ocr = row?.ocrModel ?? null;
       this.stt = row?.sttModel ?? null;
+      if (row) {
+        this.ttsCfg = {
+          engine: isTtsEngine(row.ttsEngine) ? row.ttsEngine : 'browser',
+          model: row.ttsModel ?? null,
+          voice: row.ttsVoice ?? null,
+          rate: row.ttsRate ?? 1,
+          autoRead: row.ttsAutoRead ?? false,
+        };
+        this.companion = row.companionPrompt ?? null;
+      }
       if (row?.model) {
         await this.model.switchTo(row.model).catch((e: Error) => this.log.warn(`saved model unavailable: ${e.message}`));
       }
@@ -171,7 +206,60 @@ export class SettingsService implements OnModuleInit {
         label: PROVIDER_LABEL[id],
         features: (['chat', 'ocr', 'stt'] as AiFeature[]).filter((f) => supports(id, f)),
       })),
+      tts: { ...this.ttsCfg },
+      companionPrompt: this.companionPrompt(),
+      defaultCompanionPrompt: DEFAULT_COMPANION_PROMPT,
     };
+  }
+
+  companionPrompt(): string {
+    return this.companion ?? DEFAULT_COMPANION_PROMPT;
+  }
+
+  /** 서버에서 합성할 때 쓸 값 (모델·목소리 기본값 채움) */
+  tts(): TtsSettings {
+    const c = this.ttsCfg;
+    if (c.engine === 'browser') return { ...c };
+    return { ...c, model: c.model || TTS_MODELS[c.engine][0] || null, voice: c.voice || TTS_VOICES[c.engine][0] };
+  }
+
+  async setTts(input: Partial<TtsSettings>): Promise<SettingsView> {
+    const next: TtsSettings = { ...this.ttsCfg, ...input };
+    if (input.engine !== undefined && input.engine !== this.ttsCfg.engine) {
+      // 엔진 바뀌면 이전 엔진 모델·목소리 무효
+      if (input.model === undefined) next.model = null;
+      if (input.voice === undefined) next.voice = null;
+    }
+    next.model = next.model?.trim() || null;
+    next.voice = next.voice?.trim() || null;
+    next.rate = Math.min(2, Math.max(0.5, Number(next.rate) || 1));
+    await this.prisma.appSettings.upsert({
+      where: { id: 1 },
+      create: { id: 1, ttsEngine: next.engine, ttsModel: next.model, ttsVoice: next.voice, ttsRate: next.rate, ttsAutoRead: next.autoRead },
+      update: { ttsEngine: next.engine, ttsModel: next.model, ttsVoice: next.voice, ttsRate: next.rate, ttsAutoRead: next.autoRead },
+    });
+    this.ttsCfg = next;
+    return this.get();
+  }
+
+  /** 엔진별 모델·목소리 목록. API 키 있으면 모델 실시간 조회 */
+  async ttsOptions(engine: ServerTtsEngine): Promise<{ models: string[]; voices: string[]; live: boolean; keySet: boolean; error?: string }> {
+    const base = { models: TTS_MODELS[engine], voices: TTS_VOICES[engine] };
+    if (engine === 'edge') return { ...base, live: false, keySet: true };
+    const key = this.routes.key(engine);
+    if (!key) return { ...base, live: false, keySet: false };
+    try {
+      const live = await apiTtsModels(engine, key);
+      const rec = base.models.filter((m) => live.includes(m));
+      return { ...base, models: [...rec, ...live.filter((m) => !rec.includes(m))], live: true, keySet: true };
+    } catch (e) {
+      return { ...base, live: false, keySet: true, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  /** API 키 원문 (TTS용) */
+  apiKey(p: ApiProvider): string | null {
+    return this.routes.key(p);
   }
 
   /** API 경로 정보 (로컬이면 null) */
@@ -271,7 +359,7 @@ export class SettingsService implements OnModuleInit {
   }
 
   /** systemPrompt: '' 이면 기본값으로 되돌림 */
-  async update(input: { model?: string; systemPrompt?: string; ocrModel?: string; sttModel?: string }): Promise<SettingsView> {
+  async update(input: { model?: string; systemPrompt?: string; ocrModel?: string; sttModel?: string; companionPrompt?: string }): Promise<SettingsView> {
     const ocr = input.ocrModel === undefined ? undefined : input.ocrModel.trim() || null;
     const stt = input.sttModel === undefined ? undefined : input.sttModel.trim() || null;
     if (stt && !(STT_MODELS as readonly string[]).includes(stt)) {
@@ -295,7 +383,9 @@ export class SettingsService implements OnModuleInit {
       }
     }
     const prompt = input.systemPrompt === undefined ? undefined : input.systemPrompt.trim() || null;
+    const companion = input.companionPrompt === undefined ? undefined : input.companionPrompt.trim() || null;
     const data = {
+      ...(companion !== undefined ? { companionPrompt: companion } : {}),
       ...(input.model !== undefined ? { model: this.model.localName } : {}),
       ...(prompt !== undefined ? { systemPrompt: prompt } : {}),
       ...(ocr !== undefined ? { ocrModel: ocr } : {}),
@@ -305,6 +395,7 @@ export class SettingsService implements OnModuleInit {
     if (prompt !== undefined) this.prompt = prompt;
     if (ocr !== undefined) this.ocr = ocr;
     if (stt !== undefined) this.stt = stt;
+    if (companion !== undefined) this.companion = companion;
     return this.get();
   }
 }

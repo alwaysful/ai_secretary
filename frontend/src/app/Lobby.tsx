@@ -27,13 +27,17 @@ const MAIN: Item[] = [
   { id: 'settings', icon: '⚙️', label: '설정', hint: '모델·시스템 프롬프트' },
   { id: 'models', icon: '⬇️', label: '모델 받기', hint: 'Ollama·HF·Whisper' },
   { id: 'tools', icon: '🛠️', label: '도구', hint: 'STT·OCR·사이트' },
+  { id: 'tts', icon: '🔊', label: 'TTS 읽어주기', hint: '글 → 음성 · 감정 선택' },
   { id: 'stats', icon: '📊', label: '통계', hint: '공부·채팅·API 비용' },
   { id: 'info', icon: 'ℹ️', label: '정보', hint: '기능 설명' },
   { id: 'guide', icon: '🚀', label: '시작 가이드', hint: '처음 설정 순서' },
 ];
 
 /** 관리자 모드 추가 카드 */
-const ADMIN: Item[] = [{ id: 'admin', icon: '🖥️', label: '서버 관리하기', hint: '상태·로그·백업·권한' }];
+const ADMIN: Item[] = [
+  { id: 'admin', icon: '🖥️', label: '서버 관리하기', hint: '상태·로그·백업·권한' },
+  { id: 'companion', icon: '💕', label: 'AI 여자친구', hint: 'Live2D·음성 대화' },
+];
 
 const SOON: Item[] = [
   { id: null, icon: '🎙️', label: '음성', hint: '준비 중' },

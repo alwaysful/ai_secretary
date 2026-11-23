@@ -17,6 +17,7 @@ import { PcControlPage } from '../features/pc/PcControlPage';
 import { PcRunBar } from '../features/pc/PcRunBar';
 import { ToolsPage } from '../features/tools/ToolsPage';
 import { StatsPage } from '../features/stats/StatsPage';
+import { TtsPage } from '../features/tts/TtsPage';
 import { getBackendUrl, isNative } from '../shared/backend';
 import { ShortcutHelp, useGlobalShortcuts } from './Shortcuts';
 
@@ -28,9 +29,10 @@ const PhonePage = lazy(() => import('../features/phone/PhonePage').then((m) => (
 
 /** 공부 집중: mediapipe 포함, 필요할 때만 로드 */
 const AdminPage = lazy(() => import('../features/admin/AdminPage').then((m) => ({ default: m.AdminPage })));
+const CompanionPage = lazy(() => import('../features/companion/CompanionPage').then((m) => ({ default: m.CompanionPage })));
 const StudyPage = lazy(() => import('../features/study/pages/StudyView').then((m) => ({ default: m.StudyPage })));
 
-export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study' | 'phone' | 'info' | 'news' | 'landing' | 'models' | 'pc' | 'tools' | 'stats' | 'guide' | 'admin';
+export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study' | 'phone' | 'info' | 'news' | 'landing' | 'models' | 'pc' | 'tools' | 'stats' | 'guide' | 'admin' | 'tts' | 'companion';
 
 function Page(props: { page: PageId; go: (p: PageId) => void }) {
   const { page, go } = props;
@@ -76,6 +78,14 @@ function Page(props: { page: PageId; go: (p: PageId) => void }) {
       return (
         <Suspense fallback={null}>
           <AdminPage onBack={back} />
+        </Suspense>
+      );
+    case 'tts':
+      return <TtsPage onBack={back} onSettings={() => go('settings')} />;
+    case 'companion':
+      return (
+        <Suspense fallback={null}>
+          <CompanionPage onBack={back} onSettings={() => go('settings')} onMemory={() => go('memory')} />
         </Suspense>
       );
     case 'guide':

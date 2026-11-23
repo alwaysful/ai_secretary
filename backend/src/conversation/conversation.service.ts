@@ -56,21 +56,24 @@ export class ConversationService {
     private readonly pc: PcControlService,
   ) {}
 
-  create(title?: string) {
-    return this.prisma.conversation.create({ data: { title } });
+  create(title?: string, persona?: string) {
+    return this.prisma.conversation.create({ data: { title, persona: persona ?? null } });
   }
 
   /** q: 제목 또는 메시지 본문 부분 일치 (대소문자 무시) */
-  list(q?: string) {
+  list(q?: string, persona?: string) {
     const term = q?.trim();
-    const where = term
-      ? {
-          OR: [
-            { title: { contains: term, mode: 'insensitive' as const } },
-            { messages: { some: { content: { contains: term, mode: 'insensitive' as const } } } },
-          ],
-        }
-      : undefined;
+    const where = {
+      persona: persona ?? null,
+      ...(term
+        ? {
+            OR: [
+              { title: { contains: term, mode: 'insensitive' as const } },
+              { messages: { some: { content: { contains: term, mode: 'insensitive' as const } } } },
+            ],
+          }
+        : {}),
+    };
     return this.prisma.conversation.findMany({ where, orderBy: { updatedAt: 'desc' }, take: 100 });
   }
 
@@ -251,7 +254,9 @@ export class ConversationService {
       .reverse()
       .map((m) => ({ role: m.role.toLowerCase() as ChatMessage['role'], content: m.content }));
     const memory = await this.memory.context();
-    const system = [this.settings.systemPrompt(), this.settings.pcControl() ? CAPABILITIES : CAPABILITIES_PC_OFF, memory, extra].filter(Boolean).join('\n\n');
+    const conv = await this.prisma.conversation.findUnique({ where: { id }, select: { persona: true } });
+    const persona = conv?.persona === 'girlfriend' ? this.settings.companionPrompt() : null;
+    const system = [persona ?? this.settings.systemPrompt(), this.settings.pcControl() ? CAPABILITIES : CAPABILITIES_PC_OFF, memory, extra].filter(Boolean).join('\n\n');
     return system ? [{ role: 'system', content: system }, ...history] : history;
   }
 

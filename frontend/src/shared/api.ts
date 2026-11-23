@@ -198,7 +198,36 @@ export interface Settings {
   /** API 키 등록 여부 (마스킹) */
   apiKeys: Record<ApiProvider, { set: boolean; hint: string | null }>;
   providers: { id: ApiProvider; label: string; features: AiFeature[] }[];
+  tts: TtsSettings;
+  /** AI 여자친구 성격 */
+  companionPrompt: string;
+  defaultCompanionPrompt: string;
 }
+
+export type TtsEngine = 'browser' | 'edge' | 'openai' | 'gemini';
+export interface TtsSettings {
+  engine: TtsEngine;
+  model: string | null;
+  voice: string | null;
+  rate: number;
+  autoRead: boolean;
+}
+export interface TtsOptions {
+  models: string[];
+  voices: string[];
+  live: boolean;
+  keySet: boolean;
+  error?: string;
+}
+export interface TtsAudio {
+  audio: string;
+  mime: string;
+  engine: TtsEngine;
+  voice: string;
+  ms: number;
+}
+export type Persona = 'girlfriend';
+export type Emotion = 'neutral' | 'happy' | 'sad' | 'angry' | 'calm' | 'excited' | 'tender';
 
 export type AiFeature = 'chat' | 'ocr' | 'stt';
 export type AiSource = 'local' | 'api';
@@ -457,20 +486,30 @@ export const api = {
     req<{ deleted: number }>(`/admin/data/${kind}?confirm=${kind}`, { method: 'DELETE', headers: adminH(t) }),
   adminBackup: (t: string) => req<unknown>('/admin/backup', { headers: adminH(t) }),
   warmup: () => req<{ state: string }>('/health/warmup', { method: 'POST' }),
-  conversations: (q?: string) =>
-    req<Conversation[]>(q ? `/conversations?q=${encodeURIComponent(q)}` : '/conversations'),
+  conversations: (q?: string, persona?: Persona) => {
+    const p = new URLSearchParams();
+    if (q) p.set('q', q);
+    if (persona) p.set('persona', persona);
+    const qs = p.toString();
+    return req<Conversation[]>(qs ? `/conversations?${qs}` : '/conversations');
+  },
   renameConversation: (id: string, title: string) =>
     req<Conversation>(`/conversations/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
   deleteConversation: (id: string) => req<void>(`/conversations/${id}`, { method: 'DELETE' }),
-  createConversation: (title?: string) =>
-    req<Conversation>('/conversations', { method: 'POST', body: JSON.stringify({ title }) }),
+  createConversation: (title?: string, persona?: Persona) =>
+    req<Conversation>('/conversations', { method: 'POST', body: JSON.stringify({ title, ...(persona ? { persona } : {}) }) }),
   messages: (id: string) => req<Message[]>(`/conversations/${id}/messages`),
   mailStatus: () => req<MailStatus>('/mail/auth/status'),
   mailStart: () => req<DeviceLogin>('/mail/auth/start', { method: 'POST' }),
   mailDisconnect: () => req<void>('/mail/auth', { method: 'DELETE' }),
   mailList: (unreadOnly: boolean) => req<MailSummary[]>(`/mail/messages?top=15&unreadOnly=${unreadOnly}`),
   settings: () => req<Settings>('/settings'),
-  saveSettings: (s: { model?: string; systemPrompt?: string; ocrModel?: string; sttModel?: string }) =>
+  saveTts: (t: Partial<Omit<TtsSettings, 'model' | 'voice'>> & { model?: string; voice?: string }) =>
+    req<Settings>('/settings/tts', { method: 'PUT', body: JSON.stringify(t) }),
+  ttsOptions: (engine: Exclude<TtsEngine, 'browser'>) => req<TtsOptions>(`/settings/tts-options?engine=${engine}`),
+  tts: (text: string, o: { engine?: TtsEngine; model?: string; voice?: string; rate?: number; emotion?: Emotion } = {}) =>
+    req<TtsAudio>('/tools/tts', { method: 'POST', body: JSON.stringify({ text, ...o }) }),
+  saveSettings: (s: { model?: string; systemPrompt?: string; ocrModel?: string; sttModel?: string; companionPrompt?: string }) =>
     req<Settings>('/settings', { method: 'PUT', body: JSON.stringify(s) }),
   savePermissions: (p: Partial<Pick<Settings, 'pcControl' | 'screenRead' | 'mic' | 'webcam'>>) =>
     req<Settings>('/settings/permissions', { method: 'PUT', body: JSON.stringify(p) }),

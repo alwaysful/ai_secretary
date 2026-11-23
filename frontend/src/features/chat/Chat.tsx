@@ -6,6 +6,7 @@ import {
   Health,
   Message,
   PendingAction,
+  Persona,
   StreamHandlers,
   streamEditLast,
   streamMessage,
@@ -13,6 +14,8 @@ import {
   StreamPhase,
 } from '../../shared/api';
 import { CopyButton } from '../../shared/CopyButton';
+import { SpeakButton } from '../../shared/TtsControls';
+import { speak, stopSpeaking, useTtsSettings } from '../../shared/tts';
 import { MailPanel } from '../mail/MailPanel';
 import { isTyping } from '../../app/Shortcuts';
 import { ThemeButton } from '../../shared/theme';
@@ -39,7 +42,26 @@ const ACTION_OK: Record<PendingAction['kind'], string> = {
   'pc.run': '시작 (중지: Esc)',
 };
 
-export function Chat(props: { onBack: () => void; onSettings: () => void; onMemory: () => void }) {
+export function Chat(props: {
+  onBack: () => void;
+  onSettings: () => void;
+  onMemory: () => void;
+  /** girlfriend 등: 대화 목록·성격 분리 */
+  persona?: Persona;
+  /** 좁은 칸용: 대화 목록을 ☰ 서랍으로 */
+  compact?: boolean;
+  /** 답변 자동 읽기. 없으면 설정값 */
+  autoSpeak?: boolean;
+  emptyText?: string;
+  emptyHint?: string;
+}) {
+  const { persona } = props;
+  const tts = useTtsSettings();
+  const autoSpeak = props.autoSpeak ?? tts?.autoRead ?? false;
+  const autoRef = useRef(autoSpeak);
+  autoRef.current = autoSpeak;
+  const replyRef = useRef('');
+  useEffect(() => () => stopSpeaking(), []);
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [query, setQuery] = useState('');
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -69,10 +91,10 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
   const loadConvs = useCallback(
     (q = query) =>
       api
-        .conversations(q.trim() || undefined)
+        .conversations(q.trim() || undefined, persona)
         .then(setConvs)
         .catch(() => undefined),
-    [query],
+    [query, persona],
   );
 
   // 검색어 디바운스
@@ -135,8 +157,9 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
 
   const refresh = async (id: string) => {
     const seq = loadSeq.current;
-    const list = await api.messages(id);
-    if (seq === loadSeq.current) setMessages(list.filter((m) => m.role !== 'SYSTEM'));
+    const list = (await api.messages(id)).filter((m) => m.role !== 'SYSTEM');
+    if (seq === loadSeq.current) setMessages(list);
+    return list;
   };
 
   const open = async (id: string | null) => {
@@ -171,24 +194,35 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
     abortRef.current = ac;
     const aiId = tmpId();
     setMessages((prev) => prepare(prev, aiId));
+    stopSpeaking();
+    replyRef.current = '';
+    let ok = false;
     try {
       await run(
         {
-          onToken: (t) =>
-            setMessages((prev) => prev.map((m) => (m.id === aiId ? { ...m, content: m.content + t } : m))),
+          onToken: (t) => {
+            replyRef.current += t;
+            setMessages((prev) => prev.map((m) => (m.id === aiId ? { ...m, content: m.content + t } : m)));
+          },
           onStatus: setPhase,
           onAction: (a) => setActions((prev) => [...prev.filter((x) => x.id !== a.id), a]),
         },
         ac.signal,
       );
+      ok = !ac.signal.aborted;
     } catch (e) {
       if (!ac.signal.aborted) showError(e, retry);
     } finally {
       setBusy(false);
       setPhase(null);
       abortRef.current = null;
-      await refresh(id).catch(() => undefined);
+      const list = await refresh(id).catch(() => null);
       void loadConvs();
+      const last = list?.at(-1);
+      if (ok && autoRef.current && replyRef.current.trim()) {
+        const sid = last?.role === 'ASSISTANT' ? `msg-${last.id}` : `auto-${Date.now()}`;
+        void speak(sid, last?.role === 'ASSISTANT' ? last.content : replyRef.current).catch(() => undefined);
+      }
     }
   };
 
@@ -206,7 +240,7 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
     let id = activeId;
     try {
       if (!id) {
-        const c = await api.createConversation(content.slice(0, 40));
+        const c = await api.createConversation(content.slice(0, 40), persona);
         id = c.id;
         setActiveId(id);
         setConvs((prev) => [c, ...prev]);
@@ -362,7 +396,7 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
   const activeConv = convs.find((c) => c.id === activeId);
 
   return (
-    <div className="app">
+    <div className={props.compact ? 'app compact' : 'app'}>
       <aside className={menu ? 'side open' : 'side'}>
         <button className="ghost back" onClick={props.onBack}>
           ← 로비
@@ -420,7 +454,7 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
           )}
           {convs.length === 0 && <p className="muted">{query ? '검색 결과 없음' : '대화 없음'}</p>}
         </nav>
-        <MailPanel />
+        {!persona && <MailPanel />}
         <div className="side-links">
           <button className="ghost" onClick={props.onMemory}>
             🧠 기억
@@ -452,8 +486,8 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
         <div className="log">
           {messages.length === 0 && (
             <div className="empty">
-              <p>무엇을 도와줄까요?</p>
-              <p className="muted">예: &quot;안 읽은 메일 3통 요약해줘&quot;, &quot;내일 일정 알려줘&quot;, &quot;내일 3시 회의 잡아&quot;</p>
+              <p>{props.emptyText ?? '무엇을 도와줄까요?'}</p>
+              <p className="muted">{props.emptyHint ?? '예: "안 읽은 메일 3통 요약해줘", "내일 일정 알려줘", "내일 3시 회의 잡아"'}</p>
             </div>
           )}
           {messages.map((m, i) => {
@@ -489,6 +523,7 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
                 {!streamingThis && m.content && (
                   <div className="msg-acts">
                     <CopyButton text={m.content} />
+                    {!isUser && <SpeakButton id={`msg-${m.id}`} text={m.content} />}
                     {isUser && i === lastUserIdx && !busy && !m.id.startsWith('tmp-') && (
                       <button className="tool" onClick={() => setEditing(m.id)}>
                         편집

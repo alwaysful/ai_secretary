@@ -35,6 +35,8 @@ if not errorlevel 1 (
   python -c "import pyautogui, pynput, pyperclip" >nul 2>&1 || python -m pip install -q -r pc-agent\requirements.txt
   rem 도구 탭 STT(로컬 Whisper)
   python -c "import faster_whisper" >nul 2>&1 || python -m pip install -q -r pc-agent\requirements-stt.txt
+  rem TTS(edge-tts, 무료 음성)
+  python -c "import edge_tts" >nul 2>&1 || python -m pip install -q -r pc-agent\requirements-tts.txt
 )
 
 rem 마이그레이션·generate는 npm run dev(scripts/dev.mjs)가 자동 실행

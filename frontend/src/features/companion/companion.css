@@ -1,0 +1,27 @@
+.companion { display: grid; grid-template-columns: minmax(340px, 1fr) minmax(320px, 0.9fr); height: 100dvh; min-height: 0; }
+.cmp-chat { min-width: 0; min-height: 0; border-right: 1px solid var(--line); }
+.cmp-chat .app { height: 100%; }
+.cmp-stage { display: flex; flex-direction: column; gap: 12px; padding: 16px; min-height: 0; overflow: auto; }
+.cmp-model {
+  position: relative; flex: 1; min-height: 320px; border-radius: var(--radius, 18px);
+  border: 1px dashed var(--line); display: grid; place-items: center; overflow: hidden;
+  background: radial-gradient(120% 80% at 50% 100%, color-mix(in srgb, var(--accent2, #a78bfa) 22%, transparent), transparent 70%);
+}
+.cmp-placeholder { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.cmp-face { font-size: 96px; line-height: 1; transition: transform 0.2s; }
+.cmp-model.talking .cmp-face { animation: cmp-talk 0.35s ease-in-out infinite alternate; }
+.cmp-wave { position: absolute; bottom: 16px; left: 50%; width: 64px; height: 6px; margin-left: -32px; border-radius: 3px; background: var(--grad, var(--accent)); animation: cmp-wave 0.5s ease-in-out infinite alternate; }
+@keyframes cmp-talk { from { transform: scale(1); } to { transform: scale(1.06) translateY(-2px); } }
+@keyframes cmp-wave { from { transform: scaleX(0.4); opacity: 0.6; } to { transform: scaleX(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .cmp-model.talking .cmp-face, .cmp-wave { animation: none; } }
+.cmp-controls { display: flex; flex-direction: column; gap: 10px; }
+.cmp-persona { display: flex; flex-direction: column; gap: 8px; }
+
+@media (max-width: 900px) {
+  .companion { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .cmp-stage { order: -1; padding: 10px; gap: 8px; overflow: visible; }
+  .cmp-model { min-height: 110px; flex: none; }
+  .cmp-face { font-size: 44px; }
+  .cmp-controls { padding: 10px; gap: 6px; }
+  .cmp-chat { border-right: none; min-height: 0; }
+}

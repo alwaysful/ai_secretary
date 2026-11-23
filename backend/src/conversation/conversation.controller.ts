@@ -36,12 +36,12 @@ export class ConversationController {
 
   @Post()
   create(@Body() dto: CreateConversationDto) {
-    return this.conversations.create(dto.title);
+    return this.conversations.create(dto.title, dto.persona);
   }
 
   @Get()
   list(@Query() q: ListConversationsDto) {
-    return this.conversations.list(q.q);
+    return this.conversations.list(q.q, q.persona);
   }
 
   @Patch(':id')
