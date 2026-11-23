@@ -44,4 +44,5 @@ if errorlevel 1 (
 
 start "" /min cmd /c "timeout /t 10 /nobreak >nul & start http://127.0.0.1:5173"
 call npm run dev
+echo AURA 종료됨. 다시 켜려면 start-aura.bat 실행.
 pause

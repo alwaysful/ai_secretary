@@ -174,7 +174,7 @@ async function call(path: string, init?: RequestInit): Promise<Response> {
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await call(path, {
     ...init,
-    headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
+    headers: { ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...(init?.headers as Record<string, string> | undefined) },
   });
   if (!res.ok) throw await failure(res);
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
@@ -206,6 +206,7 @@ export const api = {
   updateMemory: (id: string, m: { content?: string; category?: string; enabled?: boolean }) =>
     req<Memory>(`/memories/${id}`, { method: 'PATCH', body: JSON.stringify(m) }),
   deleteMemory: (id: string) => req<void>(`/memories/${id}`, { method: 'DELETE' }),
+  shutdown: () => req<{ status: string }>('/system/shutdown', { method: 'POST', headers: { 'X-Aura-Shutdown': '1' } }),
   shortcuts: () => req<WebShortcut[]>('/shortcuts'),
   createShortcut: (s: { url: string; title?: string }) =>
     req<WebShortcut>('/shortcuts', { method: 'POST', body: JSON.stringify(s) }),

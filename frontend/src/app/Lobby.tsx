@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { isNative } from '../shared/backend';
 import type { PageId } from './App';
 import { api, ApiError, CalendarEvent, Health } from '../shared/api';
 import { ThemeButton } from '../shared/theme';
@@ -121,10 +122,46 @@ function Widgets(props: { onNavigate: (p: PageId) => void }) {
   );
 }
 
+/** PC에서만 표시. 확인 후 백엔드·프론트 종료 → 꺼짐 화면 */
+function PowerButton(props: { onOff: () => void }) {
+  const [busy, setBusy] = useState(false);
+  if (isNative()) return null;
+  const off = async () => {
+    if (!window.confirm('AURA 서버(백엔드·화면)를 끌까요?\n다시 켜려면 start-aura.bat 실행.')) return;
+    setBusy(true);
+    try {
+      await api.shutdown();
+      props.onOff();
+    } catch (e) {
+      setBusy(false);
+      window.alert(`끄기 실패: ${errText(e)}`);
+    }
+  };
+  return (
+    <button className="ghost" onClick={off} disabled={busy} title="서버 끄기">
+      ⏻ 서버 끄기
+    </button>
+  );
+}
+
+function OffScreen() {
+  return (
+    <div className="lobby-page off-screen">
+      <div className="lobby-in">
+        <h1 className="title">서버 꺼짐</h1>
+        <p>AURA 백엔드와 화면 서버를 종료함. 이 탭은 닫아도 됨.</p>
+        <p className="muted">다시 켜기: start-aura.bat 실행.</p>
+      </div>
+    </div>
+  );
+}
+
 export function Lobby(props: { onNavigate: (p: PageId) => void }) {
+  const [off, setOff] = useState(false);
   const [health, setHealth] = useState<Health | null | undefined>(undefined);
 
   useEffect(() => {
+    if (off) return;
     const poll = () =>
       api
         .health()
@@ -133,7 +170,9 @@ export function Lobby(props: { onNavigate: (p: PageId) => void }) {
     poll();
     const t = setInterval(poll, 10_000);
     return () => clearInterval(t);
-  }, []);
+  }, [off]);
+
+  if (off) return <OffScreen />;
 
   const dot = health === undefined ? 'warn' : health && health.db === 'ok' ? 'ok' : health ? 'warn' : 'down';
   const status =
@@ -154,6 +193,7 @@ export function Lobby(props: { onNavigate: (p: PageId) => void }) {
           <button className="ghost" onClick={() => props.onNavigate('info')}>
             ℹ️ 정보
           </button>
+          <PowerButton onOff={() => setOff(true)} />
           <span className="muted">
             단축키 <kbd>?</kbd>
           </span>
