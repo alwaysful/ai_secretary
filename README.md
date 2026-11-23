@@ -18,6 +18,7 @@
 | ⚙️ 설정 | 모델 선택, 시스템 프롬프트 수정 |
 | 📚 공부 집중 | 웹캠(자세·졸음·폰), 화면(딴짓) 감시. 🤖로봇/🧑인간 말투 토글, 🍅 뽀모도로, 일별·주별 통계 |
 | 📱 폰 감시 | Android 앱. 딴짓 앱 열면 알림 (UsageStats). QR 연결 + 설정 마법사 |
+| 🖱️ PC 조작 | AI가 화면 보고 마우스·키보드 조작 (PC만). 시작 전 확인. 중지: Esc · Ctrl+Alt+X · 마우스 화면 모서리 · ■ 정지 버튼. 채팅 `PC: 할 일` |
 | 🏠 로비 | 오늘 일정·안 읽은 메일 위젯, 🌐 웹사이트 바로가기(추가·수정·삭제·드래그 정렬, 새 탭), 기능 바로가기, ℹ️ 정보, ⏻ 서버 끄기(PC만) |
 | 기타 | 다크 모드, 단축키(`?`), 모바일 화면 |
 
@@ -46,6 +47,17 @@ npm.cmd run migrate                          # DB 테이블 생성
 
 - `.env` 기본값 그대로 사용 가능.
 - `migrate` 실패 시 DB 기동 10초 대기 후 재시도.
+
+## PC 조작 설정 (선택)
+
+1. Python 3.10+ 설치 (python.org, "Add to PATH" 체크). 확인: `python --version`
+2. `python -m pip install -r pc-agent\requirements.txt` (start-aura.bat가 자동 시도)
+3. 비전 모델: `ollama pull qwen2.5vl:7b` → `backend/.env`에 `PC_VISION_MODEL=qwen2.5vl:7b` (없으면 `STUDY_VISION_MODEL` 사용)
+4. 로비 → 🖱️ PC 조작 → 할 일 입력 → 확인 → 시작
+
+- 중지: Esc, Ctrl+Alt+X, 마우스를 화면 모서리로, 화면 위 ■ 정지 버튼.
+- 주 모니터만. 관리자 권한 창은 조작 불가 (AURA도 관리자로 실행 시 가능).
+- 최대 단계 `PC_MAX_STEPS` (기본 25).
 
 ## 3. 모델 받기
 

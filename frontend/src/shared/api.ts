@@ -29,7 +29,7 @@ export interface EventDraft {
 /** 사용자 확인을 기다리는 작업 (일정 등록·변경) */
 export interface PendingAction {
   id: string;
-  kind: 'calendar.create' | 'calendar.update' | 'memory.create' | 'memory.delete';
+  kind: 'calendar.create' | 'calendar.update' | 'memory.create' | 'memory.delete' | 'pc.run';
   conversationId: string | null;
   summary: string;
   draft?: EventDraft;
@@ -37,6 +37,29 @@ export interface PendingAction {
   eventId?: string;
   before?: CalendarEvent;
   expiresAt: string;
+}
+
+/** AI PC 조작 실행 */
+export interface PcStep {
+  n: number;
+  thought: string;
+  action: string;
+  error?: string;
+  at: string;
+}
+export interface PcRun {
+  id: string;
+  goal: string;
+  status: 'starting' | 'running' | 'done' | 'cancelled' | 'failed';
+  steps: PcStep[];
+  message: string;
+  startedAt: string;
+  endedAt: string | null;
+}
+export interface PcCheck {
+  ok: boolean;
+  detail: string;
+  model: string;
 }
 
 export interface Memory {
@@ -306,6 +329,10 @@ export const api = {
   updateMemory: (id: string, m: { content?: string; category?: string; enabled?: boolean }) =>
     req<Memory>(`/memories/${id}`, { method: 'PATCH', body: JSON.stringify(m) }),
   deleteMemory: (id: string) => req<void>(`/memories/${id}`, { method: 'DELETE' }),
+  pcCheck: () => req<PcCheck>('/pc-control/check'),
+  pcCurrent: () => req<{ run: PcRun | null }>('/pc-control/runs/current'),
+  pcStart: (goal: string) => req<PcRun>('/pc-control/runs', { method: 'POST', body: JSON.stringify({ goal, confirm: true }) }),
+  pcCancel: () => req<{ run: PcRun | null }>('/pc-control/runs/current/cancel', { method: 'POST' }),
   shutdown: () => req<{ status: string }>('/system/shutdown', { method: 'POST', headers: { 'X-Aura-Shutdown': '1' } }),
   newsFeed: (q: { categoryId?: string; tag?: string; unread?: boolean; q?: string; limit?: number } = {}) => {
     const p = new URLSearchParams();

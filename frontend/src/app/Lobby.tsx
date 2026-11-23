@@ -20,6 +20,7 @@ const MAIN: Item[] = [
   { id: 'news', icon: '📰', label: '새 소식', hint: '공지·공모전 모음' },
   { id: 'study', icon: '📚', label: '공부 집중', hint: '웹캠·화면 감시' },
   { id: 'phone', icon: '📱', label: '폰 감시', hint: 'Android 앱' },
+  { id: 'pc', icon: '🖱️', label: 'PC 조작', hint: 'AI가 마우스·키보드' },
   { id: 'memory', icon: '🧠', label: '기억 관리', hint: '장기 기억' },
   { id: 'settings', icon: '⚙️', label: '설정', hint: '모델·시스템 프롬프트' },
   { id: 'models', icon: '⬇️', label: '다른 모델 다운로드 하러 가기', hint: 'Ollama' },
@@ -232,7 +233,7 @@ export function Lobby(props: { onNavigate: (p: PageId) => void }) {
         <div className="cols">
           <section>
             <h2>바로가기</h2>
-            <Links items={MAIN} onNavigate={props.onNavigate} />
+            <Links items={isNative() ? MAIN.filter((i) => i.id !== 'pc') : MAIN} onNavigate={props.onNavigate} />
           </section>
           <section>
             <h2>곧 추가</h2>

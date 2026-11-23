@@ -29,6 +29,12 @@ if errorlevel 1 (
 )
 timeout /t 5 /nobreak >nul
 
+rem PC 조작(선택): Python 있으면 라이브러리 자동 설치
+where python >nul 2>&1
+if not errorlevel 1 (
+  python -c "import pyautogui, pynput, pyperclip" >nul 2>&1 || python -m pip install -q -r pc-agent\requirements.txt
+)
+
 rem 마이그레이션·generate는 npm run dev(scripts/dev.mjs)가 자동 실행
 
 curl -s -o nul http://127.0.0.1:11434

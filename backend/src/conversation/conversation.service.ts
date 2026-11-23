@@ -15,6 +15,7 @@ import { describeError } from '../common/errors';
 import { inferenceMutex } from '../common/mutex';
 import { CalendarActionService, PendingAction } from '../actions/calendar-action.service';
 import { MemoryService } from '../memory/memory.service';
+import { PcControlService } from '../pc-control/pc-control.service';
 import { SettingsService } from '../settings/settings.service';
 import { EnvVars } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
@@ -41,6 +42,7 @@ export class ConversationService {
     private readonly settings: SettingsService,
     private readonly actions: CalendarActionService,
     private readonly memory: MemoryService,
+    private readonly pc: PcControlService,
   ) {}
 
   create(title?: string) {
@@ -136,9 +138,9 @@ export class ConversationService {
     });
   }
 
-  /** 기억 명령이 우선, 아니면 일정 쓰기 */
+  /** PC 조작 → 기억 → 일정 쓰기 순 */
   private async planAction(text: string, id: string, signal?: AbortSignal) {
-    return (await this.memory.plan(text, id)) ?? this.actions.plan(text, id, signal);
+    return this.pc.plan(text, id) ?? (await this.memory.plan(text, id)) ?? this.actions.plan(text, id, signal);
   }
 
   private async lastUserMessage(id: string) {

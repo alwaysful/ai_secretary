@@ -23,6 +23,18 @@ export class EnvVars {
   @IsString()
   STUDY_VISION_MODEL: string = 'gemma4:12b';
 
+  /** PC 조작: 화면 보고 클릭 위치 고르는 비전 모델. 비우면 STUDY_VISION_MODEL */
+  @Transform(emptyToUndefined) @IsOptional() @IsString()
+  PC_VISION_MODEL?: string;
+
+  /** PC 조작: Python 실행 파일 (기본 Windows python, 그 외 python3) */
+  @Transform(emptyToUndefined) @IsOptional() @IsString()
+  PC_PYTHON?: string;
+
+  /** PC 조작: 한 번 실행 최대 단계 */
+  @Type(() => Number) @IsInt() @Min(1) @Max(100)
+  PC_MAX_STEPS: number = 25;
+
   @IsString()
   OLLAMA_KEEP_ALIVE: string = '5m';
 

@@ -38,6 +38,7 @@ function setup() {
   const settings: any = { systemPrompt: () => 'sys' };
   const actions: any = { plan: jest.fn().mockResolvedValue(null) };
   const memory: any = { plan: jest.fn().mockResolvedValue(null), context: jest.fn().mockResolvedValue(null) };
+  const pc: any = { plan: jest.fn().mockReturnValue(null) };
   return {
     prisma,
     model,
@@ -45,7 +46,7 @@ function setup() {
     tools,
     actions,
     memory,
-    service: new ConversationService(prisma, model, config, tools, settings, actions, memory),
+    service: new ConversationService(prisma, model, config, tools, settings, actions, memory, pc),
   };
 }
 
