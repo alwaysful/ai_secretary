@@ -7,6 +7,8 @@ interface ApolloActivity {
   organizationName?: string;
   recruitCloseAt?: number | null;
   recruitStartAt?: number | null;
+  activityStartAt?: number | null;
+  activityEndAt?: number | null;
   activityTypeID?: number;
 }
 
@@ -45,6 +47,12 @@ export const linkareerParser: Parser = {
     const a = id ? state[`Activity:${id}`] : undefined;
     if (!a) return {};
     const d = (n?: number | null) => (typeof n === 'number' ? new Date(n) : undefined);
-    return { startsAt: d(a.recruitStartAt), deadline: d(a.recruitCloseAt) };
+    return {
+      startsAt: d(a.recruitStartAt),
+      deadline: d(a.recruitCloseAt),
+      eventStartsAt: d(a.activityStartAt),
+      eventEndsAt: d(a.activityEndAt),
+      summary: a.organizationName ? `주최 ${clean(a.organizationName)}` : undefined,
+    };
   },
 };

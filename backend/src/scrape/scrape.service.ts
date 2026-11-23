@@ -7,7 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DEFAULT_CATEGORIES } from './defaults';
 import { FeedItem, MergeablePost, mergePosts } from './merge';
 import { CONTEST_PARSERS, CONTEST_TAGS, contestTags, isContestCategory } from './tags';
-import { Parser, PARSER_IDS, PARSERS, runParser, ScrapedItem } from './parsers';
+import { ItemDetail, Parser, PARSER_IDS, PARSERS, runParser, ScrapedItem } from './parsers';
 
 const UA = 'AURA-personal-reader/1.0 (+local personal assistant; 1 req/site/hour)';
 const FETCH_TIMEOUT_MS = 15_000;
@@ -199,7 +199,7 @@ export class ScrapeService implements OnModuleInit, OnModuleDestroy {
     });
     for (const p of todo) {
       await new Promise((r) => setTimeout(r, DETAIL_GAP_MS));
-      let d: { startsAt?: Date; deadline?: Date } = {};
+      let d: ItemDetail = {};
       try {
         d = parser.parseDetail!(await this.fetchText(p.url), { baseUrl: p.url, now: new Date(), tz: this.tz });
       } catch (e) {
@@ -207,7 +207,10 @@ export class ScrapeService implements OnModuleInit, OnModuleDestroy {
       }
       await this.prisma.scrapedPost.update({
         where: { id: p.id },
-        data: { detailAt: new Date(), ...(d.startsAt ? { startsAt: d.startsAt } : {}), ...(d.deadline ? { deadline: d.deadline } : {}) },
+        data: {
+          detailAt: new Date(),
+          ...Object.fromEntries(Object.entries(d).filter(([, v]) => v !== undefined && v !== '')),
+        },
       });
     }
   }
