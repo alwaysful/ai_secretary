@@ -447,6 +447,7 @@ export const api = {
   health: () => req<Health>('/health'),
   adminLogin: (code: string) => req<{ token: string; expiresAt: string }>('/admin/login', { method: 'POST', body: JSON.stringify({ code }) }),
   adminLogout: (t: string) => req<void>('/admin/logout', { method: 'POST', headers: adminH(t) }),
+  adminSession: (t: string) => req<{ ok: boolean }>('/admin/session', { headers: adminH(t) }),
   adminOverview: (t: string) => req<AdminOverview>('/admin/overview', { headers: adminH(t) }),
   adminLogs: (t: string, level?: string) => req<AdminLog[]>(`/admin/logs?limit=150${level ? `&level=${level}` : ''}`, { headers: adminH(t) }),
   adminRefreshNews: (t: string) => req<{ ok: boolean }>('/admin/scrape/refresh', { method: 'POST', headers: adminH(t) }),

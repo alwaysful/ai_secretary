@@ -127,9 +127,9 @@ export function AdminPage(props: { onBack: () => void }) {
     <div className="subpage adm">
       <header className="bar">
         <button className="ghost" onClick={props.onBack}>
-          ← 로비
+          ← Admin 로비
         </button>
-        <h1>Admin 로비</h1>
+        <h1>서버 관리</h1>
         <span style={{ flex: 1 }} />
         <button className="ghost" onClick={load}>
           ↻ 새로고침
