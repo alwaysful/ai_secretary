@@ -35,6 +35,10 @@ export const CAPABILITIES = [
   'PC 조작 요청인데 확인 카드 안내가 없으면 "PC: 할 일" 형식으로 다시 말해 달라고 안내한다. 기기를 조작할 수 없다고 말하지 않는다.',
   '생각 과정이나 영어 추론을 출력하지 말고 최종 답만 한국어로 쓴다.',
 ].join('\n');
+export const CAPABILITIES_PC_OFF = [
+  'AURA의 PC 조작(마우스·키보드) 기능은 지금 꺼져 있다. PC 조작 요청이면 설정에서 "PC 조작"을 켜야 한다고 짧게 안내한다.',
+  '생각 과정이나 영어 추론을 출력하지 말고 최종 답만 한국어로 쓴다.',
+].join('\n');
 
 @Injectable()
 export class ConversationService {
@@ -247,7 +251,7 @@ export class ConversationService {
       .reverse()
       .map((m) => ({ role: m.role.toLowerCase() as ChatMessage['role'], content: m.content }));
     const memory = await this.memory.context();
-    const system = [this.settings.systemPrompt(), CAPABILITIES, memory, extra].filter(Boolean).join('\n\n');
+    const system = [this.settings.systemPrompt(), this.settings.pcControl() ? CAPABILITIES : CAPABILITIES_PC_OFF, memory, extra].filter(Boolean).join('\n\n');
     return system ? [{ role: 'system', content: system }, ...history] : history;
   }
 

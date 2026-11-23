@@ -25,6 +25,21 @@ export function SettingsPage(props: { onBack: () => void; onModels: () => void }
     });
   }, []);
 
+  const [permBusy, setPermBusy] = useState(false);
+  const togglePerm = async (key: 'pcControl' | 'screenRead', on: boolean) => {
+    setPermBusy(true);
+    setMsg(null);
+    try {
+      const s = await api.savePermissions({ [key]: on });
+      setSettings((prev) => (prev ? { ...prev, pcControl: s.pcControl, screenRead: s.screenRead } : s));
+      setMsg({ ok: true, text: `${key === 'pcControl' ? 'PC 조작' : '화면 읽기'} ${on ? '켜짐' : '꺼짐'}.` });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setPermBusy(false);
+    }
+  };
+
   const save = async () => {
     if (!settings) return;
     setSaving(true);
@@ -63,6 +78,35 @@ export function SettingsPage(props: { onBack: () => void; onModels: () => void }
         {!settings && !msg && <p className="muted">불러오는 중…</p>}
         {settings && (
           <>
+            <section className="card">
+              <h2>권한</h2>
+              <label className="switch-row">
+                <input
+                  type="checkbox"
+                  checked={settings.screenRead}
+                  disabled={permBusy}
+                  onChange={(e) => void togglePerm('screenRead', e.target.checked)}
+                />
+                <span>
+                  👁️ 화면 읽기
+                  <small className="muted">AI가 내 화면을 캡처해 분석 (공부 집중 딴짓 감시, PC 조작)</small>
+                </span>
+              </label>
+              <label className="switch-row">
+                <input
+                  type="checkbox"
+                  checked={settings.pcControl}
+                  disabled={permBusy}
+                  onChange={(e) => void togglePerm('pcControl', e.target.checked)}
+                />
+                <span>
+                  🖱️ PC 조작
+                  <small className="muted">AI가 내 마우스·키보드를 직접 움직임. 끄면 실행 중인 작업도 멈춤</small>
+                </span>
+              </label>
+              {settings.pcControl && !settings.screenRead && <p className="error">PC 조작은 화면 읽기도 켜야 동작함.</p>}
+              <p className="muted">켜기는 PC에서만 가능. 끄기는 폰에서도 가능.</p>
+            </section>
             <section className="card">
               <h2>모델</h2>
               <label className="field">

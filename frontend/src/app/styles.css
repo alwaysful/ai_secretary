@@ -506,3 +506,6 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; border: 1
 .pc-page textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: inherit; }
 .pc-page .row { display: flex; gap: 8px; }
 .pc-steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 4px; }
+.switch-row { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.switch-row input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); flex: none; }
+.switch-row span { display: flex; flex-direction: column; gap: 2px; }

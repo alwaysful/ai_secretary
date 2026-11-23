@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
-import { Body, Controller, Get, HttpCode, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, HttpCode, Post, Put, Query } from '@nestjs/common';
+import { SettingsService } from '../settings/settings.service';
 import { LiveDto, PhoneEventDto, PhoneEventsQueryDto } from './dto/phone.dto';
 import { ScreenCheckDto, ScreenCheckResponseDto } from './dto/screen-check.dto';
 import { StatsQueryDto, StudySessionDto } from './dto/session.dto';
@@ -17,11 +18,15 @@ export class StudyController {
     private readonly statsService: StudyStatsService,
     private readonly phone: PhoneService,
     private readonly config: ConfigService<EnvVars, true>,
+    private readonly settings: SettingsService,
   ) {}
 
   @Post('screen-check')
   @HttpCode(200)
   screenCheck(@Body() body: ScreenCheckDto): Promise<ScreenCheckResponseDto> {
+    if (!this.settings.screenRead()) {
+      throw new ForbiddenException({ code: 'SCREEN_READ_OFF', message: '화면 읽기 꺼짐 (설정에서 켜기)' });
+    }
     return this.study.check('local', body.image);
   }
 

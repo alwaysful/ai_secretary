@@ -184,6 +184,14 @@ function OffScreen() {
 
 export function Lobby(props: { onNavigate: (p: PageId) => void }) {
   const [off, setOff] = useState(false);
+  const [pcOn, setPcOn] = useState(false);
+  useEffect(() => {
+    if (isNative()) return;
+    api.settings().then(
+      (s) => setPcOn(s.pcControl && s.screenRead),
+      () => setPcOn(false),
+    );
+  }, []);
   const [health, setHealth] = useState<Health | null | undefined>(undefined);
 
   useEffect(() => {
@@ -233,7 +241,7 @@ export function Lobby(props: { onNavigate: (p: PageId) => void }) {
         <div className="cols">
           <section>
             <h2>바로가기</h2>
-            <Links items={isNative() ? MAIN.filter((i) => i.id !== 'pc') : MAIN} onNavigate={props.onNavigate} />
+            <Links items={pcOn ? MAIN : MAIN.filter((i) => i.id !== 'pc')} onNavigate={props.onNavigate} />
           </section>
           <section>
             <h2>곧 추가</h2>
