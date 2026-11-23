@@ -29,12 +29,14 @@ const ACTION_TITLE: Record<PendingAction['kind'], string> = {
   'calendar.update': '📅 일정 변경 확인',
   'memory.create': '🧠 기억 추가 확인',
   'memory.delete': '🧠 기억 삭제 확인',
+  'pc.run': '🖱️ PC 조작 시작 확인',
 };
 const ACTION_OK: Record<PendingAction['kind'], string> = {
   'calendar.create': 'Outlook에 저장',
   'calendar.update': 'Outlook에 저장',
   'memory.create': '기억하기',
   'memory.delete': '삭제',
+  'pc.run': '시작 (중지: Esc)',
 };
 
 export function Chat(props: { onBack: () => void; onSettings: () => void; onMemory: () => void }) {
@@ -294,7 +296,11 @@ export function Chat(props: { onBack: () => void; onSettings: () => void; onMemo
     try {
       if (ok) {
         await api.confirmAction(a.id);
-        setInfo(`${ACTION_TITLE[a.kind].replace(' 확인', '')} 완료: ${a.summary.replace(/^[^:]+: /, '')}`);
+        setInfo(
+          a.kind === 'pc.run'
+            ? 'PC 조작 시작. 중지: Esc · Ctrl+Alt+X · 마우스 화면 모서리 · 정지 버튼'
+            : `${ACTION_TITLE[a.kind].replace(' 확인', '')} 완료: ${a.summary.replace(/^[^:]+: /, '')}`,
+        );
       } else {
         await api.cancelAction(a.id);
       }
