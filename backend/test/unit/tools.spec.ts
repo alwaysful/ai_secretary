@@ -15,7 +15,7 @@ describe('tools helpers', () => {
 describe('ToolsService permissions/models', () => {
   const config = { get: (k: string) => (k === 'OLLAMA_BASE_URL' ? 'http://x' : undefined) };
   const mk = (mic: boolean) =>
-    new ToolsService(config as never, { mic: () => mic, sttModel: () => 'base', ocrModel: () => 'v:1' } as never);
+    new ToolsService(config as never, { mic: () => mic, sttModel: () => 'base', ocrModel: () => 'v:1', aiApi: () => null } as never);
 
   it('마이크 꺼지면 mic STT 거부', async () => {
     await expect(mk(false).transcribe('AAAA', 'audio/webm', 'ko', 'mic')).rejects.toBeInstanceOf(ForbiddenException);

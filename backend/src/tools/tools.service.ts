@@ -9,6 +9,8 @@ import { randomUUID } from 'node:crypto';
 import { EnvVars } from '../config/env';
 import { PcAgentProcess } from '../pc-control/pc-agent.process';
 import { SettingsService } from '../settings/settings.service';
+import { ModelError } from '../ai/models/base-model';
+import { apiTranscribe, apiVision, PROVIDER_LABEL } from '../ai/providers/api-providers';
 
 const OCR_TIMEOUT_MS = 180_000;
 const STT_TIMEOUT_MS = 15 * 60_000;
@@ -79,12 +81,21 @@ export class ToolsService implements OnModuleDestroy {
 
   /** STT 설치 확인(30초 캐시) + 모델 이름 */
   async status() {
-    const stt = await this.checkStt();
+    const ocrApi = this.settings.aiApi('ocr');
+    const sttApi = this.settings.aiApi('stt');
+    const stt = sttApi
+      ? { ok: !!sttApi.key, detail: sttApi.key ? '' : `${PROVIDER_LABEL[sttApi.provider]} API 키 없음` }
+      : await this.checkStt();
     return {
-      ocr: { model: this.settings.ocrModel() },
-      stt: { ...stt, model: this.settings.sttModel() },
+      ocr: { model: ocrApi ? `${ocrApi.provider}:${ocrApi.model}` : this.settings.ocrModel(), source: ocrApi ? 'api' : 'local' },
+      stt: { ...stt, model: sttApi ? `${sttApi.provider}:${sttApi.model}` : this.settings.sttModel(), source: sttApi ? 'api' : 'local' },
       mic: this.settings.mic(),
     };
+  }
+
+  private apiFail(e: unknown, code: string): Error {
+    const msg = e instanceof ModelError || e instanceof Error ? e.message : String(e);
+    return new ServiceUnavailableException({ code, message: msg });
   }
 
   private checkStt(): Promise<{ ok: boolean; detail: string }> {
@@ -112,6 +123,17 @@ export class ToolsService implements OnModuleDestroy {
     const img = stripDataUrl(image);
     if (!img) throw new BadRequestException({ code: 'NO_IMAGE', message: '이미지 없음' });
     const t0 = Date.now();
+    const prompt = hint?.trim() ? `이미지의 글자를 그대로 옮겨 적어. 추가 지시: ${hint.trim()}` : '이미지의 글자를 그대로 옮겨 적어.';
+    const api = this.settings.aiApi('ocr');
+    if (api) {
+      if (!api.key) throw new BadRequestException({ code: 'NO_API_KEY', message: `${PROVIDER_LABEL[api.provider]} API 키 없음 (설정 → 모델)` });
+      try {
+        const text = await apiVision(api.provider, api.key, api.model, OCR_SYSTEM, prompt, img, { timeoutMs: OCR_TIMEOUT_MS, maxTokens: 8192 });
+        return { text: cleanOcr(text), model: `${api.provider}:${api.model}`, ms: Date.now() - t0 };
+      } catch (e) {
+        throw this.apiFail(e, 'OCR_FAILED');
+      }
+    }
     const model = this.settings.ocrModel();
     let res: Response;
     try {
@@ -129,7 +151,7 @@ export class ToolsService implements OnModuleDestroy {
             { role: 'system', content: OCR_SYSTEM },
             {
               role: 'user',
-              content: hint?.trim() ? `이미지의 글자를 그대로 옮겨 적어. 추가 지시: ${hint.trim()}` : '이미지의 글자를 그대로 옮겨 적어.',
+              content: prompt,
               images: [img],
             },
           ],
@@ -151,6 +173,20 @@ export class ToolsService implements OnModuleDestroy {
   async transcribe(audio: string, mime: string, language?: string, source: 'mic' | 'file' = 'file') {
     if (source === 'mic' && !this.settings.mic()) {
       throw new ForbiddenException({ code: 'MIC_OFF', message: '마이크 꺼짐 (설정 → 권한에서 켜기)' });
+    }
+    const api = this.settings.aiApi('stt');
+    if (api) {
+      if (!api.key) throw new BadRequestException({ code: 'NO_API_KEY', message: `${PROVIDER_LABEL[api.provider]} API 키 없음 (설정 → 모델)` });
+      const buf = Buffer.from(stripDataUrl(audio), 'base64');
+      if (buf.length < 100) throw new BadRequestException({ code: 'NO_AUDIO', message: '음성 없음' });
+      const clean = mime.split(';')[0].trim().toLowerCase();
+      const t0 = Date.now();
+      try {
+        const r = await apiTranscribe(api.provider, api.key, api.model, buf, clean, EXT[clean] ?? 'webm', language || undefined, { timeoutMs: STT_TIMEOUT_MS });
+        return { text: r.text, language: r.language, duration: 0, model: `${api.provider}:${api.model}`, ms: Date.now() - t0 };
+      } catch (e) {
+        throw this.apiFail(e, 'STT_FAILED');
+      }
     }
     const check = await this.checkStt();
     if (!check.ok) {

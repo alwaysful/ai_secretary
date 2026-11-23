@@ -155,9 +155,12 @@ function SttCard(props: { status: ToolsStatus | null }) {
     <section className="card tool-card">
       <h2>🎙️ 음성 → 글자 (STT)</h2>
       <p className="muted">
-        로컬 Whisper{st ? ` (${st.model})` : ''}. 인터넷 전송 없음. 첫 사용 때 모델 자동 다운로드.
+        {st?.source === 'api'
+          ? `API (${st.model}). 음성이 외부 서버로 전송됨.`
+          : `로컬 Whisper${st ? ` (${st.model})` : ''}. 인터넷 전송 없음. 첫 사용 때 모델 자동 다운로드.`}
       </p>
-      {st && !st.ok && (
+      {st && !st.ok && st.source === 'api' && <p className="err">{st.detail}. 설정 → 모델에서 키 입력.</p>}
+      {st && !st.ok && st.source !== 'api' && (
         <p className="err">
           STT 미설치: {st.detail}
           <br />
@@ -253,7 +256,10 @@ function OcrCard(props: { status: ToolsStatus | null }) {
   return (
     <section className="card tool-card">
       <h2>🔍 이미지 → 글자 (OCR)</h2>
-      <p className="muted">로컬 비전 모델{props.status ? ` (${props.status.ocr.model})` : ''}. 손글씨·표·한글 가능.</p>
+      <p className="muted">
+        {props.status?.ocr.source === 'api' ? 'API 비전 모델' : '로컬 비전 모델'}
+        {props.status ? ` (${props.status.ocr.model})` : ''}. 손글씨·표·한글 가능.
+      </p>
       <div
         className={`drop${drag ? ' on' : ''}`}
         onDragOver={(e) => {

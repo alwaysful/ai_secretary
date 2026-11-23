@@ -75,8 +75,8 @@ export interface Memory {
 export type ShortcutSection = 'lobby' | 'tools';
 
 export interface ToolsStatus {
-  ocr: { model: string };
-  stt: { ok: boolean; detail: string; model: string };
+  ocr: { model: string; source?: AiSource };
+  stt: { ok: boolean; detail: string; model: string; source?: AiSource };
   /** 마이크 허용 */
   mic: boolean;
 }
@@ -188,6 +188,20 @@ export interface Settings {
   /** STT whisper 모델 */
   sttModel: string;
   defaults: { model: string; systemPrompt: string; ocrModel: string; sttModel: string };
+  /** 기능별 로컬/API */
+  routes: Record<AiFeature, AiRoute>;
+  /** API 키 등록 여부 (마스킹) */
+  apiKeys: Record<ApiProvider, { set: boolean; hint: string | null }>;
+  providers: { id: ApiProvider; label: string; features: AiFeature[] }[];
+}
+
+export type AiFeature = 'chat' | 'ocr' | 'stt';
+export type AiSource = 'local' | 'api';
+export type ApiProvider = 'gemini' | 'anthropic' | 'openai';
+export interface AiRoute {
+  source: AiSource;
+  provider: ApiProvider | null;
+  model: string | null;
 }
 
 export interface BriefingData {
@@ -362,6 +376,15 @@ export const api = {
   models: () => req<string[]>('/settings/models'),
   visionModels: () => req<string[]>('/settings/vision-models'),
   sttModels: () => req<string[]>('/settings/stt-models'),
+  saveRoute: (feature: AiFeature, r: { source: AiSource; provider?: ApiProvider; model?: string }) =>
+    req<Settings>('/settings/route', { method: 'PUT', body: JSON.stringify({ feature, ...r }) }),
+  apiModels: (provider: ApiProvider, feature: AiFeature) =>
+    req<{ models: string[]; live: boolean; error?: string }>(`/settings/api-models?provider=${provider}&feature=${feature}`),
+  saveApiKey: (provider: ApiProvider, key: string) =>
+    req<Settings>(`/settings/api-keys/${provider}`, { method: 'PUT', body: JSON.stringify({ key }) }),
+  deleteApiKey: (provider: ApiProvider) => req<Settings>(`/settings/api-keys/${provider}`, { method: 'DELETE' }),
+  testApiKey: (provider: ApiProvider, key?: string) =>
+    req<{ ok: boolean; message: string }>(`/settings/api-keys/${provider}/test`, { method: 'POST', body: JSON.stringify(key ? { key } : {}) }),
   actions: (conversationId: string) => req<PendingAction[]>(`/actions?conversationId=${conversationId}`),
   memories: (q?: string) => req<Memory[]>(q ? `/memories?q=${encodeURIComponent(q)}` : '/memories'),
   createMemory: (m: { content: string; category?: string }) =>

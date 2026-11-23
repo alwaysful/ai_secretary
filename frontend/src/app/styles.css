@@ -526,3 +526,12 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; border: 1
 .rec-on { animation: recpulse 1.2s ease-in-out infinite; }
 @keyframes recpulse { 50% { opacity: 0.65; } }
 @media (max-width: 400px) { .tool-grid { grid-template-columns: 1fr; } }
+
+/* 설정: 기능별 로컬/API 모델 */
+.feature-model, .api-key { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-top: 1px solid var(--line); }
+.feature-model:first-of-type, .api-key:first-of-type { border-top: none; }
+.feature-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.seg button { border: none; background: transparent; color: inherit; padding: 6px 14px; font: inherit; cursor: pointer; }
+.seg button.on { background: var(--accent); color: #fff; }
+.api-key input[type='password'] { flex: 1; min-width: 180px; }

@@ -65,7 +65,26 @@ model AppSettings {
   ocrModel     String?
   /// 도구 탭 STT whisper 모델. null = .env
   sttModel     String?
+  /// 기능별 실행 위치: local | api
+  chatSource   String   @default("local")
+  chatProvider String?
+  chatApiModel String?
+  ocrSource    String   @default("local")
+  ocrProvider  String?
+  ocrApiModel  String?
+  sttSource    String   @default("local")
+  sttProvider  String?
+  sttApiModel  String?
   updatedAt    DateTime @updatedAt
+}
+
+/// 외부 AI API 키 (gemini | anthropic | openai). AES-256-GCM 암호문만 저장
+model ApiKey {
+  provider  String   @id
+  cipher    String
+  /// 마스킹된 표시용 (앞4·뒤4)
+  hint      String
+  updatedAt DateTime @updatedAt
 }
 
 /// 사용자가 직접 저장·관리하는 장기 기억. 켜진 항목만 대화 프롬프트에 들어간다.
