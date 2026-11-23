@@ -129,6 +129,10 @@ model ScrapedPost {
   postedAt   DateTime?
   /// 마감일 (공모전)
   deadline   DateTime?
+  /// 접수 시작일 (공모전, 상세 페이지에서 보충)
+  startsAt   DateTime?
+  /// 상세 페이지 확인 시각. null = 아직
+  detailAt   DateTime?
   /// 읽음 처리 시각. null = 새 글
   seenAt     DateTime?
   createdAt  DateTime  @default(now())
@@ -136,6 +140,7 @@ model ScrapedPost {
   @@unique([source, externalId])
   @@index([source, createdAt])
   @@index([seenAt])
+  @@index([deadline])
 }
 
 /// 새 소식 카테고리 (예: 학사공지, 공모전). 카테고리 안에서 같은 글은 하나로 합쳐 보여줌.

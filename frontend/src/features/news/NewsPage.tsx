@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, NewsCategory, NewsItem } from '../../shared/api';
+import { NewsCalendar } from './NewsCalendar';
 import { NewsManage } from './NewsManage';
 import { newsNotifySupported } from './useNewsNotify';
 
@@ -16,7 +17,11 @@ export const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e
 /** 새 소식: 카테고리별 게시판 글. 카테고리 안 같은 글은 하나로 합치고 사이트별 링크를 모두 표시 */
 export function NewsPage(props: { onBack: () => void }) {
   const [manage, setManage] = useState(false);
+  const [view, setView] = useState<'list' | 'calendar'>('list');
   const [tab, setTab] = useState<string>('all');
+  const [tag, setTag] = useState('');
+  const [allTags, setAllTags] = useState<string[]>([]);
+  const [tagCounts, setTagCounts] = useState<Map<string, number>>(new Map());
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [q, setQ] = useState('');
   const [items, setItems] = useState<NewsItem[] | null>(null);
@@ -29,16 +34,27 @@ export function NewsPage(props: { onBack: () => void }) {
 
   const load = useCallback(
     () =>
-      Promise.all([api.newsFeed({ categoryId, unread: unreadOnly, q: q.trim() || undefined, limit: 150 }), api.newsCategories()]).then(
+      Promise.all([
+        api.newsFeed({ categoryId, unread: unreadOnly, q: q.trim() || undefined, limit: 300 }),
+        api.newsCategories(),
+      ]).then(
         ([f, c]) => {
-          setItems(f);
+          // 태그 개수는 태그 거르기 전 기준
+          const counts = new Map<string, number>();
+          for (const i of f) for (const t of i.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
+          setTagCounts(counts);
+          setItems(tag ? f.filter((i) => i.tags.includes(tag)) : f);
           setCats(c);
           setError('');
         },
         (e: unknown) => setError(errMsg(e)),
       ),
-    [categoryId, unreadOnly, q],
+    [categoryId, unreadOnly, q, tag],
   );
+
+  useEffect(() => {
+    api.newsTags().then(setAllTags, () => undefined);
+  }, []);
 
   useEffect(() => {
     if (manage) return;
@@ -50,6 +66,9 @@ export function NewsPage(props: { onBack: () => void }) {
   useEffect(() => {
     if (tab !== 'all' && cats.length && !cats.some((c) => c.id === tab)) setTab('all');
   }, [cats, tab]);
+
+  // 탭 바꾸면 태그 초기화
+  useEffect(() => setTag(''), [tab]);
 
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -109,7 +128,29 @@ export function NewsPage(props: { onBack: () => void }) {
               </button>
             ))}
         </div>
+        {tagCounts.size > 0 && (
+          <div className="news-tags" role="tablist" aria-label="분야">
+            <button className={tag === '' ? 'on' : ''} onClick={() => setTag('')}>
+              # 전체 분야
+            </button>
+            {allTags
+              .filter((t) => tagCounts.has(t))
+              .map((t) => (
+                <button key={t} className={tag === t ? 'on' : ''} onClick={() => setTag(tag === t ? '' : t)}>
+                  #{t} <small>{tagCounts.get(t)}</small>
+                </button>
+              ))}
+          </div>
+        )}
         <div className="news-tools">
+          <div className="news-view" role="tablist" aria-label="보기">
+            <button className={view === 'list' ? 'on' : ''} onClick={() => setView('list')}>
+              ☰ 목록
+            </button>
+            <button className={view === 'calendar' ? 'on' : ''} onClick={() => setView('calendar')}>
+              📅 달력
+            </button>
+          </div>
           <label className="news-check">
             <input type="checkbox" checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} /> 안 읽은 것만
           </label>
@@ -127,9 +168,10 @@ export function NewsPage(props: { onBack: () => void }) {
           )}
         </div>
         {error && <p className="error">{error}</p>}
-        {items === null && !error && <p className="muted">불러오는 중…</p>}
-        {items?.length === 0 && <p className="muted">글 없음. 새 사이트는 추가 직후, 나머지는 1시간마다 수집.</p>}
-        {items && items.length > 0 && (
+        {view === 'calendar' && <NewsCalendar categoryId={categoryId} tag={tag || undefined} onOpen={open} />}
+        {view === 'list' && items === null && !error && <p className="muted">불러오는 중…</p>}
+        {view === 'list' && items?.length === 0 && <p className="muted">글 없음. 새 사이트는 추가 직후, 나머지는 1시간마다 수집.</p>}
+        {view === 'list' && items && items.length > 0 && (
           <ul className="news-list">
             {items.map((it) => (
               <li key={it.key} className={it.unread ? 'new' : ''}>
@@ -143,7 +185,17 @@ export function NewsPage(props: { onBack: () => void }) {
                     {it.category && <span>{it.category}</span>}
                     {it.author && <span>{it.author}</span>}
                     {it.postedAt && <span>{day.format(new Date(it.postedAt))}</span>}
+                    {it.startsAt && it.deadline && (
+                      <span>
+                        접수 {day.format(new Date(it.startsAt))}~{day.format(new Date(it.deadline))}
+                      </span>
+                    )}
                     {it.deadline && <span className="news-dday">{dday(it.deadline)}</span>}
+                    {it.tags.map((t) => (
+                      <span key={t} className="news-tag">
+                        #{t}
+                      </span>
+                    ))}
                   </span>
                 </button>
                 <span className="news-links">

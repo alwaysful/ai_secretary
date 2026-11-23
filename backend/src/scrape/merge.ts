@@ -9,6 +9,7 @@ export interface MergeablePost {
   author: string | null;
   postedAt: Date | null;
   deadline: Date | null;
+  startsAt?: Date | null;
   seenAt: Date | null;
   createdAt: Date;
 }
@@ -31,7 +32,10 @@ export interface FeedItem {
   author: string | null;
   postedAt: Date | null;
   deadline: Date | null;
+  startsAt: Date | null;
   createdAt: Date;
+  /** 공모전 분야 태그 (공모전이 아니면 빈 배열) */
+  tags: string[];
 }
 
 const DAY = 86_400_000;
@@ -77,7 +81,11 @@ export function samePost(a: { title: string; postedAt: Date | null }, b: { title
 }
 
 /** posts 는 최신순 가정. 다른 사이트의 같은 글만 합침 (같은 사이트 글은 별개) */
-export function mergePosts(posts: MergeablePost[], siteName: (id: string) => string): FeedItem[] {
+export function mergePosts(
+  posts: MergeablePost[],
+  siteName: (id: string) => string,
+  tagsOf: (p: MergeablePost) => string[] = () => [],
+): FeedItem[] {
   const groups: MergeablePost[][] = [];
   for (const p of posts) {
     const g = groups.find((grp) => !grp.some((q) => q.source === p.source) && samePost(grp[0], p));
@@ -96,7 +104,9 @@ export function mergePosts(posts: MergeablePost[], siteName: (id: string) => str
       author: pick('author') as string | null,
       postedAt: pick('postedAt') as Date | null,
       deadline: pick('deadline') as Date | null,
+      startsAt: (pick('startsAt') as Date | null | undefined) ?? null,
       createdAt: g.reduce((m, p) => (p.createdAt > m ? p.createdAt : m), head.createdAt),
+      tags: [...new Set(g.flatMap(tagsOf))],
     };
   });
 }

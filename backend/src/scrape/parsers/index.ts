@@ -1,3 +1,4 @@
+import { contestkoreaParser } from './contestkorea';
 import { egovParser } from './egov';
 import { genericParser } from './generic';
 import { gistParser } from './gist';
@@ -7,7 +8,7 @@ import { rssParser } from './rss';
 import { ParseCtx, Parser, ScrapedItem } from './types';
 import { wevityParser } from './wevity';
 
-export const PARSERS: readonly Parser[] = [gistParser, kboardParser, egovParser, rssParser, wevityParser, linkareerParser, genericParser];
+export const PARSERS: readonly Parser[] = [gistParser, kboardParser, egovParser, rssParser, wevityParser, linkareerParser, contestkoreaParser, genericParser];
 export const PARSER_IDS = ['auto', ...PARSERS.map((p) => p.id)] as const;
 
 /** HTML 생김새로 파서 고르기 */
@@ -19,6 +20,7 @@ export function detectParser(html: string, url: string): Parser {
   if (/fn_search_detail\(/.test(html)) return egovParser;
   if (/linkareer\.com/i.test(url) && html.includes('__NEXT_DATA__')) return linkareerParser;
   if (/wevity\.com/i.test(url)) return wevityParser;
+  if (/contestkorea\.com/i.test(url)) return contestkoreaParser;
   return genericParser;
 }
 
@@ -33,4 +35,4 @@ export function runParser(parserId: string, html: string, ctx: ParseCtx): { pars
 }
 
 export * from './types';
-export { parseDate, parseDday } from './date';
+export { parseDate, parseDday, parsePeriod } from './date';
