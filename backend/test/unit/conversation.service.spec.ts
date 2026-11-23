@@ -1,6 +1,6 @@
 import { GatewayTimeoutException, NotFoundException } from '@nestjs/common';
 import { BaseModel, GenerateResponse, ModelError } from '../../src/ai/models/base-model';
-import { ConversationService } from '../../src/conversation/conversation.service';
+import { CAPABILITIES, ConversationService } from '../../src/conversation/conversation.service';
 
 class FakeModel extends BaseModel {
   readonly name = 'fake';
@@ -58,7 +58,7 @@ describe('ConversationService', () => {
     const res = await service.postMessage('c1', 'hello');
 
     expect(model.generate.mock.calls[0][0].messages).toEqual([
-      { role: 'system', content: 'sys' },
+      { role: 'system', content: `sys\n\n${CAPABILITIES}` },
       { role: 'user', content: 'hello' },
     ]);
     expect(stored.map((m) => m.role)).toEqual(['USER', 'ASSISTANT']);
@@ -114,7 +114,7 @@ describe('ConversationService', () => {
     await service.postMessage('c1', '메일 보여줘');
 
     expect(tools.contextFor).toHaveBeenCalledWith('메일 보여줘');
-    expect(model.generate.mock.calls[0][0].messages[0]).toEqual({ role: 'system', content: 'sys\n\nCTX' });
+    expect(model.generate.mock.calls[0][0].messages[0]).toEqual({ role: 'system', content: `sys\n\n${CAPABILITIES}\n\nCTX` });
     expect(stored.some((m) => String(m.content).includes('CTX'))).toBe(false);
   });
 
@@ -127,7 +127,7 @@ describe('ConversationService', () => {
     const ac = new AbortController();
     for await (const _ of service.stream('c1', 'hi', ac.signal)) void _;
     expect(tools.contextFor).toHaveBeenCalledWith('hi', ac.signal);
-    expect(model.stream.mock.calls[0][0].messages[0].content).toBe('sys\n\nCTX');
+    expect(model.stream.mock.calls[0][0].messages[0].content).toBe(`sys\n\n${CAPABILITIES}\n\nCTX`);
   });
 
   it('stream: 상태 이벤트 순서', async () => {
@@ -180,7 +180,7 @@ describe('ConversationService', () => {
     const got: unknown[] = [];
     for await (const _ of service.stream('c1', '내일 3시 회의 잡아', undefined, { onAction: (a) => got.push(a) })) void _;
     expect(got).toEqual([action]);
-    expect(model.stream.mock.calls[0][0].messages[0].content).toBe('sys\n\nPLAN');
+    expect(model.stream.mock.calls[0][0].messages[0].content).toBe(`sys\n\n${CAPABILITIES}\n\nPLAN`);
   });
 
   it('stream: 중단 시 부분 응답을 stopped=true 로 저장', async () => {
@@ -204,6 +204,6 @@ describe('ConversationService', () => {
     memory.context.mockResolvedValue('MEM');
     model.generate.mockResolvedValue({ content: 'ok', model: 'fake', durationMs: 1 });
     await service.postMessage('c1', 'hi');
-    expect(model.generate.mock.calls[0][0].messages[0].content).toBe('sys\n\nMEM');
+    expect(model.generate.mock.calls[0][0].messages[0].content).toBe(`sys\n\n${CAPABILITIES}\n\nMEM`);
   });
 });
