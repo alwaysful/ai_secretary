@@ -63,6 +63,16 @@ const FEATURES: Feature[] = [
     ],
   },
   {
+    icon: '📰',
+    title: '새 소식 (웹 스크래핑)',
+    page: 'news',
+    lines: [
+      'GIST 학사공지, 위비티·링커리어 공모전 목록을 1시간마다 확인 → 새 글 표시·OS 알림.',
+      '채팅: "새 학사공지 있어?", "공모전 뭐 있어" → 모은 글로 답함.',
+      '사이트별 켜기/끄기 가능. 주기: backend/.env SCRAPE_INTERVAL_MIN (0=끔).',
+    ],
+  },
+  {
     icon: '🧠',
     title: '기억 관리',
     page: 'memory',

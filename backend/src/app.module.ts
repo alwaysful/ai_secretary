@@ -7,6 +7,7 @@ import { CalendarModule } from './calendar/calendar.module';
 import { MemoryModule } from './memory/memory.module';
 import { StudyModule } from './study/study.module';
 import { ShortcutModule } from './shortcut/shortcut.module';
+import { ScrapeModule } from './scrape/scrape.module';
 import { SystemModule } from './system/system.module';
 import { SettingsModule } from './settings/settings.module';
 import { validateEnv } from './config/env';
@@ -27,6 +28,7 @@ import { PrismaModule } from './prisma/prisma.module';
     MemoryModule,
     StudyModule,
     ShortcutModule,
+    ScrapeModule,
     SystemModule,
   ],
   controllers: [HealthController],

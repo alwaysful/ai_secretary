@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CalendarTool } from './calendar.tool';
 import { MailTool } from './mail.tool';
+import { ScrapeTool } from './scrape.tool';
 import { ContextTool, ToolContextProvider, ToolError } from './tool';
 
 export const TOOL_PREAMBLE =
@@ -11,9 +12,9 @@ export class ToolRegistry extends ToolContextProvider {
   private readonly log = new Logger(ToolRegistry.name);
   private readonly tools: ContextTool[];
 
-  constructor(mail: MailTool, calendar: CalendarTool) {
+  constructor(mail: MailTool, calendar: CalendarTool, scrape: ScrapeTool) {
     super();
-    this.tools = [mail, calendar];
+    this.tools = [mail, calendar, scrape];
   }
 
   async contextFor(text: string, signal?: AbortSignal): Promise<string | null> {

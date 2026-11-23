@@ -56,6 +56,43 @@ export interface WebShortcut {
   position: number;
 }
 
+export type NewsKind = 'notice' | 'contest';
+
+/** 스크래핑으로 모은 글 (학사공지·공모전) */
+export interface NewsPost {
+  id: string;
+  source: string;
+  externalId: string;
+  title: string;
+  url: string;
+  category: string | null;
+  author: string | null;
+  postedAt: string | null;
+  deadline: string | null;
+  seenAt: string | null;
+  createdAt: string;
+}
+
+export interface NewsSource {
+  id: string;
+  name: string;
+  kind: NewsKind;
+  homeUrl: string;
+  enabled: boolean;
+  lastRunAt: string | null;
+  lastOkAt: string | null;
+  lastError: string | null;
+  lastNew: number;
+  unread: number;
+}
+
+export interface NewsUnread {
+  total: number;
+  notice: number;
+  contest: number;
+  latest: string | null;
+}
+
 export interface Settings {
   model: string;
   systemPrompt: string;
@@ -207,6 +244,19 @@ export const api = {
     req<Memory>(`/memories/${id}`, { method: 'PATCH', body: JSON.stringify(m) }),
   deleteMemory: (id: string) => req<void>(`/memories/${id}`, { method: 'DELETE' }),
   shutdown: () => req<{ status: string }>('/system/shutdown', { method: 'POST', headers: { 'X-Aura-Shutdown': '1' } }),
+  newsPosts: (q: { kind?: NewsKind; source?: string; unread?: boolean; q?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '' && v !== false) p.set(k, String(v));
+    return req<NewsPost[]>(`/scrape/posts?${p}`);
+  },
+  newsUnread: () => req<NewsUnread>('/scrape/unread'),
+  newsSources: () => req<NewsSource[]>('/scrape/sources'),
+  newsRefresh: (source?: string) =>
+    req<NewsSource[]>(`/scrape/refresh${source ? `?source=${encodeURIComponent(source)}` : ''}`, { method: 'POST' }),
+  newsSeen: (b: { ids?: string[]; kind?: NewsKind }) =>
+    req<{ count: number }>('/scrape/seen', { method: 'POST', body: JSON.stringify(b) }),
+  newsSourceEnabled: (id: string, enabled: boolean) =>
+    req<NewsSource[]>(`/scrape/sources/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ enabled }) }),
   shortcuts: () => req<WebShortcut[]>('/shortcuts'),
   createShortcut: (s: { url: string; title?: string }) =>
     req<WebShortcut>('/shortcuts', { method: 'POST', body: JSON.stringify(s) }),

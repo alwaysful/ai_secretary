@@ -238,7 +238,7 @@ code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-weight:
 .toggle { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; cursor: pointer; }
 
 /* 로비 위젯 */
-.widgets { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin: 0 0 36px; }
+.widgets { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 16px; margin: 0 0 36px; }
 .widget { border: 1px solid var(--line); border-radius: 14px; padding: 18px 22px; display: flex; flex-direction: column; gap: 10px; background: var(--panel); text-align: left; font: inherit; color: inherit; }
 button.widget { cursor: pointer; }
 button.widget:hover { border-color: var(--accent); }
@@ -382,3 +382,24 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; border: 1
 .sc-form .err { color: var(--err); margin: 0 0 10px; font-size: 14px; }
 .sc-actions { display: flex; gap: 8px; align-items: center; }
 .danger-text { color: var(--err); }
+
+/* 새 소식 (웹 스크래핑) */
+.news-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.news-tabs { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.news-tabs button { background: none; border: 0; padding: 6px 14px; cursor: pointer; }
+.news-tabs button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.news-check { display: flex; gap: 6px; align-items: center; font-size: 14px; }
+.news-search { flex: 1 1 140px; min-width: 0; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
+.news-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.news-list li + li { border-top: 1px solid var(--line); }
+.news-list button { width: 100%; text-align: left; background: none; border: 0; padding: 12px 16px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
+.news-list button:hover { background: var(--bg); }
+.news-list li:not(.new) .news-title { color: var(--muted); }
+.news-list li.new .news-title { font-weight: 600; }
+.news-title { display: flex; gap: 8px; align-items: baseline; overflow-wrap: anywhere; }
+.news-dot { flex: none; font-size: 11px; background: var(--accent); color: var(--accent-ink); border-radius: 4px; padding: 0 5px; }
+.news-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--muted); }
+.news-dday { color: var(--accent); font-weight: 600; }
+.news-sources ul { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 6px; }
+.news-sources li { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.news-sources a { color: inherit; }

@@ -111,3 +111,41 @@ model WebShortcut {
 
   @@index([position])
 }
+
+/// 웹 스크래핑으로 모은 글 (학사공지·공모전 등). source+externalId 로 중복 방지.
+model ScrapedPost {
+  id         String    @id @default(uuid()) @db.Uuid
+  /// 소스 id (gist-academic, wevity, linkareer …)
+  source     String
+  /// 사이트의 글 번호
+  externalId String
+  title      String
+  url        String
+  /// 분류 (장학/납입금, 공모 분야 등)
+  category   String?
+  /// 작성자·주최사
+  author     String?
+  /// 게시일
+  postedAt   DateTime?
+  /// 마감일 (공모전)
+  deadline   DateTime?
+  /// 읽음 처리 시각. null = 새 글
+  seenAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@unique([source, externalId])
+  @@index([source, createdAt])
+  @@index([seenAt])
+}
+
+/// 스크래핑 소스별 상태. 행이 없으면 켜짐.
+model ScrapeSourceState {
+  id        String    @id
+  enabled   Boolean   @default(true)
+  lastRunAt DateTime?
+  lastOkAt  DateTime?
+  lastError String?
+  /// 마지막 실행에서 새로 찾은 글 수
+  lastNew   Int       @default(0)
+  updatedAt DateTime  @updatedAt
+}

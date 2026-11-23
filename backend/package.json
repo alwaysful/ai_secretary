@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "AURA backend (NestJS + Prisma + PostgreSQL)",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "postinstall": "prisma generate",
     "prebuild": "prisma generate",
@@ -23,6 +25,7 @@
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
     "@prisma/client": "^6.0.0",
+    "cheerio": "^1.2.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "reflect-metadata": "^0.2.2",
@@ -39,10 +42,16 @@
     "typescript": "^5.7.0"
   },
   "jest": {
-    "moduleFileExtensions": ["js", "json", "ts"],
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
     "rootDir": ".",
     "testRegex": "test/.*\\.spec\\.ts$",
-    "transform": { "^.+\\.ts$": "ts-jest" },
+    "transform": {
+      "^.+\\.ts$": "ts-jest"
+    },
     "testEnvironment": "node"
   }
 }
