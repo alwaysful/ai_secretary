@@ -1,6 +1,8 @@
 import { Body, Controller, Get, HttpCode, Post, Put, Query } from '@nestjs/common';
+import { LiveDto, PhoneEventDto, PhoneEventsQueryDto } from './dto/phone.dto';
 import { ScreenCheckDto, ScreenCheckResponseDto } from './dto/screen-check.dto';
 import { StatsQueryDto, StudySessionDto } from './dto/session.dto';
+import { PhoneService } from './phone.service';
 import { StudyStatsService } from './study-stats.service';
 import { StudyService } from './study.service';
 
@@ -10,6 +12,7 @@ export class StudyController {
   constructor(
     private readonly study: StudyService,
     private readonly statsService: StudyStatsService,
+    private readonly phone: PhoneService,
   ) {}
 
   @Post('screen-check')
@@ -28,5 +31,28 @@ export class StudyController {
   @Get('stats')
   stats(@Query() q: StatsQueryDto) {
     return this.statsService.stats(q.unit, q.count);
+  }
+
+  /** PC 공부 세션 heartbeat. 폰 앱이 GET 으로 확인 */
+  @Post('live')
+  @HttpCode(200)
+  heartbeat(@Body() body: LiveDto) {
+    return this.phone.heartbeat(body.active);
+  }
+
+  @Get('live')
+  live() {
+    return this.phone.live();
+  }
+
+  /** 폰 딴짓 앱 사용 기록 (Android 앱) */
+  @Post('phone-events')
+  recordPhone(@Body() body: PhoneEventDto) {
+    return this.phone.record(body);
+  }
+
+  @Get('phone-events')
+  phoneEvents(@Query() q: PhoneEventsQueryDto) {
+    return this.phone.list(q.since);
   }
 }

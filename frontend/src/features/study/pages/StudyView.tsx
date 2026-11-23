@@ -8,6 +8,7 @@ import { StudyStats } from '../components/StudyStats';
 import { useAnalysis } from '../hooks/useAnalysis';
 import { useBreak } from '../hooks/useBreak';
 import { useCoach } from '../hooks/useCoach';
+import { usePhoneWatch } from '../hooks/usePhoneWatch';
 import { BREAK_MIN, FOCUS_MIN, usePomodoro } from '../hooks/usePomodoro';
 import { useQuitGuard } from '../hooks/useQuitGuard';
 import { useScreenWatch } from '../hooks/useScreenWatch';
@@ -93,6 +94,7 @@ export function StudyPage({ onBack }: { onBack: () => void }) {
   const busy = running || screen.active;
   const pomo = usePomodoro(busy, rest);
   const rec = useStudyRecorder(busy, rest.active, pomo.count);
+  const phoneWatch = usePhoneWatch(busy);
 
   // 휴대폰은 한 번 감지되면 PHONE_HOLD_MS 동안 사용 중으로 유지
   const phoneRaw = Math.round(
@@ -169,6 +171,15 @@ export function StudyPage({ onBack }: { onBack: () => void }) {
     setRecent(screen.toast);
     screen.dismiss();
   }, [screen.toast, screen.dismiss]);
+
+  // 폰 앱이 보낸 딴짓 앱 사용 (통계는 백엔드가 따로 집계)
+  useEffect(() => {
+    if (!phoneWatch.toast) return;
+    setRoasts((n) => n + 1);
+    setRecent(phoneWatch.toast);
+    showAlertWindow('폰 딴짓', phoneWatch.toast);
+    phoneWatch.dismiss();
+  }, [phoneWatch.toast, phoneWatch.dismiss]);
 
   // 공부 중 탭 닫기도 한 번 막는다
   useEffect(() => {

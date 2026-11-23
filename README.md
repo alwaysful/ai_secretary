@@ -190,6 +190,30 @@ curl -X POST http://127.0.0.1:3000/mail/auth/start
 
 `TOKEN_ENC_KEY` 분실·변경 시 재로그인 필요.
 
+## 9-1. Android 앱 + 폰 감시 (선택)
+
+PC 공부 감시 중 폰에서 딴짓 앱(유튜브·인스타 등)을 열면 폰에 알림 + 공부 통계에 "폰 딴짓 앱" 기록.
+화면 캡처 없이 UsageStats(지금 켜진 앱 이름)만 사용. Android 전용.
+
+**준비**: Node 22+, [Android Studio](https://developer.android.com/studio) (JDK·SDK 포함), PC·폰에 [Tailscale](https://tailscale.com) 같은 계정 로그인.
+
+1. 백엔드를 Tailscale에서 접근 가능하게: `backend/.env` 에 `HOST=0.0.0.0` → 백엔드 재시작. Windows 방화벽이 묻으면 허용.
+2. 앱 빌드 + Android Studio 열기:
+   ```powershell
+   cd frontend
+   npm.cmd install
+   npm.cmd run android:sync
+   npm.cmd run android:open
+   ```
+3. Android Studio: 폰 USB 연결(개발자 옵션 → USB 디버깅) → ▶ Run. APK만 필요하면 Build → Build APK(s) → `frontend/android/app/build/outputs/apk/debug/app-debug.apk` 폰으로 복사해 설치.
+4. 폰 앱 → 로비 → 📱 폰 감시:
+   - 백엔드 주소 `http://<PC Tailscale IP>:3000` 저장 (PC에서 `tailscale ip -4`)
+   - 사용 정보 접근 허용, 알림 허용, 배터리 최적화 제외
+   - 딴짓 앱 선택 → 저장 → 감시 켜기
+5. PC에서 공부 감시 시작 → 폰이 자동으로 감시 (기본: PC 세션 중에만. 체크 해제 시 항상).
+
+프론트 코드 수정 후에는 `npm.cmd run android:sync` 다시 → Run.
+
 ## 10. 테스트
 
 ```bash

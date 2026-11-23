@@ -50,4 +50,6 @@ export interface StatsBucket {
   phone: number;
   slack: number;
   sleep: number;
+  /** 폰 딴짓 앱 사용 (Android 앱) */
+  phoneApp: number;
 }

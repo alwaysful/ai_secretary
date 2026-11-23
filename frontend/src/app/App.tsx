@@ -3,6 +3,7 @@ import { Briefing } from '../features/briefing/Briefing';
 import { Chat } from '../features/chat/Chat';
 import { Lobby } from './Lobby';
 import { MailPage } from '../features/mail/MailPage';
+import { PhonePage } from '../features/phone/PhonePage';
 import { MemoryPage } from '../features/memory/MemoryPage';
 import { Schedule } from '../features/schedule/Schedule';
 import { SettingsPage } from '../features/settings/SettingsPage';
@@ -11,7 +12,7 @@ import { ShortcutHelp, useGlobalShortcuts } from './Shortcuts';
 /** 공부 집중: mediapipe 포함, 필요할 때만 로드 */
 const StudyPage = lazy(() => import('../features/study/pages/StudyView').then((m) => ({ default: m.StudyPage })));
 
-export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study';
+export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study' | 'phone';
 
 function Page(props: { page: PageId; go: (p: PageId) => void }) {
   const { page, go } = props;
@@ -33,6 +34,8 @@ function Page(props: { page: PageId; go: (p: PageId) => void }) {
           <StudyPage onBack={back} />
         </Suspense>
       );
+    case 'phone':
+      return <PhonePage onBack={back} />;
     case 'mail':
       return <MailPage onBack={back} />;
     default:
