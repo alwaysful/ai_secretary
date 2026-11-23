@@ -370,7 +370,7 @@ export function SettingsPage(props: { onBack: () => void; onModels: () => void }
               </p>
               <div className="chips">
                 <button className="ghost" onClick={props.onModels}>
-                  ⬇ 다른 모델 다운로드 하러 가기
+                  ⬇ 모델 받기
                 </button>
               </div>
             </section>
