@@ -6,6 +6,7 @@ import { BriefingModule } from './briefing/briefing.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { MemoryModule } from './memory/memory.module';
 import { StudyModule } from './study/study.module';
+import { ShortcutModule } from './shortcut/shortcut.module';
 import { SettingsModule } from './settings/settings.module';
 import { validateEnv } from './config/env';
 import { ConversationModule } from './conversation/conversation.module';
@@ -24,6 +25,7 @@ import { PrismaModule } from './prisma/prisma.module';
     BriefingModule,
     MemoryModule,
     StudyModule,
+    ShortcutModule,
   ],
   controllers: [HealthController],
 })

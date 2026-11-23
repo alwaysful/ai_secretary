@@ -49,6 +49,13 @@ export interface Memory {
   updatedAt: string;
 }
 
+export interface WebShortcut {
+  id: string;
+  title: string;
+  url: string;
+  position: number;
+}
+
 export interface Settings {
   model: string;
   systemPrompt: string;
@@ -199,6 +206,14 @@ export const api = {
   updateMemory: (id: string, m: { content?: string; category?: string; enabled?: boolean }) =>
     req<Memory>(`/memories/${id}`, { method: 'PATCH', body: JSON.stringify(m) }),
   deleteMemory: (id: string) => req<void>(`/memories/${id}`, { method: 'DELETE' }),
+  shortcuts: () => req<WebShortcut[]>('/shortcuts'),
+  createShortcut: (s: { url: string; title?: string }) =>
+    req<WebShortcut>('/shortcuts', { method: 'POST', body: JSON.stringify(s) }),
+  updateShortcut: (id: string, s: { url?: string; title?: string }) =>
+    req<WebShortcut>(`/shortcuts/${id}`, { method: 'PATCH', body: JSON.stringify(s) }),
+  deleteShortcut: (id: string) => req<void>(`/shortcuts/${id}`, { method: 'DELETE' }),
+  reorderShortcuts: (ids: string[]) =>
+    req<WebShortcut[]>('/shortcuts/order', { method: 'PUT', body: JSON.stringify({ ids }) }),
   deleteAllMemories: () => req<{ deleted: number }>('/memories?confirm=all', { method: 'DELETE' }),
   confirmAction: (id: string) => req<{ subject?: string; content?: string; deleted?: string }>(`/actions/${id}/confirm`, { method: 'POST' }),
   cancelAction: (id: string) => req<void>(`/actions/${id}`, { method: 'DELETE' }),

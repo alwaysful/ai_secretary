@@ -360,3 +360,25 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; border: 1
 
 /* 정보 페이지 */
 .info-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+
+/* 로비 웹사이트 바로가기 */
+.websc { margin: 0 0 36px; }
+.websc h2 { font-size: 24px; font-weight: 700; margin: 0 0 14px; }
+.sc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
+.sc-tile { position: relative; border-radius: 12px; }
+.sc-tile:hover { background: var(--bg); }
+.sc-tile a, .sc-add { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 8px 12px; color: inherit; text-decoration: none; width: 100%; }
+.sc-add { border: 0; background: none; cursor: pointer; font: inherit; }
+.sc-ic { width: 48px; height: 48px; border-radius: 50%; background: var(--bg); border: 1px solid var(--line); display: grid; place-items: center; font-size: 22px; color: var(--muted); }
+.sc-ic .fav { width: 24px; height: 24px; }
+.sc-ic .fav.letter { width: auto; height: auto; font-weight: 700; font-size: 20px; color: var(--ink); }
+.sc-title { font-size: 13px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-edit { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border-radius: 50%; border: 0; background: var(--panel); color: var(--muted); cursor: pointer; opacity: 0; font-size: 13px; }
+.sc-tile:hover .sc-edit, .sc-edit:focus-visible { opacity: 1; }
+.sc-edit:hover { color: var(--ink); }
+@media (hover: none) { .sc-edit { opacity: 1; } }
+.sc-form label { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; font-weight: 600; font-size: 14px; }
+.sc-form input { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-weight: 400; }
+.sc-form .err { color: var(--err); margin: 0 0 10px; font-size: 14px; }
+.sc-actions { display: flex; gap: 8px; align-items: center; }
+.danger-text { color: var(--err); }

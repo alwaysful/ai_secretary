@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { PageId } from './App';
 import { api, ApiError, CalendarEvent, Health } from '../shared/api';
 import { ThemeButton } from '../shared/theme';
+import { WebShortcuts } from './WebShortcuts';
 
 interface Item {
   id: PageId | null;
@@ -159,6 +160,7 @@ export function Lobby(props: { onNavigate: (p: PageId) => void }) {
         </div>
         <h1 className="title">AURA 810</h1>
         <Widgets onNavigate={props.onNavigate} />
+        <WebShortcuts />
         <div className="cols">
           <section>
             <h2>바로가기</h2>
