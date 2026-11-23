@@ -31,11 +31,11 @@ export class EnvVars {
   @Transform(emptyToUndefined) @IsOptional() @IsString()
   PC_PYTHON?: string;
 
-  /** 도구 탭 OCR 비전 모델. 비우면 PC_VISION_MODEL → STUDY_VISION_MODEL */
+  /** 도구 탭 OCR 비전 모델 기본값(설정 화면 선택이 우선). 비우면 PC_VISION_MODEL → STUDY_VISION_MODEL */
   @Transform(emptyToUndefined) @IsOptional() @IsString()
   OCR_VISION_MODEL?: string;
 
-  /** 도구 탭 STT: faster-whisper 모델 (tiny/base/small/medium/large-v3) */
+  /** 도구 탭 STT faster-whisper 모델 기본값(설정 화면 선택이 우선) */
   @IsString()
   STT_MODEL: string = 'small';
 

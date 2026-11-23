@@ -57,6 +57,14 @@ model AppSettings {
   pcControl    Boolean  @default(true)
   /// 화면 읽기(스크린샷 분석) 허용. 끄면 공부 화면 감시·PC 조작 불가
   screenRead   Boolean  @default(true)
+  /// 마이크 사용 허용 (STT 녹음)
+  mic          Boolean  @default(true)
+  /// 웹캠 사용 허용 (공부 집중 자세 분석)
+  webcam       Boolean  @default(true)
+  /// 도구 탭 OCR 비전 모델. null = .env
+  ocrModel     String?
+  /// 도구 탭 STT whisper 모델. null = .env
+  sttModel     String?
   updatedAt    DateTime @updatedAt
 }
 

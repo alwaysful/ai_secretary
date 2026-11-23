@@ -77,6 +77,8 @@ export type ShortcutSection = 'lobby' | 'tools';
 export interface ToolsStatus {
   ocr: { model: string };
   stt: { ok: boolean; detail: string; model: string };
+  /** 마이크 허용 */
+  mic: boolean;
 }
 
 export interface OcrResult {
@@ -177,7 +179,15 @@ export interface Settings {
   pcControl: boolean;
   /** 화면 읽기(스크린샷 분석) 허용 */
   screenRead: boolean;
-  defaults: { model: string; systemPrompt: string };
+  /** 마이크 허용 */
+  mic: boolean;
+  /** 웹캠 허용 */
+  webcam: boolean;
+  /** OCR 비전 모델 */
+  ocrModel: string;
+  /** STT whisper 모델 */
+  sttModel: string;
+  defaults: { model: string; systemPrompt: string; ocrModel: string; sttModel: string };
 }
 
 export interface BriefingData {
@@ -344,11 +354,13 @@ export const api = {
   mailDisconnect: () => req<void>('/mail/auth', { method: 'DELETE' }),
   mailList: (unreadOnly: boolean) => req<MailSummary[]>(`/mail/messages?top=15&unreadOnly=${unreadOnly}`),
   settings: () => req<Settings>('/settings'),
-  saveSettings: (s: { model?: string; systemPrompt?: string }) =>
+  saveSettings: (s: { model?: string; systemPrompt?: string; ocrModel?: string; sttModel?: string }) =>
     req<Settings>('/settings', { method: 'PUT', body: JSON.stringify(s) }),
-  savePermissions: (p: { pcControl?: boolean; screenRead?: boolean }) =>
+  savePermissions: (p: Partial<Pick<Settings, 'pcControl' | 'screenRead' | 'mic' | 'webcam'>>) =>
     req<Settings>('/settings/permissions', { method: 'PUT', body: JSON.stringify(p) }),
   models: () => req<string[]>('/settings/models'),
+  visionModels: () => req<string[]>('/settings/vision-models'),
+  sttModels: () => req<string[]>('/settings/stt-models'),
   actions: (conversationId: string) => req<PendingAction[]>(`/actions?conversationId=${conversationId}`),
   memories: (q?: string) => req<Memory[]>(q ? `/memories?q=${encodeURIComponent(q)}` : '/memories'),
   createMemory: (m: { content: string; category?: string }) =>
@@ -403,8 +415,8 @@ export const api = {
   toolsStatus: () => req<ToolsStatus>('/tools/status'),
   ocr: (image: string, hint?: string) =>
     req<OcrResult>('/tools/ocr', { method: 'POST', body: JSON.stringify({ image, ...(hint ? { hint } : {}) }) }),
-  stt: (audio: string, mime: string, language?: string) =>
-    req<SttResult>('/tools/stt', { method: 'POST', body: JSON.stringify({ audio, mime, ...(language ? { language } : {}) }) }),
+  stt: (audio: string, mime: string, language?: string, source: 'mic' | 'file' = 'file') =>
+    req<SttResult>('/tools/stt', { method: 'POST', body: JSON.stringify({ audio, mime, source, ...(language ? { language } : {}) }) }),
   deleteAllMemories: () => req<{ deleted: number }>('/memories?confirm=all', { method: 'DELETE' }),
   confirmAction: (id: string) => req<{ subject?: string; content?: string; deleted?: string }>(`/actions/${id}/confirm`, { method: 'POST' }),
   cancelAction: (id: string) => req<void>(`/actions/${id}`, { method: 'DELETE' }),

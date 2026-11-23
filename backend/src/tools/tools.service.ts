@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, OnModuleDestroy, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, OnModuleDestroy, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -8,6 +8,7 @@ import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { EnvVars } from '../config/env';
 import { PcAgentProcess } from '../pc-control/pc-agent.process';
+import { SettingsService } from '../settings/settings.service';
 
 const OCR_TIMEOUT_MS = 180_000;
 const STT_TIMEOUT_MS = 15 * 60_000;
@@ -54,8 +55,6 @@ export function cleanOcr(text: string): string {
 export class ToolsService implements OnModuleDestroy {
   private readonly log = new Logger(ToolsService.name);
   private readonly baseUrl: string;
-  private readonly ocrModel: string;
-  private readonly sttModel: string;
   private readonly python: string;
   private readonly script: string;
   private stt: PcAgentProcess | null = null;
@@ -64,13 +63,11 @@ export class ToolsService implements OnModuleDestroy {
   private queue: Promise<unknown> = Promise.resolve();
   private checkCache: { at: number; ok: boolean; detail: string } | null = null;
 
-  constructor(config: ConfigService<EnvVars, true>) {
+  constructor(
+    config: ConfigService<EnvVars, true>,
+    private readonly settings: SettingsService,
+  ) {
     this.baseUrl = config.get('OLLAMA_BASE_URL', { infer: true }).replace(/\/$/, '');
-    this.ocrModel =
-      config.get('OCR_VISION_MODEL', { infer: true }) ||
-      config.get('PC_VISION_MODEL', { infer: true }) ||
-      config.get('STUDY_VISION_MODEL', { infer: true });
-    this.sttModel = config.get('STT_MODEL', { infer: true }) ?? 'small';
     this.python = config.get('PC_PYTHON', { infer: true }) || (process.platform === 'win32' ? 'python' : 'python3');
     const candidates = [resolve(process.cwd(), '..', 'pc-agent', 'stt.py'), resolve(process.cwd(), 'pc-agent', 'stt.py')];
     this.script = candidates.find((p) => existsSync(p)) ?? candidates[0];
@@ -83,7 +80,11 @@ export class ToolsService implements OnModuleDestroy {
   /** STT 설치 확인(30초 캐시) + 모델 이름 */
   async status() {
     const stt = await this.checkStt();
-    return { ocr: { model: this.ocrModel }, stt: { ...stt, model: this.sttModel } };
+    return {
+      ocr: { model: this.settings.ocrModel() },
+      stt: { ...stt, model: this.settings.sttModel() },
+      mic: this.settings.mic(),
+    };
   }
 
   private checkStt(): Promise<{ ok: boolean; detail: string }> {
@@ -111,6 +112,7 @@ export class ToolsService implements OnModuleDestroy {
     const img = stripDataUrl(image);
     if (!img) throw new BadRequestException({ code: 'NO_IMAGE', message: '이미지 없음' });
     const t0 = Date.now();
+    const model = this.settings.ocrModel();
     let res: Response;
     try {
       res = await fetch(`${this.baseUrl}/api/chat`, {
@@ -118,7 +120,7 @@ export class ToolsService implements OnModuleDestroy {
         headers: { 'Content-Type': 'application/json' },
         signal: AbortSignal.timeout(OCR_TIMEOUT_MS),
         body: JSON.stringify({
-          model: this.ocrModel,
+          model,
           stream: false,
           think: false,
           keep_alive: '5m',
@@ -138,14 +140,18 @@ export class ToolsService implements OnModuleDestroy {
     }
     if (!res.ok) {
       const body = (await res.text().catch(() => '')).slice(0, 200);
-      const missing = res.status === 404 ? ` (ollama pull ${this.ocrModel})` : '';
+      const missing = res.status === 404 ? ` (ollama pull ${model})` : '';
       throw new ServiceUnavailableException({ code: 'OCR_FAILED', message: `Ollama ${res.status}${missing}: ${body}` });
     }
     const data = (await res.json()) as { message?: { content?: string } };
-    return { text: cleanOcr(data.message?.content ?? ''), model: this.ocrModel, ms: Date.now() - t0 };
+    return { text: cleanOcr(data.message?.content ?? ''), model, ms: Date.now() - t0 };
   }
 
-  async transcribe(audio: string, mime: string, language?: string) {
+  /** source=mic 이면 마이크 스위치 확인 */
+  async transcribe(audio: string, mime: string, language?: string, source: 'mic' | 'file' = 'file') {
+    if (source === 'mic' && !this.settings.mic()) {
+      throw new ForbiddenException({ code: 'MIC_OFF', message: '마이크 꺼짐 (설정 → 권한에서 켜기)' });
+    }
     const check = await this.checkStt();
     if (!check.ok) {
       throw new ServiceUnavailableException({
@@ -163,13 +169,14 @@ export class ToolsService implements OnModuleDestroy {
       const t0 = Date.now();
       const agent = await this.agent();
       clearTimeout(this.idle);
+      const model = this.settings.sttModel();
       try {
-        const r = await agent.send('transcribe', { path, language: language || null }, STT_TIMEOUT_MS);
+        const r = await agent.send('transcribe', { path, language: language || null, model }, STT_TIMEOUT_MS);
         return {
           text: String(r.text ?? ''),
           language: String(r.language ?? ''),
           duration: Number(r.duration ?? 0),
-          model: this.sttModel,
+          model,
           ms: Date.now() - t0,
         };
       } finally {
@@ -196,7 +203,7 @@ export class ToolsService implements OnModuleDestroy {
       .start(30_000)
       .then(() => {
         this.stt = proc;
-        this.log.log(`STT 사이드카 시작 (${this.sttModel})`);
+        this.log.log('STT 사이드카 시작');
         return proc;
       })
       .finally(() => (this.starting = null));

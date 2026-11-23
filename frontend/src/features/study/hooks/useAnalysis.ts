@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { api } from '../../../shared/api';
 import { errorText } from '../format';
 import { createAnalysisService } from '../services/analysisService';
 import { closeWebcam, openWebcam } from '../services/webcamService';
@@ -25,6 +26,15 @@ export function useAnalysis(videoRef: RefObject<HTMLVideoElement | null>) {
     if (!video || stopRef.current) return;
     setStatus('loading');
     setError(null);
+    const allowed = await api.settings().then(
+      (s) => s.webcam,
+      () => true,
+    );
+    if (!allowed) {
+      setError('웹캠 꺼짐. 설정 → 권한에서 켜기.');
+      setStatus('error');
+      return;
+    }
 
     let service: AnalysisService | null = null;
     let stream: MediaStream | null = null;

@@ -91,7 +91,7 @@ function SttCard(props: { status: ToolsStatus | null }) {
 
   useEffect(() => () => rec?.stream.getTracks().forEach((t) => t.stop()), [rec]);
 
-  const send = async (blob: Blob, mime: string) => {
+  const send = async (blob: Blob, mime: string, source: 'mic' | 'file' = 'file') => {
     if (blob.size > MAX_AUDIO_MB * 1024 * 1024) {
       setErr(`파일이 너무 큼 (최대 ${MAX_AUDIO_MB}MB)`);
       return;
@@ -99,7 +99,7 @@ function SttCard(props: { status: ToolsStatus | null }) {
     setBusy(true);
     setErr('');
     try {
-      const r = await api.stt(await readDataUrl(blob), mime || 'application/octet-stream', lang || undefined);
+      const r = await api.stt(await readDataUrl(blob), mime || 'application/octet-stream', lang || undefined, source);
       setOut({ text: r.text, meta: `${r.model} · 음성 ${r.duration}초 · ${(r.ms / 1000).toFixed(1)}초 걸림 · ${r.language}` });
     } catch (e) {
       setErr(errText(e));
@@ -108,8 +108,14 @@ function SttCard(props: { status: ToolsStatus | null }) {
     }
   };
 
+  const micOff = props.status?.mic === false;
+
   const start = async () => {
     setErr('');
+    if (micOff) {
+      setErr('마이크 꺼짐. 설정 → 권한에서 켜기.');
+      return;
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
       setErr('이 화면에서는 마이크 사용 불가 (https 또는 localhost 필요). 파일로 올리세요.');
       return;
@@ -123,7 +129,7 @@ function SttCard(props: { status: ToolsStatus | null }) {
       r.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
         const type = r.mimeType || mime || 'audio/webm';
-        void send(new Blob(chunks.current, { type }), type);
+        void send(new Blob(chunks.current, { type }), type, 'mic');
       };
       r.start(1000);
       setSec(0);
@@ -164,8 +170,8 @@ function SttCard(props: { status: ToolsStatus | null }) {
             ■ 정지 · {Math.floor(sec / 60)}:{String(sec % 60).padStart(2, '0')}
           </button>
         ) : (
-          <button className="primary" onClick={start} disabled={busy}>
-            ● 녹음
+          <button className="primary" onClick={start} disabled={busy || micOff} title={micOff ? '설정 → 권한에서 마이크 켜기' : undefined}>
+            {micOff ? '🔇 마이크 꺼짐' : '● 녹음'}
           </button>
         )}
         <button className="ghost" onClick={() => file.current?.click()} disabled={busy || !!rec}>
