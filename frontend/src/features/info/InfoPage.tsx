@@ -174,8 +174,11 @@ export function InfoPage(props: { onBack: () => void; onNavigate: (p: PageId) =>
           ← 로비
         </button>
         <h1>정보</h1>
+        <button className="ghost info-pdf" onClick={() => window.print()} title="인쇄 창에서 대상: PDF로 저장">
+          📄 PDF로 저장
+        </button>
       </header>
-      <div className="subbody">
+      <div className="subbody info-page">
         <section className="card">
           <h2>AURA 810</h2>
           <p>내 PC에서 돌아가는 개인 AI 비서. 대화·메일·일정·기억은 PC의 DB에만 저장.</p>
@@ -197,7 +200,7 @@ export function InfoPage(props: { onBack: () => void; onNavigate: (p: PageId) =>
               ))}
             </ul>
             {f.page && (
-              <div className="chips">
+              <div className="chips no-print">
                 <button className="ghost" onClick={() => props.onNavigate(f.page!)}>
                   열기 →
                 </button>
