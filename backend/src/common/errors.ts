@@ -65,6 +65,16 @@ export class PrismaErrorFilter implements ExceptionFilter {
       res.status(404).json({ statusCode: 404, code: 'NOT_FOUND', message: 'not found' });
       return;
     }
+    // 테이블·컬럼 없음 = 새 마이그레이션 미적용
+    if (e instanceof Prisma.PrismaClientKnownRequestError && (e.code === 'P2021' || e.code === 'P2022')) {
+      this.log.error(`db schema: ${e.message.split('\n').pop()}`);
+      res.status(500).json({
+        statusCode: 500,
+        code: 'DB_MIGRATION',
+        message: 'DB 업데이트 필요: backend에서 npx.cmd prisma migrate deploy 실행 후 서버 재시작',
+      });
+      return;
+    }
     this.log.error(e.message);
     res.status(500).json({ statusCode: 500, code: 'INTERNAL', message: 'internal error' });
   }
