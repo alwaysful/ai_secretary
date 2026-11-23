@@ -27,12 +27,34 @@ def check():
     return 0
 
 
+def _patch_av():
+    """PyAV 15+ 는 av.open(metadata_errors=) 제거. faster-whisper 호환용."""
+    import av
+
+    orig = av.open
+    if getattr(orig, "_aura", False):
+        return
+
+    def _open(*a, **kw):
+        try:
+            return orig(*a, **kw)
+        except TypeError as e:
+            if "metadata_errors" not in str(e):
+                raise
+            kw.pop("metadata_errors", None)
+            return orig(*a, **kw)
+
+    _open._aura = True
+    av.open = _open
+
+
 _model = None
 
 
 def model():
     global _model
     if _model is None:
+        _patch_av()
         from faster_whisper import WhisperModel
 
         try:
