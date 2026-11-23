@@ -6,9 +6,10 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { ModelErrorFilter, PrismaErrorFilter } from './common/errors';
 import { EnvVars } from './config/env';
+import { BufferedLogger } from './admin/log-buffer';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: new BufferedLogger() });
   // 화면 캡처·OCR 이미지·STT 음성(base64) 수신용
   app.useBodyParser('json', { limit: '40mb' });
   // Android 앱(Capacitor WebView, http://localhost)에서 직접 호출

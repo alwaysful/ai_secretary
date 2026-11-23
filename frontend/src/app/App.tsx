@@ -27,9 +27,10 @@ const Landing = lazy(() => import('../features/landing/Landing').then((m) => ({ 
 const PhonePage = lazy(() => import('../features/phone/PhonePage').then((m) => ({ default: m.PhonePage })));
 
 /** 공부 집중: mediapipe 포함, 필요할 때만 로드 */
+const AdminPage = lazy(() => import('../features/admin/AdminPage').then((m) => ({ default: m.AdminPage })));
 const StudyPage = lazy(() => import('../features/study/pages/StudyView').then((m) => ({ default: m.StudyPage })));
 
-export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study' | 'phone' | 'info' | 'news' | 'landing' | 'models' | 'pc' | 'tools' | 'stats' | 'guide';
+export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study' | 'phone' | 'info' | 'news' | 'landing' | 'models' | 'pc' | 'tools' | 'stats' | 'guide' | 'admin';
 
 function Page(props: { page: PageId; go: (p: PageId) => void }) {
   const { page, go } = props;
@@ -71,6 +72,12 @@ function Page(props: { page: PageId; go: (p: PageId) => void }) {
       return <ToolsPage onBack={back} />;
     case 'stats':
       return <StatsPage onBack={back} />;
+    case 'admin':
+      return (
+        <Suspense fallback={null}>
+          <AdminPage onBack={back} />
+        </Suspense>
+      );
     case 'guide':
       return <GuidePage onBack={back} onNavigate={go} />;
     case 'landing':
