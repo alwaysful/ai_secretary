@@ -430,6 +430,7 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; border: 1
 .news-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .news-tags button { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 13px; }
 .news-tags button small { color: var(--muted); margin-left: 2px; }
+.news-tags button.empty { opacity: 0.55; }
 .news-tags button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .news-tag { color: var(--accent); }
 .news-view { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
