@@ -25,8 +25,6 @@ export interface HubItem extends CatalogModel {
 export interface HubView {
   reachable: boolean;
   current: string;
-  /** STT(faster-whisper) 모델 (STT_MODEL) */
-  sttModel: string;
   items: HubItem[];
   /** 목록에 없는 설치 모델 */
   others: { name: string; bytes: number }[];
@@ -55,7 +53,6 @@ const KEEP_MS = 60_000;
 export class ModelHubService implements OnModuleDestroy {
   private readonly log = new Logger(ModelHubService.name);
   private readonly baseUrl: string;
-  private readonly sttModel: string;
   private readonly jobs = new Map<string, { job: PullJob; ctrl: AbortController; layers: Map<string, [number, number]> }>();
   private readonly timers = new Set<NodeJS.Timeout>();
   fetchFn: typeof fetch = (...a) => fetch(...a);
@@ -65,7 +62,6 @@ export class ModelHubService implements OnModuleDestroy {
     private readonly model: BaseModel,
   ) {
     this.baseUrl = config.get('OLLAMA_BASE_URL', { infer: true }).replace(/\/+$/, '');
-    this.sttModel = config.get('STT_MODEL', { infer: true }) ?? 'small';
   }
 
   onModuleDestroy(): void {
@@ -84,7 +80,7 @@ export class ModelHubService implements OnModuleDestroy {
     const others = installed
       .filter((t) => !CATALOG.some((c) => same(c.name, t.name)))
       .map((t) => ({ name: t.name, bytes: t.size ?? 0 }));
-    return { reachable: tags !== null, current: this.model.name, sttModel: this.sttModel, items, others, jobs: this.listJobs() };
+    return { reachable: tags !== null, current: this.model.name, items, others, jobs: this.listJobs() };
   }
 
   listJobs(): PullJob[] {

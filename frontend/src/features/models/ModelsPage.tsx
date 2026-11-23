@@ -88,6 +88,13 @@ export function ModelsPage(props: { onBack: () => void; onSettings: () => void }
   const [custom, setCustom] = useState('');
   const [tab, setTab] = useState<Tab>('ollama');
   const [quant, setQuant] = useState('Q4_K_M');
+  const [stt, setStt] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tab === 'stt') api.settings().then((s) => setStt(s.sttModel), (e: unknown) => setError(errText(e)));
+  }, [tab]);
+  const pickStt = (name: string) =>
+    run(async () => setStt((await api.saveSettings({ sttModel: name })).sttModel), `음성 인식 ${name} 사용. 첫 사용 때 자동 다운로드.`);
 
   const load = useCallback(
     () =>
@@ -300,12 +307,12 @@ export function ModelsPage(props: { onBack: () => void; onSettings: () => void }
         {tab === 'stt' && (
           <>
             <p className="muted">
-              도구 탭 음성→텍스트(faster-whisper) 모델. 현재: <b>{hub?.sttModel ?? '…'}</b>. 바꾸려면 <code>.env</code>의{' '}
-              <code>STT_MODEL</code>을 아래 이름으로 수정 후 재시작. 첫 사용 때 자동 다운로드.
+              도구 탭 음성→텍스트(faster-whisper) 모델. 현재: <b>{stt ?? '…'}</b>. 고르면 바로 적용, 첫 사용 때 Hugging Face에서
+              자동 다운로드. 설정에서도 변경 가능.
             </p>
             <div className="model-grid">
               {WHISPER.map((w) => {
-                const cur = hub?.sttModel === w.name;
+                const cur = stt === w.name;
                 return (
                   <section key={w.name} className={`card model-card${cur ? ' installed' : ''}`}>
                     <div className="model-head">
@@ -321,9 +328,11 @@ export function ModelsPage(props: { onBack: () => void; onSettings: () => void }
                       <Meter label="속도" value={w.speed} />
                     </div>
                     <div className="chips">
-                      <button className="ghost" onClick={() => void navigator.clipboard?.writeText(`STT_MODEL=${w.name}`).then(() => setMsg(`STT_MODEL=${w.name} 복사됨.`), () => undefined)}>
-                        설정값 복사
-                      </button>
+                      {!cur && (
+                        <button className="primary" onClick={() => void pickStt(w.name)}>
+                          이 모델 사용
+                        </button>
+                      )}
                       <a className="ghost" href={`https://huggingface.co/${w.repo}`} target="_blank" rel="noreferrer">
                         Hugging Face ↗
                       </a>
