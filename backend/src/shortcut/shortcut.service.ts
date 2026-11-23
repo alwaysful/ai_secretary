@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 
 export const MAX_SHORTCUTS = 30;
+export const SECTIONS = ['lobby', 'tools'] as const;
+export type Section = (typeof SECTIONS)[number];
 
 /** "naver.com" → "https://naver.com". http(s)만 허용 */
 export function normalizeUrl(raw: string): string {
@@ -29,19 +31,20 @@ function titleOf(title: string | undefined, url: string): string {
 export class ShortcutService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list() {
-    return this.prisma.webShortcut.findMany({ orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] });
+  list(section: Section = 'lobby') {
+    return this.prisma.webShortcut.findMany({ where: { section }, orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] });
   }
 
-  async create(input: { title?: string; url: string }) {
-    const count = await this.prisma.webShortcut.count();
+  async create(input: { title?: string; url: string; section?: Section }) {
+    const section = input.section ?? 'lobby';
+    const count = await this.prisma.webShortcut.count({ where: { section } });
     if (count >= MAX_SHORTCUTS) {
       throw new BadRequestException({ code: 'TOO_MANY', message: `바로가기는 최대 ${MAX_SHORTCUTS}개` });
     }
     const url = normalizeUrl(input.url);
-    const last = await this.prisma.webShortcut.aggregate({ _max: { position: true } });
+    const last = await this.prisma.webShortcut.aggregate({ where: { section }, _max: { position: true } });
     return this.prisma.webShortcut.create({
-      data: { url, title: titleOf(input.title, url), position: (last._max.position ?? -1) + 1 },
+      data: { url, section, title: titleOf(input.title, url), position: (last._max.position ?? -1) + 1 },
     });
   }
 
@@ -54,11 +57,11 @@ export class ShortcutService {
   }
 
   /** ids 순서대로 position 재배치 */
-  async reorder(ids: string[]) {
+  async reorder(ids: string[], section: Section = 'lobby') {
     await this.prisma.$transaction(
-      ids.map((id, i) => this.prisma.webShortcut.updateMany({ where: { id }, data: { position: i } })),
+      ids.map((id, i) => this.prisma.webShortcut.updateMany({ where: { id, section }, data: { position: i } })),
     );
-    return this.list();
+    return this.list(section);
   }
 
   async remove(id: string): Promise<void> {

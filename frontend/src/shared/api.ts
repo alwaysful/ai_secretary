@@ -72,6 +72,27 @@ export interface Memory {
   updatedAt: string;
 }
 
+export type ShortcutSection = 'lobby' | 'tools';
+
+export interface ToolsStatus {
+  ocr: { model: string };
+  stt: { ok: boolean; detail: string; model: string };
+}
+
+export interface OcrResult {
+  text: string;
+  model: string;
+  ms: number;
+}
+
+export interface SttResult {
+  text: string;
+  language: string;
+  duration: number;
+  model: string;
+  ms: number;
+}
+
 export interface WebShortcut {
   id: string;
   title: string;
@@ -371,14 +392,19 @@ export const api = {
   newsDeleteSite: (id: string) => req<NewsCategory[]>(`/scrape/sites/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   newsPreview: (b: { url: string; parser?: string; itemSelector?: string | null }) =>
     req<NewsPreview>('/scrape/preview', { method: 'POST', body: JSON.stringify(b) }),
-  shortcuts: () => req<WebShortcut[]>('/shortcuts'),
-  createShortcut: (s: { url: string; title?: string }) =>
+  shortcuts: (section: ShortcutSection = 'lobby') => req<WebShortcut[]>(`/shortcuts?section=${section}`),
+  createShortcut: (s: { url: string; title?: string; section?: ShortcutSection }) =>
     req<WebShortcut>('/shortcuts', { method: 'POST', body: JSON.stringify(s) }),
   updateShortcut: (id: string, s: { url?: string; title?: string }) =>
     req<WebShortcut>(`/shortcuts/${id}`, { method: 'PATCH', body: JSON.stringify(s) }),
   deleteShortcut: (id: string) => req<void>(`/shortcuts/${id}`, { method: 'DELETE' }),
-  reorderShortcuts: (ids: string[]) =>
-    req<WebShortcut[]>('/shortcuts/order', { method: 'PUT', body: JSON.stringify({ ids }) }),
+  reorderShortcuts: (ids: string[], section: ShortcutSection = 'lobby') =>
+    req<WebShortcut[]>('/shortcuts/order', { method: 'PUT', body: JSON.stringify({ ids, section }) }),
+  toolsStatus: () => req<ToolsStatus>('/tools/status'),
+  ocr: (image: string, hint?: string) =>
+    req<OcrResult>('/tools/ocr', { method: 'POST', body: JSON.stringify({ image, ...(hint ? { hint } : {}) }) }),
+  stt: (audio: string, mime: string, language?: string) =>
+    req<SttResult>('/tools/stt', { method: 'POST', body: JSON.stringify({ audio, mime, ...(language ? { language } : {}) }) }),
   deleteAllMemories: () => req<{ deleted: number }>('/memories?confirm=all', { method: 'DELETE' }),
   confirmAction: (id: string) => req<{ subject?: string; content?: string; deleted?: string }>(`/actions/${id}/confirm`, { method: 'POST' }),
   cancelAction: (id: string) => req<void>(`/actions/${id}`, { method: 'DELETE' }),

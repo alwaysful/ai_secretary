@@ -13,6 +13,7 @@ import { Schedule } from '../features/schedule/Schedule';
 import { SettingsPage } from '../features/settings/SettingsPage';
 import { PcControlPage } from '../features/pc/PcControlPage';
 import { PcRunBar } from '../features/pc/PcRunBar';
+import { ToolsPage } from '../features/tools/ToolsPage';
 import { getBackendUrl, isNative } from '../shared/backend';
 import { ShortcutHelp, useGlobalShortcuts } from './Shortcuts';
 
@@ -25,7 +26,7 @@ const PhonePage = lazy(() => import('../features/phone/PhonePage').then((m) => (
 /** 공부 집중: mediapipe 포함, 필요할 때만 로드 */
 const StudyPage = lazy(() => import('../features/study/pages/StudyView').then((m) => ({ default: m.StudyPage })));
 
-export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study' | 'phone' | 'info' | 'news' | 'landing' | 'models' | 'pc';
+export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study' | 'phone' | 'info' | 'news' | 'landing' | 'models' | 'pc' | 'tools';
 
 function Page(props: { page: PageId; go: (p: PageId) => void }) {
   const { page, go } = props;
@@ -63,6 +64,8 @@ function Page(props: { page: PageId; go: (p: PageId) => void }) {
       return <MailPage onBack={back} />;
     case 'pc':
       return <PcControlPage onBack={back} />;
+    case 'tools':
+      return <ToolsPage onBack={back} />;
     case 'landing':
       return (
         <Suspense fallback={null}>
