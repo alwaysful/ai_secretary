@@ -5,8 +5,9 @@ import { randomUUID } from 'node:crypto';
 import { EnvVars } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { DEFAULT_CATEGORIES } from './defaults';
-import { FeedItem, mergePosts } from './merge';
-import { PARSER_IDS, PARSERS, runParser, ScrapedItem } from './parsers';
+import { FeedItem, MergeablePost, mergePosts } from './merge';
+import { CONTEST_PARSERS, CONTEST_TAGS, contestTags, isContestCategory } from './tags';
+import { Parser, PARSER_IDS, PARSERS, runParser, ScrapedItem } from './parsers';
 
 const UA = 'AURA-personal-reader/1.0 (+local personal assistant; 1 req/site/hour)';
 const FETCH_TIMEOUT_MS = 15_000;
@@ -22,6 +23,9 @@ export const MAX_SITES = 40;
 export const MAX_CATEGORIES = 20;
 /** 피드 계산에 쓰는 최근 글 수 */
 const FEED_WINDOW = 400;
+/** 실행 1번에 상세 페이지 최대 수 (사이트 부하 방지) */
+const DETAIL_PER_RUN = 12;
+const DETAIL_GAP_MS = 2_000;
 
 export interface SiteInput {
   name?: string;
@@ -34,6 +38,7 @@ export interface SiteInput {
 
 export interface FeedQuery {
   categoryId?: string;
+  tag?: string;
   unread?: boolean;
   q?: string;
   limit?: number;
@@ -161,7 +166,7 @@ export class ScrapeService implements OnModuleInit, OnModuleDestroy {
   /** 사이트 1개 실행. 실패해도 다른 사이트는 계속 */
   async runOne(s: NewsSite, now: Date = new Date()): Promise<number> {
     try {
-      const { items } = await this.fetchItems(s.url, s.parser, s.itemSelector, now);
+      const { items, parser } = await this.fetchItems(s.url, s.parser, s.itemSelector, now);
       // 첫 수집: 기존 글은 읽음 처리 (알림 폭탄 방지)
       const seenAt = s.lastOkAt ? null : now;
       const r = await this.prisma.scrapedPost.createMany({
@@ -174,6 +179,7 @@ export class ScrapeService implements OnModuleInit, OnModuleDestroy {
         data: { lastRunAt: now, lastOkAt: now, lastError: null, lastNew: fresh },
       });
       if (fresh > 0) this.log.log(`${s.name}: 새 글 ${fresh}개`);
+      if (parser.parseDetail) await this.fillDetails(s, parser);
       return fresh;
     } catch (e) {
       this.log.warn(`${s.name}: ${errText(e)}`);
@@ -181,6 +187,28 @@ export class ScrapeService implements OnModuleInit, OnModuleDestroy {
         .update({ where: { id: s.id }, data: { lastRunAt: now, lastError: errText(e), lastNew: 0 } })
         .catch(() => undefined); // 실행 중 삭제됨
       return 0;
+    }
+  }
+
+  /** 상세 페이지에서 접수기간 보충. 글마다 1번만, 마감 안 지난 최신 글부터 */
+  private async fillDetails(s: NewsSite, parser: Parser): Promise<void> {
+    const todo = await this.prisma.scrapedPost.findMany({
+      where: { source: s.id, detailAt: null, OR: [{ deadline: null }, { deadline: { gte: new Date() } }] },
+      orderBy: { createdAt: 'desc' },
+      take: DETAIL_PER_RUN,
+    });
+    for (const p of todo) {
+      await new Promise((r) => setTimeout(r, DETAIL_GAP_MS));
+      let d: { startsAt?: Date; deadline?: Date } = {};
+      try {
+        d = parser.parseDetail!(await this.fetchText(p.url), { baseUrl: p.url, now: new Date(), tz: this.tz });
+      } catch (e) {
+        this.log.debug(`${s.name} 상세 실패: ${errText(e)}`);
+      }
+      await this.prisma.scrapedPost.update({
+        where: { id: p.id },
+        data: { detailAt: new Date(), ...(d.startsAt ? { startsAt: d.startsAt } : {}), ...(d.deadline ? { deadline: d.deadline } : {}) },
+      });
     }
   }
 
@@ -370,11 +398,53 @@ export class ScrapeService implements OnModuleInit, OnModuleDestroy {
       buckets.set(c, [...(buckets.get(c) ?? []), p]);
     }
     const name = (id: string) => byId.get(id)?.name ?? id;
+    const tagger = await this.tagger(sites);
     const items = [...buckets.entries()].flatMap(([categoryId, ps]) =>
-      mergePosts(ps, name).map((i) => ({ ...i, categoryId })),
+      mergePosts(ps, name, tagger).map((i) => ({ ...i, categoryId })),
     );
     items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || (b.postedAt?.getTime() ?? 0) - (a.postedAt?.getTime() ?? 0));
-    return items.filter((i) => !q.unread || i.unread).slice(0, Math.min(Math.max(q.limit ?? 100, 1), 300));
+    return items.filter((i) => (!q.unread || i.unread) && (!q.tag || i.tags.includes(q.tag))).slice(0, Math.min(Math.max(q.limit ?? 100, 1), 300));
+  }
+
+  /** 달력: 기간(시작~마감)이 [from, to) 와 겹치는 글. 시작일 없으면 마감일 하루짜리 */
+  async calendar(q: { from: Date; to: Date; categoryId?: string; tag?: string }) {
+    const sites = await this.prisma.newsSite.findMany();
+    if (q.categoryId) await this.checkCategory(q.categoryId);
+    const scoped = q.categoryId ? sites.filter((s) => s.categoryId === q.categoryId) : sites;
+    const posts = await this.prisma.scrapedPost.findMany({
+      where: {
+        source: { in: scoped.map((s) => s.id) },
+        deadline: { gte: q.from },
+        OR: [{ startsAt: { lt: q.to } }, { startsAt: null, deadline: { lt: q.to } }],
+      },
+      orderBy: [{ deadline: 'asc' }],
+      take: 500,
+    });
+    const byId = new Map(sites.map((s) => [s.id, s]));
+    const buckets = new Map<string | null, typeof posts>();
+    for (const p of posts) {
+      const c = byId.get(p.source)?.categoryId ?? null;
+      buckets.set(c, [...(buckets.get(c) ?? []), p]);
+    }
+    const tagger = await this.tagger(sites);
+    return [...buckets.entries()]
+      .flatMap(([categoryId, ps]) => mergePosts(ps, (id) => byId.get(id)?.name ?? id, tagger).map((i) => ({ ...i, categoryId })))
+      .filter((i) => !q.tag || i.tags.includes(q.tag));
+  }
+
+  /** 공모전 사이트 글이면 분야 태그 */
+  private async tagger(sites: NewsSite[]): Promise<(p: MergeablePost) => string[]> {
+    const cats = await this.prisma.newsCategory.findMany({ select: { id: true, name: true } });
+    const catName = new Map(cats.map((c) => [c.id, c.name]));
+    const contest = new Set(
+      sites.filter((s) => CONTEST_PARSERS.has(s.parser) || isContestCategory(catName.get(s.categoryId ?? ''))).map((s) => s.id),
+    );
+    return (p) => (contest.has(p.source) ? contestTags(p.category, p.title) : []);
+  }
+
+  /** 태그 목록 (정렬 기준) */
+  tags() {
+    return [...CONTEST_TAGS.map(([t]) => t), '기타'];
   }
 
   /** 카테고리별 안 읽은 글 수 (중복 합친 기준) + 가장 최근 새 글 시각 (알림용) */

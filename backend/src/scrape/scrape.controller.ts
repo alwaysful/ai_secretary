@@ -1,9 +1,10 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsDate,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -20,6 +21,9 @@ export class FeedQueryDto {
   @IsOptional() @IsUUID()
   categoryId?: string;
 
+  @IsOptional() @IsString() @MaxLength(30)
+  tag?: string;
+
   @IsOptional() @Transform(({ value }) => value === 'true' || value === '1' || value === true) @IsBoolean()
   unread?: boolean;
 
@@ -28,6 +32,20 @@ export class FeedQueryDto {
 
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(300)
   limit?: number;
+}
+
+export class CalendarQueryDto {
+  @Type(() => Date) @IsDate()
+  from!: Date;
+
+  @Type(() => Date) @IsDate()
+  to!: Date;
+
+  @IsOptional() @IsUUID()
+  categoryId?: string;
+
+  @IsOptional() @IsString() @MaxLength(30)
+  tag?: string;
 }
 
 export class MarkSeenDto {
@@ -98,6 +116,14 @@ export class ScrapeController {
     return this.scrape.feed(q);
   }
 
+  @Get('calendar')
+  calendar(@Query() q: CalendarQueryDto) {
+    if (q.to <= q.from || q.to.getTime() - q.from.getTime() > 100 * 86_400_000) {
+      throw new BadRequestException({ code: 'BAD_RANGE', message: '기간은 100일 이하' });
+    }
+    return this.scrape.calendar(q);
+  }
+
   @Get('unread')
   unread() {
     return this.scrape.unread();
@@ -111,6 +137,11 @@ export class ScrapeController {
   @Post('refresh')
   refresh(@Query('site') site?: string) {
     return this.scrape.refresh(site || undefined);
+  }
+
+  @Get('tags')
+  tags() {
+    return this.scrape.tags();
   }
 
   @Get('parsers')

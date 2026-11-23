@@ -74,8 +74,12 @@ export interface NewsItem {
   author: string | null;
   postedAt: string | null;
   deadline: string | null;
+  /** 접수 시작일 (공모전) */
+  startsAt: string | null;
   createdAt: string;
   categoryId: string | null;
+  /** 공모전 분야 태그 */
+  tags: string[];
 }
 
 export interface NewsSite {
@@ -273,11 +277,18 @@ export const api = {
     req<Memory>(`/memories/${id}`, { method: 'PATCH', body: JSON.stringify(m) }),
   deleteMemory: (id: string) => req<void>(`/memories/${id}`, { method: 'DELETE' }),
   shutdown: () => req<{ status: string }>('/system/shutdown', { method: 'POST', headers: { 'X-Aura-Shutdown': '1' } }),
-  newsFeed: (q: { categoryId?: string; unread?: boolean; q?: string; limit?: number } = {}) => {
+  newsFeed: (q: { categoryId?: string; tag?: string; unread?: boolean; q?: string; limit?: number } = {}) => {
     const p = new URLSearchParams();
     for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '' && v !== false) p.set(k, String(v));
     return req<NewsItem[]>(`/scrape/feed?${p}`);
   },
+  newsCalendar: (q: { from: Date; to: Date; categoryId?: string; tag?: string }) => {
+    const p = new URLSearchParams({ from: q.from.toISOString(), to: q.to.toISOString() });
+    if (q.categoryId) p.set('categoryId', q.categoryId);
+    if (q.tag) p.set('tag', q.tag);
+    return req<NewsItem[]>(`/scrape/calendar?${p}`);
+  },
+  newsTags: () => req<string[]>('/scrape/tags'),
   newsUnread: () => req<NewsUnread>('/scrape/unread'),
   newsCategories: () => req<NewsCategory[]>('/scrape/categories'),
   newsParsers: () => req<{ id: string; label: string }[]>('/scrape/parsers'),

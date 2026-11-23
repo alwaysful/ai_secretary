@@ -1,4 +1,5 @@
-import { detectParser, parseDday, runParser } from '../../src/scrape/parsers';
+import { detectParser, parseDday, parsePeriod, runParser } from '../../src/scrape/parsers';
+import { contestkoreaParser } from '../../src/scrape/parsers/contestkorea';
 import { egovParser } from '../../src/scrape/parsers/egov';
 import { genericParser } from '../../src/scrape/parsers/generic';
 import { gistParser } from '../../src/scrape/parsers/gist';
@@ -156,4 +157,45 @@ describe('detect', () => {
   it('runParser auto', () => {
     expect(runParser('auto', EGOV, ctx('https://ai.gist.ac.kr/prog/bbsArticle/B/list.do')).parser.id).toBe('egov');
   });
+});
+
+describe('detail period', () => {
+  it('parsePeriod', () => {
+    const r = parsePeriod('접수기간 2026-11-17 ~ 2026-11-30 D-7', tz);
+    expect(r.startsAt?.toISOString()).toBe('2026-11-16T15:00:00.000Z');
+    expect(r.deadline?.toISOString()).toBe('2026-11-30T14:59:59.999Z');
+    expect(parsePeriod('모집 기간: 2026.12.01(월) ~ 2026.12.15(월)', tz).startsAt?.toISOString()).toBe('2026-11-30T15:00:00.000Z');
+    expect(parsePeriod('기간 없음', tz)).toEqual({});
+  });
+
+  it('wevity detail', () => {
+    const html = '<ul><li class="dday-area"> <span class="tit">접수기간</span> 2026-11-17 ~ 2026-11-30 <span class="cil-dday">D-7</span> </li></ul>';
+    const r = wevityParser.parseDetail!(html, ctx('https://www.wevity.com/?c=find&s=1&gbn=view&ix=1'));
+    expect(r.startsAt?.toISOString()).toBe('2026-11-16T15:00:00.000Z');
+  });
+
+  it('linkareer detail', () => {
+    const html = linkareerHtml({ 'Activity:366104': { __typename: 'Activity', id: '366104', recruitStartAt: 1794495600000, recruitCloseAt: 1796914799999 } });
+    const r = linkareerParser.parseDetail!(html, ctx('https://linkareer.com/activity/366104'));
+    expect(r.startsAt?.getTime()).toBe(1794495600000);
+    expect(r.deadline?.getTime()).toBe(1796914799999);
+  });
+});
+
+describe('contestkorea', () => {
+  const html = `<ul class="list_style_2"><li class="imminent"> <div class="title"> <a href="view.php?int_gbn=1&amp;Txt_bcode=031610001&amp;str_no=202611140012&amp;page=1"> <span class="category">요리•뷰티•배우•오디션</span> <img src="/x.gif"> <span class="txt">2026 누아엔터테인먼트 오디션</span> </a> </div> <ul class="host"> <li class="icon_1"><strong>주최</strong> . 누아엔터테인먼트</li> </ul> <div class="date"> <div class="date-detail"> <span class="step-1"><em>접수</em> 11.13~01.05 </span> </div> </div></li></ul>`;
+  it('parses list with period, year rollover', () => {
+    const r = contestkoreaParser.parse(html, ctx('https://www.contestkorea.com/sub/list.php?int_gbn=1'));
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({
+      externalId: '202611140012',
+      title: '2026 누아엔터테인먼트 오디션',
+      url: 'https://www.contestkorea.com/sub/view.php?int_gbn=1&Txt_bcode=031610001&str_no=202611140012',
+      category: '요리/뷰티/배우/오디션',
+      author: '누아엔터테인먼트',
+    });
+    expect(r[0].startsAt?.toISOString()).toBe('2026-11-12T15:00:00.000Z');
+    expect(r[0].deadline?.toISOString()).toBe('2027-01-05T14:59:59.999Z');
+  });
+  it('detect', () => expect(detectParser(html, 'https://www.contestkorea.com/sub/list.php').id).toBe('contestkorea'));
 });

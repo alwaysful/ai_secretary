@@ -25,6 +25,7 @@ export const DEFAULT_CATEGORIES: { name: string; sites: DefaultSite[] }[] = [
     sites: [
       { id: 'wevity', name: '위비티', url: 'https://www.wevity.com/?c=find&s=1&gub=1', parser: 'wevity' },
       { id: 'linkareer', name: '링커리어', url: 'https://linkareer.com/list/contest', parser: 'linkareer' },
+      { id: 'contestkorea', name: '콘테스트코리아', url: 'https://www.contestkorea.com/sub/list.php?int_gbn=1', parser: 'contestkorea' },
     ],
   },
 ];

@@ -7,6 +7,7 @@ export interface ScrapedItem {
   author?: string;
   postedAt?: Date;
   deadline?: Date;
+  startsAt?: Date;
 }
 
 export interface ParseCtx {
@@ -19,11 +20,19 @@ export interface ParseCtx {
   itemSelector?: string;
 }
 
+/** 상세 페이지에서 얻는 기간 */
+export interface ItemDetail {
+  startsAt?: Date;
+  deadline?: Date;
+}
+
 /** 게시판 형식별 파서. parse 는 순수 함수 (네트워크 없음). 새 형식 = 파일 1개 + index.ts 등록 */
 export interface Parser {
   readonly id: string;
   readonly label: string;
   parse(html: string, ctx: ParseCtx): ScrapedItem[];
+  /** 있으면 새 글마다 상세 페이지를 1번 읽어 접수기간 보충 */
+  parseDetail?(html: string, ctx: ParseCtx): ItemDetail;
 }
 
 export const clean = (s: string | undefined | null): string => (s ?? '').replace(/\s+/g, ' ').trim();

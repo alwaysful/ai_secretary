@@ -13,6 +13,18 @@ export function parseDate(text: string, tz: string): Date | undefined {
   return startOfLocalDay(y, mo, d, tz);
 }
 
+const DATE = String.raw`(\d{4}|\d{2})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})`;
+
+/** "접수기간 2026-11-17 ~ 2026-11-30" → 시작·마감 (마감은 그날 23:59:59.999) */
+export function parsePeriod(text: string, tz: string, label = '(?:접수|모집|신청|응모)\\s*기간'): { startsAt?: Date; deadline?: Date } {
+  const re = new RegExp(`${label}[^0-9]{0,20}(${DATE}[^~\\-–]{0,20})\\s*[~\\-–]\\s*(${DATE})`);
+  const m = re.exec(text);
+  if (!m) return {};
+  const start = parseDate(m[1], tz);
+  const end = parseDate(m[5], tz);
+  return { startsAt: start, deadline: end ? new Date(end.getTime() + DAY - 1) : undefined };
+}
+
 /** "D-8" → 오늘+8일, "D-day"/"오늘마감" → 오늘. 마감·없음 → undefined */
 export function parseDday(text: string, now: Date, tz: string): Date | undefined {
   const t = localParts(now, tz);

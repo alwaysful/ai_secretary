@@ -1,4 +1,5 @@
 import { pickCategories } from '../../src/ai/tools/scrape.tool';
+import { contestTags } from '../../src/scrape/tags';
 import { MergeablePost, mergePosts, normalizeTitle, samePost } from '../../src/scrape/merge';
 
 const d = (s: string) => new Date(s);
@@ -56,4 +57,13 @@ describe('pickCategories', () => {
     ['장학 소식', ['3']],
     ['새 소식 알려줘', ['1', '2', '3']],
   ])('%s', (t, ids) => expect(pickCategories(t, cats).map((c) => c.id)).toEqual(ids));
+});
+
+describe('contest tags', () => {
+  it.each([
+    ['광고/마케팅, 기타', '아무 제목', ['광고/마케팅']],
+    [null, '제5회 AI 해커톤 참가자 모집', ['IT/SW']],
+    ['요리/뷰티/배우/오디션', '오디션', ['예체능']],
+    [null, '그냥 행사', ['기타']],
+  ])('%s %s', (c, t, tags) => expect(contestTags(c, t)).toEqual(tags));
 });
