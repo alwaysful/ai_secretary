@@ -19,6 +19,7 @@ import { validateEnv } from './config/env';
 import { ConversationModule } from './conversation/conversation.module';
 import { HealthController } from './health/health.controller';
 import { PrismaModule } from './prisma/prisma.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { PrismaModule } from './prisma/prisma.module';
     PcControlModule,
     ToolsModule,
     StatsModule,
+    AdminModule,
   ],
   controllers: [HealthController],
 })

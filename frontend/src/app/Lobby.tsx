@@ -4,6 +4,7 @@ import type { PageId } from './App';
 import { api, ApiError, CalendarEvent, Health, NewsUnread } from '../shared/api';
 import { ThemeButton } from '../shared/theme';
 import { WebShortcuts } from './WebShortcuts';
+import { AdminGate } from '../features/admin/AdminGate';
 
 interface Item {
   id: PageId | null;
@@ -225,7 +226,7 @@ export function Lobby(props: { onNavigate: (p: PageId) => void }) {
   return (
     <div className="lobby-page">
       <div className="lobby-in">
-        <div className="logo">A</div>
+        <AdminGate onEnter={() => props.onNavigate('admin')} />
         <div className="meta">
           <span className="status">
             <span className={`dot ${dot}`} />

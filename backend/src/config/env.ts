@@ -55,6 +55,10 @@ export class EnvVars {
   @IsOptional() @IsString()
   SYSTEM_PROMPT: string = '너는 AURA, 사용자의 로컬 개인 비서다. 간결하고 정확하게 한국어로 답한다.';
 
+  /** 관리자 로비 코드. 비우면 내장 기본 코드(해시) */
+  @Transform(emptyToUndefined) @IsOptional() @IsString()
+  ADMIN_CODE?: string;
+
   /** 시각 표시 기준 시간대 (IANA) */
   @IsString()
   TIMEZONE: string = 'Asia/Seoul';

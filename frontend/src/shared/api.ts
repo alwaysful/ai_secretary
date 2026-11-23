@@ -424,8 +424,37 @@ export interface ApiUsageStats {
   daily: Record<string, number>[];
 }
 
+export interface AdminOverview {
+  server: { uptimeSec: number; node: string; platform: string; pid: number; rssMb: number; heapMb: number; loadAvg: number[]; freeMemMb: number; totalMemMb: number };
+  db: 'ok' | 'down';
+  model: { name: string; state: string; reachable: boolean; installed?: boolean; loaded?: boolean };
+  counts: Record<'conversations' | 'messages' | 'memories' | 'news' | 'study' | 'phone' | 'apiUsage', number> | null;
+  scrape: { id: string; name: string; enabled: boolean; lastRunAt: string | null; lastOkAt: string | null; lastError: string | null }[];
+  apiUsage30d: { provider: string; calls: number; inputTokens: number; outputTokens: number }[];
+  permissions: { pcControl: boolean; screenRead: boolean; mic: boolean; webcam: boolean };
+}
+export interface AdminLog {
+  at: string;
+  level: 'log' | 'error' | 'warn' | 'debug' | 'verbose' | 'fatal';
+  context: string;
+  message: string;
+}
+export type AdminResetKind = 'conversations' | 'memories' | 'news' | 'study' | 'phone' | 'apiUsage';
+
+const adminH = (t: string) => ({ Authorization: `Bearer ${t}` });
+
 export const api = {
   health: () => req<Health>('/health'),
+  adminLogin: (code: string) => req<{ token: string; expiresAt: string }>('/admin/login', { method: 'POST', body: JSON.stringify({ code }) }),
+  adminLogout: (t: string) => req<void>('/admin/logout', { method: 'POST', headers: adminH(t) }),
+  adminOverview: (t: string) => req<AdminOverview>('/admin/overview', { headers: adminH(t) }),
+  adminLogs: (t: string, level?: string) => req<AdminLog[]>(`/admin/logs?limit=150${level ? `&level=${level}` : ''}`, { headers: adminH(t) }),
+  adminRefreshNews: (t: string) => req<{ ok: boolean }>('/admin/scrape/refresh', { method: 'POST', headers: adminH(t) }),
+  adminPermissions: (t: string, p: Partial<AdminOverview['permissions']>) =>
+    req<unknown>('/admin/permissions', { method: 'PUT', headers: adminH(t), body: JSON.stringify(p) }),
+  adminReset: (t: string, kind: AdminResetKind) =>
+    req<{ deleted: number }>(`/admin/data/${kind}?confirm=${kind}`, { method: 'DELETE', headers: adminH(t) }),
+  adminBackup: (t: string) => req<unknown>('/admin/backup', { headers: adminH(t) }),
   warmup: () => req<{ state: string }>('/health/warmup', { method: 'POST' }),
   conversations: (q?: string) =>
     req<Conversation[]>(q ? `/conversations?q=${encodeURIComponent(q)}` : '/conversations'),
