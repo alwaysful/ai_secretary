@@ -53,6 +53,10 @@ model AppSettings {
   id           Int      @id @default(1)
   model        String?
   systemPrompt String?
+  /// AI PC 조작(마우스·키보드) 허용
+  pcControl    Boolean  @default(true)
+  /// 화면 읽기(스크린샷 분석) 허용. 끄면 공부 화면 감시·PC 조작 불가
+  screenRead   Boolean  @default(true)
   updatedAt    DateTime @updatedAt
 }
 

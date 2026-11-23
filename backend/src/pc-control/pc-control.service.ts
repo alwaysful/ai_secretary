@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -14,6 +15,7 @@ import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { EnvVars } from '../config/env';
+import { SettingsService } from '../settings/settings.service';
 import { describe, parseDecision } from './pc-action';
 import { PcAgentProcess } from './pc-agent.process';
 
@@ -91,13 +93,22 @@ export class PcControlService implements OnModuleDestroy {
   private readonly pending = new Map<string, PendingAction>();
   private checkCache: { at: number; value: { ok: boolean; detail: string } } | null = null;
 
-  constructor(config: ConfigService<EnvVars, true>) {
+  constructor(
+    config: ConfigService<EnvVars, true>,
+    private readonly settings: SettingsService,
+  ) {
     this.baseUrl = config.get('OLLAMA_BASE_URL', { infer: true }).replace(/\/$/, '');
     this.model = config.get('PC_VISION_MODEL', { infer: true }) || config.get('STUDY_VISION_MODEL', { infer: true });
     this.python = config.get('PC_PYTHON', { infer: true }) || (process.platform === 'win32' ? 'python' : 'python3');
     this.maxSteps = config.get('PC_MAX_STEPS', { infer: true }) ?? MAX_STEPS_DEFAULT;
     const candidates = [resolve(process.cwd(), '..', 'pc-agent', 'agent.py'), resolve(process.cwd(), 'pc-agent', 'agent.py')];
     this.script = candidates.find((p) => existsSync(p)) ?? candidates[0];
+    // 스위치 끄면 실행 중 작업 정지, 대기 카드 삭제
+    settings.onPermissionsChange?.((p) => {
+      if (p.pcControl && p.screenRead) return;
+      this.cancel(p.screenRead ? '설정에서 PC 조작 끔' : '설정에서 화면 읽기 끔');
+      this.pending.clear();
+    });
   }
 
   current(): PcRun | null {
@@ -123,7 +134,15 @@ export class PcControlService implements OnModuleDestroy {
     });
   }
 
+  get enabled(): boolean {
+    return this.settings.pcControl();
+  }
+
   start(goal: string): PcRun {
+    if (!this.settings.screenRead()) {
+      throw new ForbiddenException({ code: 'SCREEN_READ_OFF', message: '화면 읽기 꺼짐. PC 조작은 화면을 봐야 함 (설정에서 켜기)' });
+    }
+    if (!this.enabled) throw new ForbiddenException({ code: 'PC_CONTROL_OFF', message: 'PC 조작 꺼짐 (설정에서 켜기)' });
     goal = goal.trim();
     if (!goal) throw new BadRequestException('목표 없음');
     if (this.busy) throw new ConflictException('이미 실행 중');
@@ -150,6 +169,7 @@ export class PcControlService implements OnModuleDestroy {
 
   /** 채팅 명령 → 확인 대기 작업 */
   plan(text: string, conversationId: string | null): ActionPlan | null {
+    if (!this.enabled) return null;
     const goal = pcGoal(text)?.slice(0, 500);
     if (!goal) return null;
     this.prune();
@@ -236,6 +256,7 @@ export class PcControlService implements OnModuleDestroy {
       let parseErrors = 0;
       for (let n = 1; n <= this.maxSteps; n++) {
         if (signal.aborted) return;
+        if (!this.enabled) return this.finish(run, 'cancelled', '설정에서 꺼짐');
         const shot = await agent.screenshot();
         if (signal.aborted) return;
         const text = await this.ask(run.goal, history, shot.image, signal);

@@ -19,9 +19,15 @@ export function PcControlPage(props: { onBack: () => void }) {
   const [check, setCheck] = useState<PcCheck | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [offReason, setOffReason] = useState('');
 
   useEffect(() => {
-    if (!isNative()) api.pcCheck().then(setCheck, (e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+    if (isNative()) return;
+    api.pcCheck().then(setCheck, (e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+    api.settings().then(
+      (s) => setOffReason(!s.screenRead ? '화면 읽기 꺼짐' : !s.pcControl ? 'PC 조작 꺼짐' : ''),
+      () => undefined,
+    );
   }, []);
 
   const start = async () => {
@@ -96,12 +102,13 @@ export function PcControlPage(props: { onBack: () => void }) {
                 ■ 정지 (Esc)
               </button>
             ) : (
-              <button className="primary" onClick={() => void start()} disabled={!goal.trim() || busy || check?.ok === false}>
+              <button className="primary" onClick={() => void start()} disabled={!goal.trim() || busy || check?.ok === false || !!offReason}>
                 ▶ 시작
               </button>
             )}
           </div>
           <p className="muted">중지: Esc · Ctrl+Alt+X · 마우스를 화면 모서리로 · 정지 버튼. 채팅에서 "PC: 할 일"로도 가능.</p>
+          {offReason && <p className="error">{offReason}. 설정 → 권한에서 켜기.</p>}
           {check && !check.ok && (
             <p className="error">
               Python 준비 안 됨: {check.detail}

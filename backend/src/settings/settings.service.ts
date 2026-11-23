@@ -4,9 +4,18 @@ import { BaseModel, ModelError } from '../ai/models/base-model';
 import { EnvVars } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 
+export interface Permissions {
+  pcControl: boolean;
+  screenRead: boolean;
+}
+
 export interface SettingsView {
   model: string;
   systemPrompt: string;
+  /** AI PC 조작 허용 */
+  pcControl: boolean;
+  /** 화면 읽기 허용 */
+  screenRead: boolean;
   defaults: { model: string; systemPrompt: string };
 }
 
@@ -15,6 +24,9 @@ export interface SettingsView {
 export class SettingsService implements OnModuleInit {
   private readonly log = new Logger(SettingsService.name);
   private prompt: string | null = null;
+  private pc = true;
+  private screen = true;
+  private readonly listeners: ((p: Permissions) => void)[] = [];
 
   constructor(
     private readonly prisma: PrismaService,
@@ -26,6 +38,8 @@ export class SettingsService implements OnModuleInit {
     try {
       const row = await this.prisma.appSettings.findUnique({ where: { id: 1 } });
       this.prompt = row?.systemPrompt ?? null;
+      this.pc = row?.pcControl ?? true;
+      this.screen = row?.screenRead ?? true;
       if (row?.model) {
         await this.model.switchTo(row.model).catch((e: Error) => this.log.warn(`saved model unavailable: ${e.message}`));
       }
@@ -38,10 +52,38 @@ export class SettingsService implements OnModuleInit {
     return this.prompt ?? this.config.get('SYSTEM_PROMPT', { infer: true });
   }
 
+  /** PC 조작: 스위치 켜짐 + 화면 읽기 켜짐 둘 다 필요 */
+  pcControl(): boolean {
+    return this.pc && this.screen;
+  }
+
+  screenRead(): boolean {
+    return this.screen;
+  }
+
+  onPermissionsChange(cb: (p: Permissions) => void): void {
+    this.listeners.push(cb);
+  }
+
+  async setPermissions(input: Partial<Permissions>): Promise<SettingsView> {
+    const data = {
+      ...(input.pcControl !== undefined ? { pcControl: input.pcControl } : {}),
+      ...(input.screenRead !== undefined ? { screenRead: input.screenRead } : {}),
+    };
+    await this.prisma.appSettings.upsert({ where: { id: 1 }, create: { id: 1, ...data }, update: data });
+    if (data.pcControl !== undefined) this.pc = data.pcControl;
+    if (data.screenRead !== undefined) this.screen = data.screenRead;
+    const now = { pcControl: this.pc, screenRead: this.screen };
+    for (const cb of this.listeners) cb(now);
+    return this.get();
+  }
+
   get(): SettingsView {
     return {
       model: this.model.name,
       systemPrompt: this.systemPrompt(),
+      pcControl: this.pc,
+      screenRead: this.screen,
       defaults: {
         model: this.config.get('OLLAMA_MODEL', { infer: true }),
         systemPrompt: this.config.get('SYSTEM_PROMPT', { infer: true }),

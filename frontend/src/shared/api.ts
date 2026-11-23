@@ -152,6 +152,10 @@ export interface NewsPreview {
 export interface Settings {
   model: string;
   systemPrompt: string;
+  /** AI PC 조작 허용 */
+  pcControl: boolean;
+  /** 화면 읽기(스크린샷 분석) 허용 */
+  screenRead: boolean;
   defaults: { model: string; systemPrompt: string };
 }
 
@@ -321,6 +325,8 @@ export const api = {
   settings: () => req<Settings>('/settings'),
   saveSettings: (s: { model?: string; systemPrompt?: string }) =>
     req<Settings>('/settings', { method: 'PUT', body: JSON.stringify(s) }),
+  savePermissions: (p: { pcControl?: boolean; screenRead?: boolean }) =>
+    req<Settings>('/settings/permissions', { method: 'PUT', body: JSON.stringify(p) }),
   models: () => req<string[]>('/settings/models'),
   actions: (conversationId: string) => req<PendingAction[]>(`/actions?conversationId=${conversationId}`),
   memories: (q?: string) => req<Memory[]>(q ? `/memories?q=${encodeURIComponent(q)}` : '/memories'),

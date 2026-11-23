@@ -35,7 +35,7 @@ function setup() {
     get: (k: string) => ({ HISTORY_LIMIT: 20, SYSTEM_PROMPT: 'sys' })[k as 'HISTORY_LIMIT'],
   };
   const tools = { contextFor: jest.fn().mockResolvedValue(null) };
-  const settings: any = { systemPrompt: () => 'sys' };
+  const settings: any = { systemPrompt: () => 'sys', pcControl: () => true };
   const actions: any = { plan: jest.fn().mockResolvedValue(null) };
   const memory: any = { plan: jest.fn().mockResolvedValue(null), context: jest.fn().mockResolvedValue(null) };
   const pc: any = { plan: jest.fn().mockReturnValue(null) };

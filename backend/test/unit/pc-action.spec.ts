@@ -20,7 +20,7 @@ describe('parseDecision', () => {
 
 describe('PcControlService.plan', () => {
   const config: any = { get: (k: string) => ({ OLLAMA_BASE_URL: 'http://x', STUDY_VISION_MODEL: 'v', PC_MAX_STEPS: 5 })[k] };
-  const svc = new PcControlService(config);
+  const svc = new PcControlService(config, { pcControl: () => true, screenRead: () => true } as any);
   it('명령어만 매칭', () => {
     expect(svc.plan('PC: 메모장 열어', 'c1')?.action?.pc?.goal).toBe('메모장 열어');
     expect(svc.plan('/pc 크롬 켜', 'c1')?.action?.kind).toBe('pc.run');
@@ -75,6 +75,26 @@ describe('닫는 태그 없는 영어 추론', () => {
   });
   it('PC 명령은 고정 답변', () => {
     const cfg: any = { get: (k: string) => ({ OLLAMA_BASE_URL: 'http://x', STUDY_VISION_MODEL: 'v' })[k] };
-    expect(new PcControlService(cfg).plan('PC: 메모장 켜', null)?.reply).toContain('시작');
+    expect(new PcControlService(cfg, { pcControl: () => true, screenRead: () => true } as any).plan('PC: 메모장 켜', null)?.reply).toContain('시작');
+  });
+});
+
+describe('스위치 꺼짐', () => {
+  const cfg: any = { get: (k: string) => ({ OLLAMA_BASE_URL: 'http://x', STUDY_VISION_MODEL: 'v' })[k] };
+  it('PC 조작 끄면 카드 없음·시작 거부', () => {
+    const svc = new PcControlService(cfg, { pcControl: () => false, screenRead: () => true } as any);
+    expect(svc.plan('PC: 메모장 켜', null)).toBeNull();
+    expect(() => svc.start('메모장')).toThrow('PC 조작 꺼짐');
+  });
+  it('화면 읽기 끄면 시작 거부', () => {
+    const svc = new PcControlService(cfg, { pcControl: () => false, screenRead: () => false } as any);
+    expect(() => svc.start('메모장')).toThrow('화면 읽기 꺼짐');
+  });
+  it('끄면 실행 중 취소', () => {
+    let cb: any;
+    const svc = new PcControlService(cfg, { pcControl: () => true, screenRead: () => true, onPermissionsChange: (f: any) => (cb = f) } as any);
+    const cancel = jest.spyOn(svc, 'cancel');
+    cb({ pcControl: false, screenRead: true });
+    expect(cancel).toHaveBeenCalledWith('설정에서 PC 조작 끔');
   });
 });

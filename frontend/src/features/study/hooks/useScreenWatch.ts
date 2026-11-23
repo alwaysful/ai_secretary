@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { api } from '../../../shared/api';
 import { studyApi, type ScreenCheck } from '../api/study';
 import { errorText } from '../format';
 import { pickSlackMessage } from '../lib/hints';
@@ -30,6 +31,14 @@ export function useScreenWatch(paused = false) {
   const start = useCallback(async () => {
     if (stopRef.current) return;
     setError(null);
+    const allowed = await api.settings().then(
+      (s) => s.screenRead,
+      () => true,
+    );
+    if (!allowed) {
+      setError('화면 읽기 꺼짐. 설정 → 권한에서 켜기.');
+      return;
+    }
 
     let session: ScreenSession;
     try {
