@@ -27,6 +27,13 @@ export interface StatsBucket extends Omit<StudySession, 'id' | 'startedAt' | 'en
   phoneApp: number;
 }
 
+export interface PhoneSetup {
+  /** false: backend HOST 가 127.0.0.1 → 폰 접속 불가 */
+  reachable: boolean;
+  host: string;
+  addresses: { url: string; kind: 'tailscale' | 'lan'; iface: string }[];
+}
+
 export interface PhoneEvent {
   id: string;
   at: string;
@@ -47,6 +54,8 @@ export const studyApi = {
 
   phoneEvents: (since: string) =>
     request<PhoneEvent[]>(`/study/phone-events?since=${encodeURIComponent(since)}`),
+
+  phoneSetup: () => request<PhoneSetup>('/study/phone-setup'),
 
   screenCheck: (image: string) =>
     request<ScreenCheck>('/study/screen-check', {

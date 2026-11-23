@@ -7,6 +7,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
 import android.provider.Settings;
 import androidx.core.app.NotificationManagerCompat;
 import com.getcapacitor.JSArray;
@@ -38,6 +39,8 @@ public class PhoneWatchPlugin extends Plugin {
         r.put("notificationsGranted", NotificationManagerCompat.from(ctx).areNotificationsEnabled());
         r.put("running", PhoneWatchService.running);
         r.put("live", PhoneWatchService.live);
+        r.put("batteryUnrestricted", batteryUnrestricted(ctx));
+        r.put("samsung", "samsung".equalsIgnoreCase(Build.MANUFACTURER));
         String fg = PhoneWatchService.foreground;
         if (fg == null && UsageReader.granted(ctx)) fg = UsageReader.foreground(ctx, 60_000, null);
         r.put("foreground", fg);
@@ -45,29 +48,38 @@ public class PhoneWatchPlugin extends Plugin {
         call.resolve(r);
     }
 
+    /** 사용 정보 접근: 가능하면 AURA 항목으로 바로 이동 (삼성 One UI 지원) */
     @PluginMethod
     public void openUsageSettings(PluginCall call) {
-        Intent i = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS);
-        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        try {
-            getContext().startActivity(i);
-        } catch (RuntimeException e) {
-            getContext().startActivity(appDetails());
-        }
-        call.resolve();
+        Intent direct = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS, pkgUri());
+        Intent list = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS);
+        open(call, direct, list, appDetails());
     }
 
     @PluginMethod
-    public void openBatterySettings(PluginCall call) {
-        Intent i = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
-        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        try {
-            getContext().startActivity(i);
-        } catch (RuntimeException e) {
-            getContext().startActivity(appDetails());
-        }
-        call.resolve();
+    public void openNotificationSettings(PluginCall call) {
+        Intent i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+        i.putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName());
+        open(call, i, appDetails());
     }
+
+    /** 앱 정보 (삼성: 배터리 → 제한 없음, 사용하지 않는 앱 일시정지 해제) */
+    @PluginMethod
+    public void openAppDetails(PluginCall call) {
+        open(call, appDetails());
+    }
+
+    /** 시스템 팝업 한 번으로 배터리 최적화 제외 (삼성: 제한 없음) */
+    @PluginMethod
+    public void requestBatteryUnrestricted(PluginCall call) {
+        if (batteryUnrestricted(getContext())) {
+            call.resolve();
+            return;
+        }
+        Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, pkgUri());
+        open(call, i, new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS), appDetails());
+    }
+
 
     @PluginMethod
     public void requestNotifications(PluginCall call) {
@@ -80,6 +92,17 @@ public class PhoneWatchPlugin extends Plugin {
 
     @PermissionCallback
     private void notifCallback(PluginCall call) {
+        // 두 번 거절하면 팝업이 안 뜬다 → 알림 설정으로
+        if (!NotificationManagerCompat.from(getContext()).areNotificationsEnabled()) {
+            Intent i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+            i.putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName());
+            i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try {
+                getContext().startActivity(i);
+            } catch (RuntimeException ignored) {
+                // 무시
+            }
+        }
         resolveNotif(call);
     }
 
@@ -161,9 +184,58 @@ public class PhoneWatchPlugin extends Plugin {
         call.resolve(r);
     }
 
+    /** PC 화면 QR (aura://setup?api=...) 로 열렸을 때 */
+    @Override
+    public void load() {
+        if (getActivity() != null) handleSetupIntent(getActivity().getIntent());
+    }
+
+    @Override
+    protected void handleOnNewIntent(Intent intent) {
+        super.handleOnNewIntent(intent);
+        handleSetupIntent(intent);
+    }
+
+    private void handleSetupIntent(Intent intent) {
+        if (intent == null || intent.getData() == null) return;
+        Uri u = intent.getData();
+        if (!"aura".equals(u.getScheme()) || !"setup".equals(u.getHost())) return;
+        String api = u.getQueryParameter("api");
+        if (api == null || !(api.startsWith("http://") || api.startsWith("https://"))) return;
+        PhoneWatchConfig c = PhoneWatchConfig.load(getContext());
+        c.backendUrl = api;
+        c.save(getContext());
+        JSObject r = new JSObject();
+        r.put("backendUrl", c.base());
+        notifyListeners("setup", r, true);
+    }
+
+    private static boolean batteryUnrestricted(Context ctx) {
+        PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+        return pm != null && pm.isIgnoringBatteryOptimizations(ctx.getPackageName());
+    }
+
+    private Uri pkgUri() {
+        return Uri.parse("package:" + getContext().getPackageName());
+    }
+
+    /** 앞에서부터 열리는 화면 시도 */
+    private void open(PluginCall call, Intent... intents) {
+        for (Intent i : intents) {
+            i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try {
+                getContext().startActivity(i);
+                call.resolve();
+                return;
+            } catch (RuntimeException ignored) {
+                // 다음 후보
+            }
+        }
+        call.reject("설정 화면을 열 수 없음");
+    }
+
     private Intent appDetails() {
         Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getContext().getPackageName()));
-        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         return i;
     }
 

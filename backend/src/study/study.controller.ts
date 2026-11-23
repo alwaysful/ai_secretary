@@ -1,7 +1,10 @@
+import { ConfigService } from '@nestjs/config';
 import { Body, Controller, Get, HttpCode, Post, Put, Query } from '@nestjs/common';
 import { LiveDto, PhoneEventDto, PhoneEventsQueryDto } from './dto/phone.dto';
 import { ScreenCheckDto, ScreenCheckResponseDto } from './dto/screen-check.dto';
 import { StatsQueryDto, StudySessionDto } from './dto/session.dto';
+import { EnvVars } from '../config/env';
+import { setupAddresses } from './phone-setup';
 import { PhoneService } from './phone.service';
 import { StudyStatsService } from './study-stats.service';
 import { StudyService } from './study.service';
@@ -13,6 +16,7 @@ export class StudyController {
     private readonly study: StudyService,
     private readonly statsService: StudyStatsService,
     private readonly phone: PhoneService,
+    private readonly config: ConfigService<EnvVars, true>,
   ) {}
 
   @Post('screen-check')
@@ -31,6 +35,17 @@ export class StudyController {
   @Get('stats')
   stats(@Query() q: StatsQueryDto) {
     return this.statsService.stats(q.unit, q.count);
+  }
+
+  /** 폰 연결 QR용 PC 주소 후보. HOST 가 127.0.0.1 이면 폰에서 접속 불가 */
+  @Get('phone-setup')
+  phoneSetup() {
+    const host = this.config.get('HOST', { infer: true });
+    return {
+      reachable: host !== '127.0.0.1' && host !== 'localhost',
+      host,
+      addresses: setupAddresses(this.config.get('PORT', { infer: true })),
+    };
   }
 
   /** PC 공부 세션 heartbeat. 폰 앱이 GET 으로 확인 */

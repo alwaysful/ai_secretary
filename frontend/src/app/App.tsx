@@ -3,11 +3,14 @@ import { Briefing } from '../features/briefing/Briefing';
 import { Chat } from '../features/chat/Chat';
 import { Lobby } from './Lobby';
 import { MailPage } from '../features/mail/MailPage';
-import { PhonePage } from '../features/phone/PhonePage';
 import { MemoryPage } from '../features/memory/MemoryPage';
 import { Schedule } from '../features/schedule/Schedule';
 import { SettingsPage } from '../features/settings/SettingsPage';
+import { getBackendUrl, isNative } from '../shared/backend';
 import { ShortcutHelp, useGlobalShortcuts } from './Shortcuts';
+
+/** 폰 감시: QR 라이브러리 포함 */
+const PhonePage = lazy(() => import('../features/phone/PhonePage').then((m) => ({ default: m.PhonePage })));
 
 /** 공부 집중: mediapipe 포함, 필요할 때만 로드 */
 const StudyPage = lazy(() => import('../features/study/pages/StudyView').then((m) => ({ default: m.StudyPage })));
@@ -35,7 +38,11 @@ function Page(props: { page: PageId; go: (p: PageId) => void }) {
         </Suspense>
       );
     case 'phone':
-      return <PhonePage onBack={back} />;
+      return (
+        <Suspense fallback={null}>
+          <PhonePage onBack={back} />
+        </Suspense>
+      );
     case 'mail':
       return <MailPage onBack={back} />;
     default:
@@ -44,7 +51,8 @@ function Page(props: { page: PageId; go: (p: PageId) => void }) {
 }
 
 export function App() {
-  const [page, setPage] = useState<PageId>('lobby');
+  // Android 앱 첫 실행: 폰 설정부터
+  const [page, setPage] = useState<PageId>(() => (isNative() && !getBackendUrl() ? 'phone' : 'lobby'));
   const { help, closeHelp } = useGlobalShortcuts(setPage);
   return (
     <>
