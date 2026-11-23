@@ -32,7 +32,7 @@ export function useNewsNotify(onOpen: () => void) {
         // 처음 실행: 기준점만 저장
         if (!last || u.latest <= last || u.total === 0) return;
         if (!newsNotifySupported() || Notification.permission !== 'granted') return;
-        const parts = [u.notice && `학사공지 ${u.notice}`, u.contest && `공모전 ${u.contest}`].filter(Boolean);
+        const parts = u.byCategory.filter((c) => c.count > 0).map((c) => `${c.name} ${c.count}`);
         try {
           const n = new Notification('AURA 새 소식', { body: `안 읽은 글: ${parts.join(', ')}`, tag: 'aura-news' });
           n.onclick = () => {
