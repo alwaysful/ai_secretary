@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 import './app/styles.css';
 import './app/mobile.css';
+import './app/bento.css';
 import { applyTheme } from './shared/theme';
 
 applyTheme();

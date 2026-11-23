@@ -49,6 +49,83 @@ export interface Memory {
   updatedAt: string;
 }
 
+export interface WebShortcut {
+  id: string;
+  title: string;
+  url: string;
+  position: number;
+}
+
+/** 새 소식: 합쳐진 글의 사이트별 링크 */
+export interface NewsLink {
+  id: string;
+  siteId: string;
+  siteName: string;
+  url: string;
+}
+
+/** 카테고리 안 중복을 합친 글 */
+export interface NewsItem {
+  key: string;
+  title: string;
+  unread: boolean;
+  links: NewsLink[];
+  category: string | null;
+  author: string | null;
+  postedAt: string | null;
+  deadline: string | null;
+  /** 접수 시작일 (공모전) */
+  startsAt: string | null;
+  createdAt: string;
+  categoryId: string | null;
+  /** 공모전 분야 태그 */
+  tags: string[];
+}
+
+export interface NewsSite {
+  id: string;
+  name: string;
+  url: string;
+  parser: string;
+  itemSelector: string | null;
+  categoryId: string | null;
+  enabled: boolean;
+  lastRunAt: string | null;
+  lastOkAt: string | null;
+  lastError: string | null;
+  lastNew: number;
+  unread: number;
+}
+
+export interface NewsCategory {
+  /** null = 미분류 */
+  id: string | null;
+  name: string;
+  sites: NewsSite[];
+}
+
+export interface NewsUnread {
+  total: number;
+  byCategory: { id: string | null; name: string; count: number }[];
+  latest: string | null;
+}
+
+export interface NewsSiteInput {
+  name?: string;
+  url?: string;
+  parser?: string;
+  itemSelector?: string | null;
+  categoryId?: string | null;
+  enabled?: boolean;
+}
+
+export interface NewsPreview {
+  parser: string;
+  parserLabel: string;
+  count: number;
+  items: { title: string; url: string; postedAt?: string; deadline?: string }[];
+}
+
 export interface Settings {
   model: string;
   systemPrompt: string;
@@ -197,7 +274,7 @@ async function call(path: string, init?: RequestInit): Promise<Response> {
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await call(path, {
     ...init,
-    headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
+    headers: { ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...(init?.headers as Record<string, string> | undefined) },
   });
   if (!res.ok) throw await failure(res);
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
@@ -229,6 +306,46 @@ export const api = {
   updateMemory: (id: string, m: { content?: string; category?: string; enabled?: boolean }) =>
     req<Memory>(`/memories/${id}`, { method: 'PATCH', body: JSON.stringify(m) }),
   deleteMemory: (id: string) => req<void>(`/memories/${id}`, { method: 'DELETE' }),
+  shutdown: () => req<{ status: string }>('/system/shutdown', { method: 'POST', headers: { 'X-Aura-Shutdown': '1' } }),
+  newsFeed: (q: { categoryId?: string; tag?: string; unread?: boolean; q?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '' && v !== false) p.set(k, String(v));
+    return req<NewsItem[]>(`/scrape/feed?${p}`);
+  },
+  newsCalendar: (q: { from: Date; to: Date; categoryId?: string; tag?: string }) => {
+    const p = new URLSearchParams({ from: q.from.toISOString(), to: q.to.toISOString() });
+    if (q.categoryId) p.set('categoryId', q.categoryId);
+    if (q.tag) p.set('tag', q.tag);
+    return req<NewsItem[]>(`/scrape/calendar?${p}`);
+  },
+  newsTags: () => req<string[]>('/scrape/tags'),
+  newsUnread: () => req<NewsUnread>('/scrape/unread'),
+  newsCategories: () => req<NewsCategory[]>('/scrape/categories'),
+  newsParsers: () => req<{ id: string; label: string }[]>('/scrape/parsers'),
+  newsRefresh: (site?: string) =>
+    req<NewsCategory[]>(`/scrape/refresh${site ? `?site=${encodeURIComponent(site)}` : ''}`, { method: 'POST' }),
+  newsSeen: (b: { ids?: string[]; categoryId?: string }) =>
+    req<{ count: number }>('/scrape/seen', { method: 'POST', body: JSON.stringify(b) }),
+  newsCreateCategory: (name: string) =>
+    req<NewsCategory[]>('/scrape/categories', { method: 'POST', body: JSON.stringify({ name }) }),
+  newsUpdateCategory: (id: string, b: { name?: string; position?: number }) =>
+    req<NewsCategory[]>(`/scrape/categories/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
+  newsDeleteCategory: (id: string) => req<NewsCategory[]>(`/scrape/categories/${id}`, { method: 'DELETE' }),
+  newsCreateSite: (b: NewsSiteInput & { url: string }) =>
+    req<NewsCategory[]>('/scrape/sites', { method: 'POST', body: JSON.stringify(b) }),
+  newsUpdateSite: (id: string, b: NewsSiteInput) =>
+    req<NewsCategory[]>(`/scrape/sites/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(b) }),
+  newsDeleteSite: (id: string) => req<NewsCategory[]>(`/scrape/sites/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  newsPreview: (b: { url: string; parser?: string; itemSelector?: string | null }) =>
+    req<NewsPreview>('/scrape/preview', { method: 'POST', body: JSON.stringify(b) }),
+  shortcuts: () => req<WebShortcut[]>('/shortcuts'),
+  createShortcut: (s: { url: string; title?: string }) =>
+    req<WebShortcut>('/shortcuts', { method: 'POST', body: JSON.stringify(s) }),
+  updateShortcut: (id: string, s: { url?: string; title?: string }) =>
+    req<WebShortcut>(`/shortcuts/${id}`, { method: 'PATCH', body: JSON.stringify(s) }),
+  deleteShortcut: (id: string) => req<void>(`/shortcuts/${id}`, { method: 'DELETE' }),
+  reorderShortcuts: (ids: string[]) =>
+    req<WebShortcut[]>('/shortcuts/order', { method: 'PUT', body: JSON.stringify({ ids }) }),
   deleteAllMemories: () => req<{ deleted: number }>('/memories?confirm=all', { method: 'DELETE' }),
   confirmAction: (id: string) => req<{ subject?: string; content?: string; deleted?: string }>(`/actions/${id}/confirm`, { method: 'POST' }),
   cancelAction: (id: string) => req<void>(`/actions/${id}`, { method: 'DELETE' }),

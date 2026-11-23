@@ -56,6 +56,10 @@ export class EnvVars {
   /** 대화 중 메일 요청 시 기본으로 읽을 메일 수 */
   @Type(() => Number) @IsInt() @Min(1) @Max(10)
   MAIL_CONTEXT_COUNT: number = 5;
+
+  /** 웹 스크래핑(학사공지·공모전) 주기(분). 0 = 자동 실행 끔 */
+  @Type(() => Number) @IsInt() @Min(0) @Max(1440)
+  SCRAPE_INTERVAL_MIN: number = 60;
 }
 
 export function validateEnv(raw: Record<string, unknown>): EnvVars {
@@ -74,6 +78,9 @@ export function validateEnv(raw: Record<string, unknown>): EnvVars {
     new Intl.DateTimeFormat('en', { timeZone: env.TIMEZONE });
   } catch {
     throw new Error(`Invalid environment: TIMEZONE: unknown time zone ${env.TIMEZONE}`);
+  }
+  if (env.SCRAPE_INTERVAL_MIN > 0 && env.SCRAPE_INTERVAL_MIN < 15) {
+    throw new Error('Invalid environment: SCRAPE_INTERVAL_MIN must be 0 or >= 15 (사이트 부하 방지)');
   }
   return env;
 }

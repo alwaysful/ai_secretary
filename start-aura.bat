@@ -29,12 +29,7 @@ if errorlevel 1 (
 )
 timeout /t 5 /nobreak >nul
 
-if not exist backend\prisma\migrations (
-  echo 첫 실행: DB 마이그레이션
-  pushd backend
-  call npx prisma migrate dev --name init
-  popd
-)
+rem 마이그레이션·generate는 npm run dev(scripts/dev.mjs)가 자동 실행
 
 curl -s -o nul http://127.0.0.1:11434
 if errorlevel 1 (
@@ -44,4 +39,5 @@ if errorlevel 1 (
 
 start "" /min cmd /c "timeout /t 10 /nobreak >nul & start http://127.0.0.1:5173"
 call npm run dev
+echo AURA 종료됨. 다시 켜려면 start-aura.bat 실행.
 pause

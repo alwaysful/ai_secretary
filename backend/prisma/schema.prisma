@@ -98,3 +98,80 @@ model PhoneEvent {
 
   @@index([at])
 }
+
+/// 로비 웹사이트 바로가기 (크롬 새 탭처럼)
+model WebShortcut {
+  id        String   @id @default(uuid()) @db.Uuid
+  title     String
+  url       String
+  /// 표시 순서 (작을수록 앞)
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([position])
+}
+
+/// 웹 스크래핑으로 모은 글 (학사공지·공모전 등). source+externalId 로 중복 방지.
+model ScrapedPost {
+  id         String    @id @default(uuid()) @db.Uuid
+  /// NewsSite.id
+  source     String
+  /// 사이트의 글 번호
+  externalId String
+  title      String
+  url        String
+  /// 분류 (장학/납입금, 공모 분야 등)
+  category   String?
+  /// 작성자·주최사
+  author     String?
+  /// 게시일
+  postedAt   DateTime?
+  /// 마감일 (공모전)
+  deadline   DateTime?
+  /// 접수 시작일 (공모전, 상세 페이지에서 보충)
+  startsAt   DateTime?
+  /// 상세 페이지 확인 시각. null = 아직
+  detailAt   DateTime?
+  /// 읽음 처리 시각. null = 새 글
+  seenAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@unique([source, externalId])
+  @@index([source, createdAt])
+  @@index([seenAt])
+  @@index([deadline])
+}
+
+/// 새 소식 카테고리 (예: 학사공지, 공모전). 카테고리 안에서 같은 글은 하나로 합쳐 보여줌.
+model NewsCategory {
+  id        String     @id @default(uuid()) @db.Uuid
+  name      String
+  position  Int        @default(0)
+  createdAt DateTime   @default(now())
+  sites     NewsSite[]
+}
+
+/// 스크래핑할 게시판 1개. 기본 사이트는 고정 id(gist-academic 등), 사용자가 추가한 건 uuid.
+model NewsSite {
+  id           String        @id
+  name         String
+  url          String
+  /// 파서: auto | gist | kboard | egov | rss | wevity | linkareer
+  parser       String        @default("auto")
+  /// 선택: 글 링크 CSS 선택자 (auto 파서가 못 찾을 때)
+  itemSelector String?
+  categoryId   String?       @db.Uuid
+  category     NewsCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  enabled      Boolean       @default(true)
+  position     Int           @default(0)
+  lastRunAt    DateTime?
+  lastOkAt     DateTime?
+  lastError    String?
+  /// 마지막 실행에서 새로 찾은 글 수
+  lastNew      Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([categoryId, position])
+}

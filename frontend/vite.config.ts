@@ -36,6 +36,8 @@ export default defineConfig({
       '/api': {
         target: process.env.AURA_API ?? 'http://127.0.0.1:3000',
         changeOrigin: true,
+        // 백엔드가 원래 접속 IP 확인 (서버 종료 = PC만)
+        xfwd: true,
         rewrite: (p) => p.replace(/^\/api/, ''),
       },
     },

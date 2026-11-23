@@ -7,6 +7,9 @@ import { CalendarModule } from './calendar/calendar.module';
 import { ModelHubModule } from './model-hub/model-hub.module';
 import { MemoryModule } from './memory/memory.module';
 import { StudyModule } from './study/study.module';
+import { ShortcutModule } from './shortcut/shortcut.module';
+import { ScrapeModule } from './scrape/scrape.module';
+import { SystemModule } from './system/system.module';
 import { SettingsModule } from './settings/settings.module';
 import { validateEnv } from './config/env';
 import { ConversationModule } from './conversation/conversation.module';
@@ -25,6 +28,9 @@ import { PrismaModule } from './prisma/prisma.module';
     BriefingModule,
     MemoryModule,
     StudyModule,
+    ShortcutModule,
+    ScrapeModule,
+    SystemModule,
     ModelHubModule,
   ],
   controllers: [HealthController],

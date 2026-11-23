@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { isNative } from '../shared/backend';
 import type { PageId } from './App';
-import { api, ApiError, CalendarEvent, Health } from '../shared/api';
+import { api, ApiError, CalendarEvent, Health, NewsUnread } from '../shared/api';
 import { ThemeButton } from '../shared/theme';
+import { WebShortcuts } from './WebShortcuts';
 
 interface Item {
   id: PageId | null;
@@ -15,6 +17,7 @@ const MAIN: Item[] = [
   { id: 'schedule', icon: '📅', label: '내 일정 보기' },
   { id: 'chat', icon: '💬', label: 'AI 채팅하기' },
   { id: 'mail', icon: '✉️', label: '메일 확인', hint: '읽기 전용' },
+  { id: 'news', icon: '📰', label: '새 소식', hint: '공지·공모전 모음' },
   { id: 'study', icon: '📚', label: '공부 집중', hint: '웹캠·화면 감시' },
   { id: 'phone', icon: '📱', label: '폰 감시', hint: 'Android 앱' },
   { id: 'memory', icon: '🧠', label: '기억 관리', hint: '장기 기억' },
@@ -57,6 +60,7 @@ const nowLocal = () => {
 function Widgets(props: { onNavigate: (p: PageId) => void }) {
   const [events, setEvents] = useState<Load<CalendarEvent[]>>({ state: 'loading' });
   const [unread, setUnread] = useState<Load<number>>({ state: 'loading' });
+  const [news, setNews] = useState<Load<NewsUnread>>({ state: 'loading' });
 
   useEffect(() => {
     const load = () => {
@@ -67,6 +71,10 @@ function Widgets(props: { onNavigate: (p: PageId) => void }) {
       api.unreadCount().then(
         (v) => setUnread({ state: 'ok', value: v.count }),
         (e: unknown) => setUnread({ state: 'error', message: errText(e) }),
+      );
+      api.newsUnread().then(
+        (v) => setNews({ state: 'ok', value: v }),
+        (e: unknown) => setNews({ state: 'error', message: errText(e) }),
       );
     };
     load();
@@ -117,14 +125,68 @@ function Widgets(props: { onNavigate: (p: PageId) => void }) {
           </div>
         )}
       </button>
+      <button className="widget" onClick={() => props.onNavigate('news')} aria-label="새 소식, 학사공지·공모전 화면 열기">
+        <h3>
+          <span>📰 새 소식</span>
+        </h3>
+        {news.state === 'loading' && <p className="muted">불러오는 중…</p>}
+        {news.state === 'error' && <p className="muted">{news.message}</p>}
+        {news.state === 'ok' && (
+          <>
+            <div className="big">
+              {news.value.total}
+              <small>개</small>
+            </div>
+            <p className="muted">
+              {news.value.byCategory.map((c) => `${c.name} ${c.count}`).join(' · ') || '카테고리 없음'}
+            </p>
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
+
+/** PC에서만 표시. 확인 후 백엔드·프론트 종료 → 꺼짐 화면 */
+function PowerButton(props: { onOff: () => void }) {
+  const [busy, setBusy] = useState(false);
+  if (isNative()) return null;
+  const off = async () => {
+    if (!window.confirm('AURA 서버(백엔드·화면)를 끌까요?\n다시 켜려면 start-aura.bat 실행.')) return;
+    setBusy(true);
+    try {
+      await api.shutdown();
+      props.onOff();
+    } catch (e) {
+      setBusy(false);
+      window.alert(`끄기 실패: ${errText(e)}`);
+    }
+  };
+  return (
+    <button className="ghost" onClick={off} disabled={busy} title="서버 끄기">
+      ⏻ 서버 끄기
+    </button>
+  );
+}
+
+function OffScreen() {
+  return (
+    <div className="lobby-page off-screen">
+      <div className="lobby-in">
+        <h1 className="title">서버 꺼짐</h1>
+        <p>AURA 백엔드와 화면 서버를 종료함. 이 탭은 닫아도 됨.</p>
+        <p className="muted">다시 켜기: start-aura.bat 실행.</p>
+      </div>
     </div>
   );
 }
 
 export function Lobby(props: { onNavigate: (p: PageId) => void }) {
+  const [off, setOff] = useState(false);
   const [health, setHealth] = useState<Health | null | undefined>(undefined);
 
   useEffect(() => {
+    if (off) return;
     const poll = () =>
       api
         .health()
@@ -133,7 +195,9 @@ export function Lobby(props: { onNavigate: (p: PageId) => void }) {
     poll();
     const t = setInterval(poll, 10_000);
     return () => clearInterval(t);
-  }, []);
+  }, [off]);
+
+  if (off) return <OffScreen />;
 
   const dot = health === undefined ? 'warn' : health && health.db === 'ok' ? 'ok' : health ? 'warn' : 'down';
   const status =
@@ -151,12 +215,20 @@ export function Lobby(props: { onNavigate: (p: PageId) => void }) {
           </span>
           <span>{today}</span>
           <ThemeButton />
+          <button className="ghost" onClick={() => props.onNavigate('info')}>
+            ℹ️ 정보
+          </button>
+          <button className="ghost" onClick={() => props.onNavigate('landing')}>
+            ✦ 소개
+          </button>
+          <PowerButton onOff={() => setOff(true)} />
           <span className="muted">
             단축키 <kbd>?</kbd>
           </span>
         </div>
         <h1 className="title">AURA 810</h1>
         <Widgets onNavigate={props.onNavigate} />
+        <WebShortcuts />
         <div className="cols">
           <section>
             <h2>바로가기</h2>
