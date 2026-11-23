@@ -357,3 +357,6 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; border: 1
   background: var(--accent);
   transition: width 0.3s;
 }
+
+/* 정보 페이지 */
+.info-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }

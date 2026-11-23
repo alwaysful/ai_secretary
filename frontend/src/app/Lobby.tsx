@@ -19,6 +19,7 @@ const MAIN: Item[] = [
   { id: 'phone', icon: '📱', label: '폰 감시', hint: 'Android 앱' },
   { id: 'memory', icon: '🧠', label: '기억 관리', hint: '장기 기억' },
   { id: 'settings', icon: '⚙️', label: '설정', hint: '모델·시스템 프롬프트' },
+  { id: 'info', icon: 'ℹ️', label: '정보', hint: '기능 설명' },
 ];
 
 const SOON: Item[] = [

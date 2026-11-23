@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react';
 import { Briefing } from '../features/briefing/Briefing';
 import { Chat } from '../features/chat/Chat';
+import { InfoPage } from '../features/info/InfoPage';
 import { Lobby } from './Lobby';
 import { MailPage } from '../features/mail/MailPage';
 import { MemoryPage } from '../features/memory/MemoryPage';
@@ -15,7 +16,7 @@ const PhonePage = lazy(() => import('../features/phone/PhonePage').then((m) => (
 /** 공부 집중: mediapipe 포함, 필요할 때만 로드 */
 const StudyPage = lazy(() => import('../features/study/pages/StudyView').then((m) => ({ default: m.StudyPage })));
 
-export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study' | 'phone';
+export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study' | 'phone' | 'info';
 
 function Page(props: { page: PageId; go: (p: PageId) => void }) {
   const { page, go } = props;
@@ -43,6 +44,8 @@ function Page(props: { page: PageId; go: (p: PageId) => void }) {
           <PhonePage onBack={back} />
         </Suspense>
       );
+    case 'info':
+      return <InfoPage onBack={back} onNavigate={go} />;
     case 'mail':
       return <MailPage onBack={back} />;
     default:

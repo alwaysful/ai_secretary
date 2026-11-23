@@ -11,6 +11,7 @@ export const PAGE_KEYS: [string, PageId, string][] = [
   ['6', 'memory', '기억 관리'],
   ['7', 'settings', '설정'],
   ['8', 'study', '공부 집중'],
+  ['9', 'info', '정보'],
 ];
 
 /** 입력 중인지 (단일 키 단축키는 입력 중에 무시) */
