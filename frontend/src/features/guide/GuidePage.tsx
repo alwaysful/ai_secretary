@@ -89,6 +89,9 @@ export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) =
           ← 로비
         </button>
         <h1>시작 가이드</h1>
+        <button className="ghost info-pdf" onClick={() => window.print()} title="인쇄 창에서 대상: PDF로 저장">
+          📄 PDF로 저장
+        </button>
       </header>
       <div className="subbody">
         <section className="card">
@@ -123,7 +126,7 @@ export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) =
               {chatApi && apiKeyCount > 0 && <span className="ok-text"> · API 사용 중</span>}
             </li>
           </ul>
-          <div className="chips">
+          <div className="chips no-print">
             <button className="ghost" onClick={go('models')}>
               ⬇️ 모델 받기
             </button>
@@ -142,7 +145,7 @@ export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) =
             <li>📷 웹캠: 공부 집중 자세·졸음 감시</li>
           </ul>
           {permsOn.length > 0 && <p className="ok-text">켜짐: {permsOn.join(', ')}</p>}
-          <div className="chips">
+          <div className="chips no-print">
             <button className="ghost" onClick={go('settings')}>
               ⚙️ 권한 설정
             </button>
@@ -163,7 +166,7 @@ export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) =
           ) : (
             <p>「✉️ 메일」에서 Outlook 연결 → 표시된 주소 접속 → 코드 입력.</p>
           )}
-          <div className="chips">
+          <div className="chips no-print">
             <button className="ghost" onClick={go('mail')}>
               ✉️ 메일
             </button>
@@ -191,7 +194,7 @@ export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) =
           <p>자세·졸음 감지 모델을 받고, 권한에서 웹캠·화면 읽기를 켜세요.</p>
           <Cmd text="npm.cmd run models" />
           <p className="muted">화면 딴짓 분석은 비전 모델(예: gemma4:12b)도 필요해요. 「⬇️ 모델 받기」에서 다운로드.</p>
-          <div className="chips">
+          <div className="chips no-print">
             <button className="ghost" onClick={go('study')}>
               📚 공부 집중
             </button>
@@ -200,7 +203,7 @@ export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) =
 
         <Step n={7} title="폰 연결 (Android)" state="optional">
           <p>폰에서 딴짓 앱을 열면 알림. 「📱 폰 감시」에서 QR로 연결해요. 앱 설치는 README 「Android 앱」 참고.</p>
-          <div className="chips">
+          <div className="chips no-print">
             <button className="ghost" onClick={go('phone')}>
               📱 폰 감시
             </button>
@@ -210,7 +213,7 @@ export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) =
         <section className="card">
           <h2>다 했으면</h2>
           <p>기능 설명은 「ℹ️ 정보」, 단축키는 <kbd>?</kbd>. 업데이트는 AURA 폴더에서 <code>git pull</code> 후 다시 실행.</p>
-          <div className="chips">
+          <div className="chips no-print">
             <button className="primary" onClick={finish}>
               시작하기 →
             </button>
