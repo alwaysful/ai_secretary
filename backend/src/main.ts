@@ -9,8 +9,8 @@ import { EnvVars } from './config/env';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  // 공부 집중 화면 캡처(base64) 수신용
-  app.useBodyParser('json', { limit: '5mb' });
+  // 화면 캡처·OCR 이미지·STT 음성(base64) 수신용
+  app.useBodyParser('json', { limit: '40mb' });
   // Android 앱(Capacitor WebView, http://localhost)에서 직접 호출
   app.enableCors({ origin: ['http://localhost', 'https://localhost', 'capacitor://localhost'] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));

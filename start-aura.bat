@@ -33,6 +33,8 @@ rem PC 조작(선택): Python 있으면 라이브러리 자동 설치
 where python >nul 2>&1
 if not errorlevel 1 (
   python -c "import pyautogui, pynput, pyperclip" >nul 2>&1 || python -m pip install -q -r pc-agent\requirements.txt
+  rem 도구 탭 STT(로컬 Whisper)
+  python -c "import faster_whisper" >nul 2>&1 || python -m pip install -q -r pc-agent\requirements-stt.txt
 )
 
 rem 마이그레이션·generate는 npm run dev(scripts/dev.mjs)가 자동 실행

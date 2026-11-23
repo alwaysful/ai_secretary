@@ -95,6 +95,16 @@ const FEATURES: Feature[] = [
     lines: ['Ollama 모델 목록·크기·권장 RAM 비교 후 바로 다운로드.', '받은 모델은 설정의 모델 선택에 표시.'],
   },
   {
+    icon: '🛠️',
+    title: '도구',
+    page: 'tools',
+    lines: [
+      'STT: 마이크 녹음·음성 파일 → 글자. 로컬 Whisper(faster-whisper).',
+      'OCR: 이미지 끌어놓기·Ctrl+V → 글자. 로컬 비전 모델(OCR_VISION_MODEL).',
+      '내 사이트: 로비와 별도 목록. ＋ 추가, ✎ 수정·삭제, 드래그 순서.',
+    ],
+  },
+  {
     icon: '🌐',
     title: '웹사이트 바로가기',
     lines: ['로비에서 자주 가는 사이트 등록 (크롬 새 탭처럼).', '＋ 추가, ✎ 수정·삭제, 드래그로 순서 변경. 클릭하면 새 탭.'],

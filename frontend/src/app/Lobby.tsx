@@ -24,12 +24,12 @@ const MAIN: Item[] = [
   { id: 'memory', icon: '🧠', label: '기억 관리', hint: '장기 기억' },
   { id: 'settings', icon: '⚙️', label: '설정', hint: '모델·시스템 프롬프트' },
   { id: 'models', icon: '⬇️', label: '다른 모델 다운로드 하러 가기', hint: 'Ollama' },
+  { id: 'tools', icon: '🛠️', label: '도구', hint: 'STT·OCR·사이트' },
   { id: 'info', icon: 'ℹ️', label: '정보', hint: '기능 설명' },
 ];
 
 const SOON: Item[] = [
   { id: null, icon: '🎙️', label: '음성', hint: '준비 중' },
-  { id: null, icon: '🛠️', label: '도구', hint: '준비 중' },
 ];
 
 function Links(props: { items: Item[]; onNavigate: (p: PageId) => void }) {

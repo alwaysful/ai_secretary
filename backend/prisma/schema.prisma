@@ -108,12 +108,14 @@ model WebShortcut {
   id        String   @id @default(uuid()) @db.Uuid
   title     String
   url       String
+  /// 표시 위치: lobby | tools
+  section   String   @default("lobby")
   /// 표시 순서 (작을수록 앞)
   position  Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([position])
+  @@index([section, position])
 }
 
 /// 웹 스크래핑으로 모은 글 (학사공지·공모전 등). source+externalId 로 중복 방지.

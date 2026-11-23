@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { api, ApiError, WebShortcut } from '../shared/api';
+import { api, ApiError, ShortcutSection, WebShortcut } from '../shared/api';
 
 const host = (url: string) => {
   try {
@@ -27,6 +27,7 @@ type Editing = { id: string | null; title: string; url: string };
 
 function EditDialog(props: {
   value: Editing;
+  section: ShortcutSection;
   onClose: () => void;
   onSaved: () => void;
   onDelete?: () => void;
@@ -54,7 +55,7 @@ function EditDialog(props: {
     try {
       const body = { title: title.trim(), url: url.trim() };
       if (props.value.id) await api.updateShortcut(props.value.id, body);
-      else await api.createShortcut(body);
+      else await api.createShortcut({ ...body, section: props.section });
       props.onSaved();
     } catch (e) {
       setErr(e instanceof ApiError || e instanceof Error ? e.message : String(e));
@@ -95,14 +96,15 @@ function EditDialog(props: {
 }
 
 /** 크롬 새 탭 스타일 웹사이트 바로가기. 클릭 → 새 탭, ✎ → 수정/삭제, 드래그 → 순서 변경 */
-export function WebShortcuts() {
+export function WebShortcuts(props: { section?: ShortcutSection; title?: string } = {}) {
+  const section = props.section ?? 'lobby';
   const [items, setItems] = useState<WebShortcut[] | null>(null);
   const [err, setErr] = useState('');
   const [editing, setEditing] = useState<Editing | null>(null);
   const drag = useRef<string | null>(null);
 
   const load = () =>
-    api.shortcuts().then(
+    api.shortcuts(section).then(
       (v) => {
         setItems(v);
         setErr('');
@@ -112,7 +114,8 @@ export function WebShortcuts() {
 
   useEffect(() => {
     void load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section]);
 
   const remove = async (s: WebShortcut) => {
     if (!window.confirm(`"${s.title}" 바로가기 삭제?`)) return;
@@ -133,12 +136,12 @@ export function WebShortcuts() {
     const idx = next.findIndex((s) => s.id === targetId);
     next.splice(idx, 0, items.find((s) => s.id === from)!);
     setItems(next);
-    api.reorderShortcuts(next.map((s) => s.id)).then(setItems, () => void load());
+    api.reorderShortcuts(next.map((s) => s.id), section).then(setItems, () => void load());
   };
 
   return (
     <section className="websc">
-      <h2>웹사이트</h2>
+      <h2>{props.title ?? '웹사이트'}</h2>
       {err && <p className="muted">{err}</p>}
       <div className="sc-grid">
         {items?.map((s) => (
@@ -176,6 +179,7 @@ export function WebShortcuts() {
       {editing && (
         <EditDialog
           value={editing}
+          section={section}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
