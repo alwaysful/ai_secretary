@@ -10,6 +10,16 @@ interface Feature {
 
 const FEATURES: Feature[] = [
   {
+    icon: '🚀',
+    title: '처음 쓸 때',
+    lines: [
+      '⚙️ 설정 → 권한: 화면 읽기·PC 조작·마이크·웹캠 중 쓸 것만 켜기.',
+      '⬇️ 모델 받기: 채팅 모델(예: qwen3:4b) 1개 이상 다운로드.',
+      '✉️ 메일 화면에서 Outlook 연결 → 일정·메일·브리핑 사용 가능.',
+      '자세한 설치 방법은 저장소 README.',
+    ],
+  },
+  {
     icon: '☀️',
     title: '아침 브리핑',
     page: 'briefing',
@@ -29,9 +39,10 @@ const FEATURES: Feature[] = [
     page: 'chat',
     key: 'Alt+2',
     lines: [
-      '로컬 Ollama 모델과 대화. 인터넷으로 내용 안 보냄.',
+      '기본은 로컬 Ollama 모델. 설정에서 Gemini·Claude·OpenAI API로 바꿀 수 있음.',
       '마크다운·코드 표시, 복사, 재생성, 마지막 메시지 편집, 대화 검색.',
-      '"메일 요약해줘", "이번 주 일정" 같은 요청은 메일·일정을 읽어서 답함.',
+      '"메일 요약해줘", "이번 주 일정", "공모전 뭐 있어" 같은 요청은 해당 데이터를 읽어서 답함.',
+      '"PC: 할 일" 로 시작하면 PC 조작 실행.',
     ],
   },
   {
@@ -42,6 +53,18 @@ const FEATURES: Feature[] = [
     lines: ['Outlook 받은편지함 읽기 전용. 보내기·삭제 불가.'],
   },
   {
+    icon: '📰',
+    title: '새 소식 (공지·공모전)',
+    page: 'news',
+    lines: [
+      '카테고리별 게시판 글 모음. 기본: GIST 학사공지, 공모전(위비티·링커리어 등).',
+      '공모전은 #분야 태그로 거르기. ☰ 목록 / 📅 달력(접수기간 막대) 보기 전환.',
+      '글마다 📅 버튼: 구글 캘린더에 접수 시작·마감 일정 추가.',
+      '⚙ 관리: 카테고리·사이트 추가·수정·삭제. 게시판 주소만 넣으면 형식 자동 감지.',
+      '1시간마다 확인 → 새 글 알림.',
+    ],
+  },
+  {
     icon: '📚',
     title: '공부 집중',
     page: 'study',
@@ -50,7 +73,7 @@ const FEATURES: Feature[] = [
       '웹캠으로 자세·졸음·폰 사용, 화면 캡처로 딴짓 감지 → 경고.',
       '🤖 로봇 / 🧑 인간 토글: 경고 말투 변경.',
       '🍅 뽀모도로: 25분 집중 → 5분 휴식 자동 반복.',
-      '하단 통계: 일별·주별 집중 시간, 위반 횟수 그래프.',
+      '웹캠·화면 읽기 권한이 켜져 있어야 함.',
     ],
   },
   {
@@ -63,14 +86,33 @@ const FEATURES: Feature[] = [
     ],
   },
   {
-    icon: '📰',
-    title: '새 소식 (웹 스크래핑)',
-    page: 'news',
+    icon: '🖱️',
+    title: 'PC 조작',
+    page: 'pc',
     lines: [
-      '카테고리별 게시판 글 모음. 기본: 학사공지(GIST 학사·물리광과학과·AI학과), 공모전(위비티·링커리어).',
-      '⚙ 관리: 카테고리·사이트 추가·수정·삭제. 게시판 주소만 넣으면 형식 자동 감지, 미리보기로 확인.',
-      '같은 카테고리의 같은 공지는 하나로 합치고 사이트별 링크 모두 표시.',
-      '1시간마다 확인 → 새 글 OS 알림. 채팅: "새 학사공지 있어?", "공모전 뭐 있어".',
+      'AI가 화면을 보고 마우스·키보드를 직접 조작. 할 일 입력 → 확인 → 시작.',
+      '중지: Esc · Ctrl+Alt+X · 마우스를 화면 모서리로 · ■ 정지 버튼.',
+      'PC에서만. Python + 비전 모델 필요. 설정에서 PC 조작 권한 켜기.',
+    ],
+  },
+  {
+    icon: '🛠️',
+    title: '도구',
+    page: 'tools',
+    lines: [
+      'STT: 마이크 녹음·음성 파일 → 글자 (Whisper). 마이크 권한 필요.',
+      'OCR: 이미지 끌어놓기·Ctrl+V → 글자.',
+      '둘 다 설정에서 로컬 또는 API 선택 가능.',
+      '내 사이트: 로비와 별도 바로가기 목록.',
+    ],
+  },
+  {
+    icon: '📊',
+    title: '통계',
+    page: 'stats',
+    lines: [
+      '공부 집중 시간·위반 횟수, 채팅 사용량, 공지·공모전 수.',
+      '🔑 API 사용량·비용: 공급자별 토큰·예상 금액. 단가 직접 수정 가능.',
     ],
   },
   {
@@ -85,34 +127,42 @@ const FEATURES: Feature[] = [
     title: '설정',
     page: 'settings',
     key: 'Alt+7',
-    lines: ['사용할 모델 선택, AI 성격·말투(시스템 프롬프트) 변경.'],
-  },
-  {
-    icon: '⬇️',
-    title: '모델 다운로드',
-    page: 'models',
-    key: 'Alt+0',
-    lines: ['Ollama 모델 목록·크기·권장 RAM 비교 후 바로 다운로드.', '받은 모델은 설정의 모델 선택에 표시.'],
-  },
-  {
-    icon: '🛠️',
-    title: '도구',
-    page: 'tools',
     lines: [
-      'STT: 마이크 녹음·음성 파일 → 글자. 로컬 Whisper(faster-whisper).',
-      'OCR: 이미지 끌어놓기·Ctrl+V → 글자. 로컬 비전 모델(OCR_VISION_MODEL).',
-      '내 사이트: 로비와 별도 목록. ＋ 추가, ✎ 수정·삭제, 드래그 순서.',
+      '권한: 화면 읽기·PC 조작·마이크·웹캠 각각 켜기/끄기.',
+      '모델: 채팅·OCR·STT 기능마다 로컬 / API(Gemini·Anthropic·OpenAI) 선택.',
+      '🔑 API 키: 공급자 키 입력. PC에 암호화 저장.',
+      '시스템 프롬프트: AI 성격·말투 변경.',
     ],
   },
   {
-    icon: '🌐',
-    title: '웹사이트 바로가기',
-    lines: ['로비에서 자주 가는 사이트 등록 (크롬 새 탭처럼).', '＋ 추가, ✎ 수정·삭제, 드래그로 순서 변경. 클릭하면 새 탭.'],
+    icon: '⬇️',
+    title: '모델 받기',
+    page: 'models',
+    key: 'Alt+0',
+    lines: [
+      '분류별 목록: 🦙 Ollama, 🤗 Hugging Face(GGUF), 🎙 Whisper(음성), 🧩 다른 로컬 AI 앱.',
+      '크기·권장 RAM·품질 비교 후 바로 다운로드. 받은 모델은 설정 모델 선택에 표시.',
+    ],
+  },
+  {
+    icon: '🏠',
+    title: '로비',
+    lines: [
+      '위젯: 오늘 일정, 안 읽은 메일, 새 소식.',
+      '🌐 웹사이트 바로가기: ＋ 추가, ✎ 수정·삭제, 드래그로 순서 변경.',
+      '기능 카드를 눌러 각 화면으로 이동.',
+      '⏻ 서버 끄기: PC에서만, 확인 후 백엔드·화면 종료.',
+    ],
   },
   {
     icon: '🌓',
     title: '화면',
-    lines: ['다크 모드: 로비 테마 버튼 또는 Ctrl+Shift+L.', '⏻ 서버 끄기: 로비 상단. PC에서만, 확인 후 백엔드·화면 종료.', '단축키 목록: ? 키.', '모바일 화면 지원.'],
+    lines: [
+      '다크 모드: 로비 테마 버튼 또는 Ctrl+Shift+L.',
+      '단축키 목록: ? 키.',
+      '소개 페이지: 처음 접속 시 표시. 다시 보기는 주소 끝에 #landing.',
+      '모바일 화면 지원.',
+    ],
   },
 ];
 
@@ -124,8 +174,11 @@ export function InfoPage(props: { onBack: () => void; onNavigate: (p: PageId) =>
           ← 로비
         </button>
         <h1>정보</h1>
+        <button className="ghost info-pdf" onClick={() => window.print()} title="인쇄 창에서 대상: PDF로 저장">
+          📄 PDF로 저장
+        </button>
       </header>
-      <div className="subbody">
+      <div className="subbody info-page">
         <section className="card">
           <h2>AURA 810</h2>
           <p>내 PC에서 돌아가는 개인 AI 비서. 대화·메일·일정·기억은 PC의 DB에만 저장.</p>
@@ -147,7 +200,7 @@ export function InfoPage(props: { onBack: () => void; onNavigate: (p: PageId) =>
               ))}
             </ul>
             {f.page && (
-              <div className="chips">
+              <div className="chips no-print">
                 <button className="ghost" onClick={() => props.onNavigate(f.page!)}>
                   열기 →
                 </button>

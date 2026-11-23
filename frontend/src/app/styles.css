@@ -572,3 +572,19 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; border: 1
   .nt-period:has(> .muted:only-child) { display: none; }
   .nt-cal { padding-top: 6px; }
 }
+
+.info-pdf { margin-left: auto; }
+/* 정보 페이지 PDF(인쇄): 버튼 숨김, 밝은 배경, 카드 안 잘리게 */
+@media print {
+  @page { margin: 14mm; }
+  :root { color-scheme: light; }
+  html, body, #root, .subpage, .subbody { background: #fff !important; color: #111 !important; height: auto !important; overflow: visible !important; }
+  .bar button, .no-print { display: none !important; }
+  .bar { border: 0; background: #fff !important; padding: 0 0 8px; }
+  .bar h1 { font-size: 20px; color: #111; }
+  .subbody { width: 100%; padding: 0; gap: 8px; }
+  .card { background: #fff !important; border: 1px solid #ccc !important; break-inside: avoid; box-shadow: none !important; }
+  .card h2 { color: #1a4fa0 !important; }
+  .card, .card li, .card p { color: #111 !important; }
+  kbd { border: 1px solid #999; background: #f3f3f3 !important; color: #111 !important; }
+}
