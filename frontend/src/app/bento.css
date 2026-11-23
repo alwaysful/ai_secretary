@@ -1,0 +1,83 @@
+/* 다크 벤토 디자인 언어: 기존 UI 공통 오버라이드 (기능·구조 변경 없음) */
+:root {
+  --accent2: #8b5cf6;
+  --radius: 18px;
+  --radius-sm: 10px;
+  --glass: rgba(255, 255, 255, 0.72);
+  --glow: rgba(91, 110, 245, 0.28);
+  --grad: linear-gradient(135deg, #6d80ff, #5b6ef5 45%, #8b5cf6);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --accent2: #a78bfa;
+    --glass: rgba(17, 24, 39, 0.72);
+    --glow: rgba(130, 155, 255, 0.35);
+    --grad: linear-gradient(135deg, #a5b6ff, #829bff 45%, #a78bfa);
+  }
+}
+:root[data-theme='dark'] {
+  --accent2: #a78bfa;
+  --glass: rgba(17, 24, 39, 0.72);
+  --glow: rgba(130, 155, 255, 0.35);
+  --grad: linear-gradient(135deg, #a5b6ff, #829bff 45%, #a78bfa);
+}
+
+body { -webkit-font-smoothing: antialiased; letter-spacing: -0.005em; }
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: -1;
+  background: radial-gradient(ellipse 60% 40% at 15% -5%, var(--glow), transparent 70%), radial-gradient(ellipse 50% 35% at 95% 0%, color-mix(in srgb, var(--accent2) 22%, transparent), transparent 70%);
+  opacity: 0.55;
+}
+
+/* 버튼 */
+.primary { background: var(--grad); border-radius: var(--radius-sm); box-shadow: 0 6px 20px -8px var(--glow), inset 0 1px 0 rgba(255, 255, 255, 0.3); transition: transform 0.2s, box-shadow 0.25s, filter 0.2s; }
+.primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 10px 28px -8px var(--glow), inset 0 1px 0 rgba(255, 255, 255, 0.3); }
+.primary.danger { background: var(--err); }
+.ghost, .theme-btn { border-radius: var(--radius-sm); transition: border-color 0.2s, background 0.2s, color 0.2s; }
+.ghost:hover, .theme-btn:hover { border-color: color-mix(in srgb, var(--accent) 50%, transparent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.chip { transition: border-color 0.2s, background 0.2s; }
+.chip:hover:not(.on) { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.chip.on { background: var(--grad); border-color: transparent; }
+
+/* 입력 */
+.composer textarea, .search, .rename, .field select, .field textarea, .mem-edit { border-radius: 12px; transition: border-color 0.2s, box-shadow 0.2s; }
+.composer textarea:focus, .search:focus, .rename:focus, .field select:focus, .field textarea:focus, .mem-edit:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+
+/* 카드류: 벤토 */
+.card, .widget, .box, .dialog, .action-card, .codeblock {
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 92%, var(--accent) 3%), var(--panel));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+}
+.card, .widget, .box { transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.3s, box-shadow 0.3s; }
+button.widget:hover, .card:hover, .box:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 45%, transparent); box-shadow: 0 18px 40px -22px var(--glow), 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent); }
+.card.unread { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent), 0 10px 30px -18px var(--glow); }
+.widget .big { letter-spacing: -0.03em; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.widget .big small { -webkit-text-fill-color: var(--muted); }
+.widgets { gap: 16px; }
+
+/* 상단바·사이드: 글래스 */
+.bar, .side, .notice, .actions, .banner { background: var(--glass); backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%); }
+.bar { position: sticky; top: 0; z-index: 5; }
+.overlay { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.conv, .conv-row { border-radius: var(--radius-sm); }
+.conv-row.on, .conv.on { box-shadow: inset 3px 0 0 var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+
+/* 채팅 말풍선 */
+.bubble { border-radius: 16px; }
+.msg.user .bubble { background: var(--grad); color: var(--accent-ink); border-bottom-right-radius: 6px; }
+.msg.user .bubble a { color: inherit; }
+.msg.ai .bubble { border-bottom-left-radius: 6px; }
+
+/* 로비 */
+.lobby-page { background: transparent; }
+.logo { width: 72px; height: 72px; border-radius: 22px; background: var(--grad); color: #fff; font-size: 30px; box-shadow: 0 16px 40px -14px var(--glow), inset 0 1px 0 rgba(255, 255, 255, 0.35); }
+.title { letter-spacing: -0.035em; }
+.link .ic::after { background: var(--bg); }
+.link:hover:not(:disabled) .txt { border-bottom-color: var(--accent); }
+.tag { background: color-mix(in srgb, var(--accent) 16%, transparent); border-radius: 6px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .primary, .card, .widget, .box { transition: none; }
+  button.widget:hover, .card:hover, .box:hover, .primary:hover:not(:disabled) { transform: none; }
+}
