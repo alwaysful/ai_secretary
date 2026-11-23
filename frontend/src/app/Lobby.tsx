@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { isNative } from '../shared/backend';
 import type { PageId } from './App';
-import { api, ApiError, CalendarEvent, Health } from '../shared/api';
+import { api, ApiError, CalendarEvent, Health, NewsUnread } from '../shared/api';
 import { ThemeButton } from '../shared/theme';
 import { WebShortcuts } from './WebShortcuts';
 
@@ -17,6 +17,7 @@ const MAIN: Item[] = [
   { id: 'schedule', icon: '📅', label: '내 일정 보기' },
   { id: 'chat', icon: '💬', label: 'AI 채팅하기' },
   { id: 'mail', icon: '✉️', label: '메일 확인', hint: '읽기 전용' },
+  { id: 'news', icon: '📰', label: '새 소식', hint: '학사공지·공모전' },
   { id: 'study', icon: '📚', label: '공부 집중', hint: '웹캠·화면 감시' },
   { id: 'phone', icon: '📱', label: '폰 감시', hint: 'Android 앱' },
   { id: 'memory', icon: '🧠', label: '기억 관리', hint: '장기 기억' },
@@ -58,6 +59,7 @@ const nowLocal = () => {
 function Widgets(props: { onNavigate: (p: PageId) => void }) {
   const [events, setEvents] = useState<Load<CalendarEvent[]>>({ state: 'loading' });
   const [unread, setUnread] = useState<Load<number>>({ state: 'loading' });
+  const [news, setNews] = useState<Load<NewsUnread>>({ state: 'loading' });
 
   useEffect(() => {
     const load = () => {
@@ -68,6 +70,10 @@ function Widgets(props: { onNavigate: (p: PageId) => void }) {
       api.unreadCount().then(
         (v) => setUnread({ state: 'ok', value: v.count }),
         (e: unknown) => setUnread({ state: 'error', message: errText(e) }),
+      );
+      api.newsUnread().then(
+        (v) => setNews({ state: 'ok', value: v }),
+        (e: unknown) => setNews({ state: 'error', message: errText(e) }),
       );
     };
     load();
@@ -116,6 +122,24 @@ function Widgets(props: { onNavigate: (p: PageId) => void }) {
             {unread.value}
             <small>통</small>
           </div>
+        )}
+      </button>
+      <button className="widget" onClick={() => props.onNavigate('news')} aria-label="새 소식, 학사공지·공모전 화면 열기">
+        <h3>
+          <span>📰 새 소식</span>
+        </h3>
+        {news.state === 'loading' && <p className="muted">불러오는 중…</p>}
+        {news.state === 'error' && <p className="muted">{news.message}</p>}
+        {news.state === 'ok' && (
+          <>
+            <div className="big">
+              {news.value.total}
+              <small>개</small>
+            </div>
+            <p className="muted">
+              학사공지 {news.value.notice} · 공모전 {news.value.contest}
+            </p>
+          </>
         )}
       </button>
     </div>
