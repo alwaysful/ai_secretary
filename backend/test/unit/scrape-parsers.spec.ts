@@ -169,9 +169,12 @@ describe('detail period', () => {
   });
 
   it('wevity detail', () => {
-    const html = '<ul><li class="dday-area"> <span class="tit">접수기간</span> 2026-11-17 ~ 2026-11-30 <span class="cil-dday">D-7</span> </li></ul>';
+    const html = '<ul><li class="dday-area"> <span class="tit">접수기간</span> 2026-11-17 ~ 2026-11-30 <span class="cil-dday">D-7</span> </li></ul><div class="comm-desc">청년 글쓰기 프로그램. 활동 기간: 2026.12.07(월) ~ 2027.01.03(일) 온라인 진행</div>';
     const r = wevityParser.parseDetail!(html, ctx('https://www.wevity.com/?c=find&s=1&gbn=view&ix=1'));
     expect(r.startsAt?.toISOString()).toBe('2026-11-16T15:00:00.000Z');
+    expect(r.eventStartsAt?.toISOString()).toBe('2026-12-06T15:00:00.000Z');
+    expect(r.eventEndsAt?.toISOString()).toBe('2027-01-03T14:59:59.999Z');
+    expect(r.summary).toMatch(/^청년 글쓰기 프로그램/);
   });
 
   it('linkareer detail', () => {
@@ -183,7 +186,7 @@ describe('detail period', () => {
 });
 
 describe('contestkorea', () => {
-  const html = `<ul class="list_style_2"><li class="imminent"> <div class="title"> <a href="view.php?int_gbn=1&amp;Txt_bcode=031610001&amp;str_no=202611140012&amp;page=1"> <span class="category">요리•뷰티•배우•오디션</span> <img src="/x.gif"> <span class="txt">2026 누아엔터테인먼트 오디션</span> </a> </div> <ul class="host"> <li class="icon_1"><strong>주최</strong> . 누아엔터테인먼트</li> </ul> <div class="date"> <div class="date-detail"> <span class="step-1"><em>접수</em> 11.13~01.05 </span> </div> </div></li></ul>`;
+  const html = `<ul class="list_style_2"><li class="imminent"> <div class="title"> <a href="view.php?int_gbn=1&amp;Txt_bcode=031610001&amp;str_no=202611140012&amp;page=1"> <span class="category">요리•뷰티•배우•오디션</span> <img src="/x.gif"> <span class="txt">2026 누아엔터테인먼트 오디션</span> </a> </div> <ul class="host"> <li class="icon_1"><strong>주최</strong> . 누아엔터테인먼트</li> <li class="icon_2"><strong>대상</strong> . 대학생 , 일반인 </li> </ul> <div class="date"> <div class="date-detail"> <span class="step-1"><em>접수</em> 11.13~01.05 </span> <span class="step-2"><em>심사</em> 01.06~01.20 </span> <span class="step-3"><em>발표</em> 01.25 </span> </div> </div></li></ul>`;
   it('parses list with period, year rollover', () => {
     const r = contestkoreaParser.parse(html, ctx('https://www.contestkorea.com/sub/list.php?int_gbn=1'));
     expect(r).toHaveLength(1);
@@ -196,6 +199,9 @@ describe('contestkorea', () => {
     });
     expect(r[0].startsAt?.toISOString()).toBe('2026-11-12T15:00:00.000Z');
     expect(r[0].deadline?.toISOString()).toBe('2027-01-05T14:59:59.999Z');
+    expect(r[0].eventStartsAt?.toISOString()).toBe('2027-01-05T15:00:00.000Z');
+    expect(r[0].eventEndsAt?.toISOString()).toBe('2027-01-25T14:59:59.999Z');
+    expect(r[0].summary).toBe('대상: 대학생, 일반인');
   });
   it('detect', () => expect(detectParser(html, 'https://www.contestkorea.com/sub/list.php').id).toBe('contestkorea'));
 });

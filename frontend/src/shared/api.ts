@@ -122,6 +122,11 @@ export interface NewsItem {
   deadline: string | null;
   /** 접수 시작일 (공모전) */
   startsAt: string | null;
+  /** 행사·활동 진행 기간 */
+  eventStartsAt: string | null;
+  eventEndsAt: string | null;
+  /** 간단한 내용 */
+  summary: string | null;
   createdAt: string;
   categoryId: string | null;
   /** 공모전 분야 태그 */

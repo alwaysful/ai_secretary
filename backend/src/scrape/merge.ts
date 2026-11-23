@@ -10,6 +10,9 @@ export interface MergeablePost {
   postedAt: Date | null;
   deadline: Date | null;
   startsAt?: Date | null;
+  eventStartsAt?: Date | null;
+  eventEndsAt?: Date | null;
+  summary?: string | null;
   seenAt: Date | null;
   createdAt: Date;
 }
@@ -33,6 +36,9 @@ export interface FeedItem {
   postedAt: Date | null;
   deadline: Date | null;
   startsAt: Date | null;
+  eventStartsAt: Date | null;
+  eventEndsAt: Date | null;
+  summary: string | null;
   createdAt: Date;
   /** 공모전 분야 태그 (공모전이 아니면 빈 배열) */
   tags: string[];
@@ -105,6 +111,9 @@ export function mergePosts(
       postedAt: pick('postedAt') as Date | null,
       deadline: pick('deadline') as Date | null,
       startsAt: (pick('startsAt') as Date | null | undefined) ?? null,
+      eventStartsAt: (pick('eventStartsAt') as Date | null | undefined) ?? null,
+      eventEndsAt: (pick('eventEndsAt') as Date | null | undefined) ?? null,
+      summary: (pick('summary') as string | null | undefined) ?? null,
       createdAt: g.reduce((m, p) => (p.createdAt > m ? p.createdAt : m), head.createdAt),
       tags: [...new Set(g.flatMap(tagsOf))],
     };

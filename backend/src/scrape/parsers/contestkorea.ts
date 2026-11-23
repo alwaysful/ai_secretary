@@ -18,6 +18,15 @@ export function parseShortPeriod(text: string, now: Date, tz: string): { startsA
   return { startsAt: startOfLocalDay(sy, sm, sd, tz), deadline: new Date(startOfLocalDay(ey, em, ed, tz).getTime() + DAY - 1) };
 }
 
+/** "01.25" 하루 → 그날 끝 */
+function shortDay(text: string, ref: Date | undefined, now: Date, tz: string): Date | undefined {
+  const m = /(\d{1,2})\.(\d{1,2})/.exec(text);
+  if (!m) return undefined;
+  const p = parseShortPeriod(`${m[1]}.${m[2]}~${m[1]}.${m[2]}`, ref ?? now, tz);
+  if (p.deadline && ref && p.deadline < ref) p.deadline = new Date(p.deadline.getTime() + 365 * DAY);
+  return p.deadline;
+}
+
 /** 콘테스트코리아 목록 (/sub/list.php). 접수기간이 목록에 있음. robots.txt: Allow / */
 export const contestkoreaParser: Parser = {
   id: 'contestkorea',
@@ -34,13 +43,21 @@ export const contestkoreaParser: Parser = {
       const url = new URL(href!, ctx.baseUrl);
       for (const k of [...url.searchParams.keys()]) if (!['int_gbn', 'Txt_bcode', 'str_no'].includes(k)) url.searchParams.delete(k);
       const host = clean(row.find('.host .icon_1').text()).replace(/^주최\s*\.?\s*/, '');
+      const target = clean(row.find('.host .icon_2').text()).replace(/^대상\s*\.?\s*/, '').replace(/\s*,\s*/g, ', ').replace(/\s*▶$/, '');
+      const apply = parseShortPeriod(clean(row.find('.date .step-1').text()), ctx.now, ctx.tz);
+      // 진행 = 심사 시작 ~ 발표 (없으면 심사 끝)
+      const judge = parseShortPeriod(clean(row.find('.date .step-2').text()), apply.startsAt ?? ctx.now, ctx.tz);
+      const announce = shortDay(clean(row.find('.date .step-3').text()), judge.startsAt ?? apply.deadline, ctx.now, ctx.tz);
       out.push({
         externalId: no,
         title: clean(a.find('.txt').text() || a.text()),
         url: url.toString(),
         category: clean(a.find('.category').text()).replace(/•/g, '/') || undefined,
         author: host || undefined,
-        ...parseShortPeriod(clean(row.find('.date .step-1').text()), ctx.now, ctx.tz),
+        ...apply,
+        eventStartsAt: judge.startsAt,
+        eventEndsAt: announce ?? judge.deadline,
+        summary: target ? `대상: ${target}` : undefined,
       });
     }
     return out;

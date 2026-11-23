@@ -8,6 +8,9 @@ export interface ScrapedItem {
   postedAt?: Date;
   deadline?: Date;
   startsAt?: Date;
+  eventStartsAt?: Date;
+  eventEndsAt?: Date;
+  summary?: string;
 }
 
 export interface ParseCtx {
@@ -24,6 +27,9 @@ export interface ParseCtx {
 export interface ItemDetail {
   startsAt?: Date;
   deadline?: Date;
+  eventStartsAt?: Date;
+  eventEndsAt?: Date;
+  summary?: string;
 }
 
 /** 게시판 형식별 파서. parse 는 순수 함수 (네트워크 없음). 새 형식 = 파일 1개 + index.ts 등록 */

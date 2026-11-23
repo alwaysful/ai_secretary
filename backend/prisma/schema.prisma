@@ -164,6 +164,11 @@ model ScrapedPost {
   deadline   DateTime?
   /// 접수 시작일 (공모전, 상세 페이지에서 보충)
   startsAt   DateTime?
+  /// 행사·활동 진행 기간
+  eventStartsAt DateTime?
+  eventEndsAt   DateTime?
+  /// 간단한 내용 (대상·본문 앞부분 등)
+  summary    String?
   /// 상세 페이지 확인 시각. null = 아직
   detailAt   DateTime?
   /// 읽음 처리 시각. null = 새 글

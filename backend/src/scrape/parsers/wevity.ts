@@ -1,5 +1,5 @@
 import { load } from 'cheerio';
-import { parseDday, parsePeriod } from './date';
+import { parseDday, parseEventPeriod, parsePeriod, snippet } from './date';
 import { clean, Parser, ScrapedItem } from './types';
 
 /** 위비티 공모전 목록. robots.txt: Allow / */
@@ -31,6 +31,11 @@ export const wevityParser: Parser = {
   },
   parseDetail(html, ctx) {
     const $ = load(html);
-    return parsePeriod(clean($('li.dday-area').text() || $('body').text()), ctx.tz);
+    const desc = clean($('.comm-desc').text());
+    return {
+      ...parsePeriod(clean($('li.dday-area').text() || $('body').text()), ctx.tz),
+      ...parseEventPeriod(desc, ctx.tz),
+      summary: snippet(desc),
+    };
   },
 };

@@ -35,4 +35,4 @@ export function runParser(parserId: string, html: string, ctx: ParseCtx): { pars
 }
 
 export * from './types';
-export { parseDate, parseDday, parsePeriod } from './date';
+export { parseDate, parseDday, parseEventPeriod, parsePeriod } from './date';

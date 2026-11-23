@@ -1,10 +1,27 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, NewsCategory, NewsItem } from '../../shared/api';
+import { gcalLinks } from './gcal';
 import { NewsCalendar } from './NewsCalendar';
 import { NewsManage } from './NewsManage';
 import { newsNotifySupported } from './useNewsNotify';
 
 const day = new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric' });
+
+const ymd = new Intl.DateTimeFormat('ko-KR', { year: '2-digit', month: 'numeric', day: 'numeric' });
+
+/** "11.17 ~ 11.30" (해가 다르면 연도 표시). 없으면 - */
+function range(from: string | null, to: string | null) {
+  if (!from && !to) return <span className="muted">-</span>;
+  const f = from ? new Date(from) : null;
+  const t = to ? new Date(to) : null;
+  const fmt = f && t && f.getFullYear() !== t.getFullYear() ? ymd : day;
+  if (f && t && f.toDateString() === t.toDateString()) return <span>{fmt.format(t)}</span>;
+  return (
+    <span>
+      {f ? fmt.format(f) : '?'} ~ {t ? fmt.format(t) : '?'}
+    </span>
+  );
+}
 
 /** 마감까지 남은 일수 */
 function dday(iso: string): string {
@@ -175,52 +192,73 @@ export function NewsPage(props: { onBack: () => void }) {
         {view === 'list' && items === null && !error && <p className="muted">불러오는 중…</p>}
         {view === 'list' && items?.length === 0 && <p className="muted">글 없음. 새 사이트는 추가 직후, 나머지는 1시간마다 수집.</p>}
         {view === 'list' && items && items.length > 0 && (
-          <ul className="news-list">
-            {items.map((it) => (
-              <li key={it.key} className={it.unread ? 'new' : ''}>
-                <button className="news-main" onClick={() => open(it, it.links[0].url)}>
-                  <span className="news-title">
-                    {it.unread && <b className="news-dot">N</b>}
-                    {it.title}
-                  </span>
-                  <span className="news-meta">
-                    {tab === 'all' && <span>{catName.get(it.categoryId) ?? '미분류'}</span>}
-                    {it.category && <span>{it.category}</span>}
-                    {it.author && <span>{it.author}</span>}
-                    {it.postedAt && <span>{day.format(new Date(it.postedAt))}</span>}
-                    {it.startsAt && it.deadline && (
-                      <span>
-                        접수 {day.format(new Date(it.startsAt))}~{day.format(new Date(it.deadline))}
+          <table className="news-table">
+            <thead>
+              <tr>
+                <th>이름 · 내용</th>
+                <th>신청기간</th>
+                <th>진행기간</th>
+                <th>캘린더</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it) => (
+                <tr key={it.key} className={it.unread ? 'new' : ''}>
+                  <td className="nt-main">
+                    <button className="news-main" onClick={() => open(it, it.links[0].url)}>
+                      <span className="news-title">
+                        {it.unread && <b className="news-dot">N</b>}
+                        {it.title}
                       </span>
-                    )}
-                    {it.deadline && <span className="news-dday">{dday(it.deadline)}</span>}
-                    {it.tags.map((t) => (
-                      <span key={t} className="news-tag">
-                        #{t}
-                      </span>
+                    </button>
+                    {it.summary && <p className="nt-summary">{it.summary}</p>}
+                    <span className="news-meta">
+                      {tab === 'all' && <span>{catName.get(it.categoryId) ?? '미분류'}</span>}
+                      {it.category && <span>{it.category}</span>}
+                      {it.author && <span>{it.author}</span>}
+                      {it.postedAt && <span>게시 {day.format(new Date(it.postedAt))}</span>}
+                      {it.tags.map((t) => (
+                        <span key={t} className="news-tag">
+                          #{t}
+                        </span>
+                      ))}
+                    </span>
+                    <span className="news-links">
+                      {it.links.map((l) => (
+                        <a
+                          key={l.id}
+                          href={l.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            open(it, l.url);
+                          }}
+                        >
+                          {l.siteName} ↗
+                        </a>
+                      ))}
+                      {it.links.length > 1 && <small className="muted">{it.links.length}곳 합침</small>}
+                    </span>
+                  </td>
+                  <td className="nt-period" data-label="신청">
+                    {range(it.startsAt, it.deadline)}
+                    {it.deadline && <span className="news-dday"> {dday(it.deadline)}</span>}
+                  </td>
+                  <td className="nt-period" data-label="진행">
+                    {range(it.eventStartsAt, it.eventEndsAt)}
+                  </td>
+                  <td className="nt-cal">
+                    {gcalLinks(it).map((g) => (
+                      <a key={g.label} className="ghost nt-gcal" href={g.url} target="_blank" rel="noreferrer" title={`구글 캘린더에 ${g.label} 일정 추가`}>
+                        ＋{g.label}
+                      </a>
                     ))}
-                  </span>
-                </button>
-                <span className="news-links">
-                  {it.links.map((l) => (
-                    <a
-                      key={l.id}
-                      href={l.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        open(it, l.url);
-                      }}
-                    >
-                      {l.siteName} ↗
-                    </a>
-                  ))}
-                  {it.links.length > 1 && <small className="muted">{it.links.length}곳 합침</small>}
-                </span>
-              </li>
-            ))}
-          </ul>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
     </div>
