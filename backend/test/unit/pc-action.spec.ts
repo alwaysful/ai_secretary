@@ -66,3 +66,15 @@ describe('think 제거', () => {
     expect(await collect(['Hello ', 'world'])).toBe('Hello world');
   });
 });
+
+describe('닫는 태그 없는 영어 추론', () => {
+  it('한글 인용문만 남김', () => {
+    const t = 'Okay, let me try.\n\nSo the answer is "확인 버튼을 눌러 주세요." (Please press)\n\nWait, maybe';
+    expect(stripThinkText(t)).toBe('확인 버튼을 눌러 주세요.');
+    expect(stripThinkText('Okay, I think so.\n\nWait, no.')).toBe('답을 만들지 못했어요. 다시 말해 주세요.');
+  });
+  it('PC 명령은 고정 답변', () => {
+    const cfg: any = { get: (k: string) => ({ OLLAMA_BASE_URL: 'http://x', STUDY_VISION_MODEL: 'v' })[k] };
+    expect(new PcControlService(cfg).plan('PC: 메모장 켜', null)?.reply).toContain('시작');
+  });
+});

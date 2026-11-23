@@ -23,7 +23,12 @@ function koreanTail(text: string): string {
     const letters = p.replace(/[\s\d\p{P}\p{S}]/gu, '').length;
     return letters > 0 && (p.match(HANGUL)?.length ?? 0) / letters >= 0.4;
   });
-  return idx > 0 ? paras.slice(idx).join('\n\n').trim() : text.trimStart();
+  if (idx > 0) return paras.slice(idx).join('\n\n').trim();
+  if (idx === 0) return text.trimStart();
+  // 한글 문단 없음: 추론 속 마지막 한글 인용문을 답으로
+  const quotes = [...text.matchAll(/["“]([^"”\n]*[\uac00-\ud7a3][^"”\n]*)["”]/g)].map((m) => m[1].trim());
+  const last = quotes.filter((q) => q.length >= 4).pop();
+  return last ?? '답을 만들지 못했어요. 다시 말해 주세요.';
 }
 
 /**

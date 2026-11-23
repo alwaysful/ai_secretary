@@ -205,12 +205,20 @@ export class OllamaModel extends BaseModel implements OnModuleDestroy {
     if (req.maxTokens !== undefined) options.num_predict = req.maxTokens;
     return {
       model: this.name,
-      messages: req.messages,
+      messages: this.noThink(req.messages),
       stream,
       think: false,
       keep_alive: this.opts.keepAlive,
       options,
     };
+  }
+
+  /** qwen3 계열: think:false를 무시하는 버전 대비 /no_think 소프트 스위치 */
+  private noThink(messages: GenerateRequest['messages']): GenerateRequest['messages'] {
+    if (!/^qwen3/i.test(this.name)) return messages;
+    const i = messages.map((m) => m.role).lastIndexOf('user');
+    if (i < 0 || messages[i].content.includes('/no_think')) return messages;
+    return messages.map((m, j) => (j === i ? { ...m, content: `${m.content} /no_think` } : m));
   }
 
   private parseLine(line: string): string {
