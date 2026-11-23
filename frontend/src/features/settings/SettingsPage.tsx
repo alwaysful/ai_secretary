@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError, Settings } from '../../shared/api';
 
-export function SettingsPage(props: { onBack: () => void }) {
+export function SettingsPage(props: { onBack: () => void; onModels: () => void }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [models, setModels] = useState<string[] | null>(null);
   const [modelsError, setModelsError] = useState('');
@@ -78,8 +78,13 @@ export function SettingsPage(props: { onBack: () => void }) {
               </label>
               {modelsError && <p className="error">{modelsError}</p>}
               <p className="muted">
-                목록은 설치된 모델. 새 모델은 터미널에서 <code>ollama pull 모델명</code>. 16GB RAM이면 4B~8B 권장.
+                목록은 설치된 모델. 16GB RAM이면 4B~8B 권장.
               </p>
+              <div className="chips">
+                <button className="ghost" onClick={props.onModels}>
+                  ⬇ 다른 모델 다운로드 하러 가기
+                </button>
+              </div>
             </section>
             <section className="card">
               <h2>시스템 프롬프트</h2>

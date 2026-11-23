@@ -22,6 +22,7 @@ const MAIN: Item[] = [
   { id: 'phone', icon: '📱', label: '폰 감시', hint: 'Android 앱' },
   { id: 'memory', icon: '🧠', label: '기억 관리', hint: '장기 기억' },
   { id: 'settings', icon: '⚙️', label: '설정', hint: '모델·시스템 프롬프트' },
+  { id: 'models', icon: '⬇️', label: '다른 모델 다운로드 하러 가기', hint: 'Ollama' },
   { id: 'info', icon: 'ℹ️', label: '정보', hint: '기능 설명' },
 ];
 

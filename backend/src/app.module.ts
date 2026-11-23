@@ -4,6 +4,7 @@ import { ModelsModule } from './ai/models/models.module';
 import { ActionsModule } from './actions/actions.module';
 import { BriefingModule } from './briefing/briefing.module';
 import { CalendarModule } from './calendar/calendar.module';
+import { ModelHubModule } from './model-hub/model-hub.module';
 import { MemoryModule } from './memory/memory.module';
 import { StudyModule } from './study/study.module';
 import { ShortcutModule } from './shortcut/shortcut.module';
@@ -30,6 +31,7 @@ import { PrismaModule } from './prisma/prisma.module';
     ShortcutModule,
     ScrapeModule,
     SystemModule,
+    ModelHubModule,
   ],
   controllers: [HealthController],
 })
