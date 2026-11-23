@@ -220,7 +220,7 @@ export class ModelHubService implements OnModuleDestroy {
     } catch {
       /* plain text */
     }
-    if (/file does not exist|not found/i.test(raw)) return 'Ollama에 없는 모델명';
+    if (/file does not exist|not found|repository not found|401|403/i.test(raw)) return '없는 모델명 또는 비공개 저장소';
     return raw.slice(0, 200);
   }
 }

@@ -3,7 +3,7 @@ import { IsString, MaxLength, MinLength } from 'class-validator';
 import { ModelHubService } from './model-hub.service';
 
 export class PullDto {
-  @IsString() @MinLength(1) @MaxLength(120)
+  @IsString() @MinLength(1) @MaxLength(200)
   name!: string;
 }
 

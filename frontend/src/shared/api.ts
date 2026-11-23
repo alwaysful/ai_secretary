@@ -261,6 +261,7 @@ export interface MailSummary {
 
 export interface HubModel {
   name: string;
+  source: 'ollama' | 'hf';
   family: string;
   sizeGb: number;
   ramGb: number;
