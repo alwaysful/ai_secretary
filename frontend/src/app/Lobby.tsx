@@ -217,6 +217,9 @@ export function Lobby(props: { onNavigate: (p: PageId) => void }) {
           <button className="ghost" onClick={() => props.onNavigate('info')}>
             ℹ️ 정보
           </button>
+          <button className="ghost" onClick={() => props.onNavigate('landing')}>
+            ✦ 소개
+          </button>
           <PowerButton onOff={() => setOff(true)} />
           <span className="muted">
             단축키 <kbd>?</kbd>

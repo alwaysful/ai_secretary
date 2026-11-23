@@ -8,9 +8,10 @@ const ORDER: Theme[] = ['system', 'light', 'dark'];
 export function getTheme(): Theme {
   try {
     const v = localStorage.getItem(KEY);
-    return v === 'light' || v === 'dark' ? v : 'system';
+    // 기본값: 다크 (다크 벤토 디자인)
+    return v === 'light' || v === 'system' ? v : 'dark';
   } catch {
-    return 'system';
+    return 'dark';
   }
 }
 
@@ -22,8 +23,7 @@ export function applyTheme(t: Theme = getTheme()): void {
 
 export function setTheme(t: Theme): void {
   try {
-    if (t === 'system') localStorage.removeItem(KEY);
-    else localStorage.setItem(KEY, t);
+    localStorage.setItem(KEY, t);
   } catch {
     /* 저장 불가 환경: 이번 세션만 적용 */
   }
