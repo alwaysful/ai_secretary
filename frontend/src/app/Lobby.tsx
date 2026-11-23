@@ -32,14 +32,21 @@ const SOON: Item[] = [
   { id: null, icon: '🎙️', label: '음성', hint: '준비 중' },
 ];
 
-function Links(props: { items: Item[]; onNavigate: (p: PageId) => void }) {
+/** 도구 탭과 같은 카드 그리드 */
+function Features(props: { items: Item[]; onNavigate: (p: PageId) => void }) {
   return (
-    <div className="box">
+    <div className="tool-grid feat-grid">
       {props.items.map((it) => (
-        <button key={it.label} className="link" disabled={it.id === null} onClick={() => it.id && props.onNavigate(it.id)}>
-          <span className="ic">{it.icon}</span>
-          <span className="txt">{it.label}</span>
-          {it.hint && <small>{it.hint}</small>}
+        <button
+          key={it.label}
+          className={`card tool-card feat${it.id === null ? ' soon' : ''}`}
+          disabled={it.id === null}
+          onClick={() => it.id && props.onNavigate(it.id)}
+        >
+          <h2>
+            <span className="ic">{it.icon}</span> {it.label}
+          </h2>
+          {it.hint && <p className="muted">{it.hint}</p>}
         </button>
       ))}
     </div>
@@ -238,16 +245,10 @@ export function Lobby(props: { onNavigate: (p: PageId) => void }) {
         <h1 className="title">AURA 810</h1>
         <Widgets onNavigate={props.onNavigate} />
         <WebShortcuts />
-        <div className="cols">
-          <section>
-            <h2>바로가기</h2>
-            <Links items={pcOn ? MAIN : MAIN.filter((i) => i.id !== 'pc')} onNavigate={props.onNavigate} />
-          </section>
-          <section>
-            <h2>곧 추가</h2>
-            <Links items={SOON} onNavigate={props.onNavigate} />
-          </section>
-        </div>
+        <section className="feats">
+          <h2>기능</h2>
+          <Features items={[...(pcOn ? MAIN : MAIN.filter((i) => i.id !== 'pc')), ...SOON]} onNavigate={props.onNavigate} />
+        </section>
       </div>
     </div>
   );
