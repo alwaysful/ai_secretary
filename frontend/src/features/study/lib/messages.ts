@@ -1,3 +1,5 @@
+import { isRobot, pick, ROBOT } from './tone';
+
 const GENERIC = [
   '회원님, 목이 먼저 졸업하려고 합니다.',
   '인간의 진화 과정을 역행하고 계십니다.',
@@ -8,6 +10,7 @@ const GENERIC = [
 ];
 
 export function pickTurtleMessage(turtlePct: number): string {
+  if (isRobot()) return pick(ROBOT.turtle);
   const pool =
     turtlePct >= 30
       ? [`현재 목 상태: 거북이 진화 ${turtlePct}%`, ...GENERIC]

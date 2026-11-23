@@ -1,3 +1,5 @@
+import { apiBase } from '../../../shared/backend';
+
 /** AURA 백엔드 호출. vite 프록시 /api → 백엔드. 인증 없음(로컬 전용). */
 export class ApiError extends Error {
   constructor(
@@ -10,7 +12,7 @@ export class ApiError extends Error {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST';
+  method?: 'GET' | 'POST' | 'PUT';
   body?: unknown;
 }
 
@@ -29,7 +31,7 @@ export async function request<T>(
 ): Promise<T> {
   let res: Response;
   try {
-    res = await fetch('/api' + path, {
+    res = await fetch(apiBase() + path, {
       method,
       headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
       body: body !== undefined ? JSON.stringify(body) : undefined,

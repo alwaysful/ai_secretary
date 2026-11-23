@@ -4,17 +4,22 @@ import { BreakButtons, BreakGauge } from '../components/BreakGauge';
 import { OverlayCanvas } from '../components/OverlayCanvas';
 import { QuitBanner } from '../components/QuitBanner';
 import { SleepGauge } from '../components/SleepGauge';
+import { StudyStats } from '../components/StudyStats';
 import { useAnalysis } from '../hooks/useAnalysis';
 import { useBreak } from '../hooks/useBreak';
 import { useCoach } from '../hooks/useCoach';
+import { usePhoneWatch } from '../hooks/usePhoneWatch';
+import { BREAK_MIN, FOCUS_MIN, usePomodoro } from '../hooks/usePomodoro';
 import { useQuitGuard } from '../hooks/useQuitGuard';
 import { useScreenWatch } from '../hooks/useScreenWatch';
 import { useSleep } from '../hooks/useSleepGauge';
+import { useStudyRecorder } from '../hooks/useStudyRecorder';
 import { pickPhoneMessage, pickSlackMessage, pickSleepStart } from '../lib/hints';
 import { pickTurtleMessage } from '../lib/messages';
 import { requestDesktopPermission } from '../lib/notify';
 import { closeAlertWindow, showAlertWindow } from '../lib/pipAlert';
 import { pickQuitMessage } from '../lib/quitMessages';
+import { getTone, setTone, type Tone } from '../lib/tone';
 import '../analysis.css';
 import '../study.css';
 import '../study-analysis.css';
@@ -51,6 +56,11 @@ function loadDeviceId(): string {
   }
 }
 
+function mmss(ms: number): string {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
 function hms(ms: number): string {
   const s = Math.floor(ms / 1000);
   return [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60]
@@ -61,7 +71,12 @@ function hms(ms: number): string {
 export function StudyPage({ onBack }: { onBack: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { status, error, frame, start, stop } = useAnalysis(videoRef);
-  const [view, setView] = useState<'user' | 'analysis'>('user');
+  const [view, setView] = useState<'user' | 'analysis' | 'stats'>('user');
+  const [tone, setToneState] = useState<Tone>(getTone);
+  const changeTone = (t: Tone) => {
+    setTone(t);
+    setToneState(t);
+  };
   const [deviceId, setDeviceId] = useState(loadDeviceId);
   const [calibration, setCalibration] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -77,6 +92,9 @@ export function StudyPage({ onBack }: { onBack: () => void }) {
   const running = status === 'running';
   const quit = useQuitGuard();
   const busy = running || screen.active;
+  const pomo = usePomodoro(busy, rest);
+  const rec = useStudyRecorder(busy, rest.active, pomo.count);
+  const phoneWatch = usePhoneWatch(busy);
 
   // 휴대폰은 한 번 감지되면 PHONE_HOLD_MS 동안 사용 중으로 유지
   const phoneRaw = Math.round(
@@ -86,6 +104,11 @@ export function StudyPage({ onBack }: { onBack: () => void }) {
   if (phoneRaw >= phoneLimit) phoneSeenAt.current = Date.now();
   const phoneHeld =
     !rest.active && Date.now() - phoneSeenAt.current < PHONE_HOLD_MS;
+
+  // 핸드폰 위반: 사용 시작 시점마다 1회
+  useEffect(() => {
+    if (phoneHeld && busy) rec.hit('phone');
+  }, [phoneHeld, busy, rec.hit]);
 
   const values: Record<(typeof CHIPS)[number]['key'], number> = {
     posture: coach.posture?.turtlePct ?? 0,
@@ -129,22 +152,34 @@ export function StudyPage({ onBack }: { onBack: () => void }) {
   // 꼽 받은 횟수 / 최근 꼽
   useEffect(() => {
     if (!coach.toast) return;
+    rec.hit('posture');
     setRoasts((n) => n + 1);
     setRecent(coach.toast);
     coach.dismiss();
   }, [coach.toast, coach.dismiss]);
   useEffect(() => {
     if (!sleep.toast) return;
+    rec.hit('sleep');
     setRoasts((n) => n + 1);
     setRecent(sleep.toast);
     sleep.dismiss();
   }, [sleep.toast, sleep.dismiss]);
   useEffect(() => {
     if (!screen.toast) return;
+    rec.hit('slack');
     setRoasts((n) => n + 1);
     setRecent(screen.toast);
     screen.dismiss();
   }, [screen.toast, screen.dismiss]);
+
+  // 폰 앱이 보낸 딴짓 앱 사용 (통계는 백엔드가 따로 집계)
+  useEffect(() => {
+    if (!phoneWatch.toast) return;
+    setRoasts((n) => n + 1);
+    setRecent(phoneWatch.toast);
+    showAlertWindow('폰 딴짓', phoneWatch.toast);
+    phoneWatch.dismiss();
+  }, [phoneWatch.toast, phoneWatch.dismiss]);
 
   // 공부 중 탭 닫기도 한 번 막는다
   useEffect(() => {
@@ -210,7 +245,9 @@ export function StudyPage({ onBack }: { onBack: () => void }) {
           <OverlayCanvas frame={frame} video={videoRef.current} />
         </div>
 
-        {view === 'user' ? (
+        {view === 'stats' ? (
+          <StudyStats onBack={() => setView('user')} />
+        ) : view === 'user' ? (
           <div className="study">
             <span className={busy && !rest.active ? 'study-pill on' : 'study-pill'}>
               <i className="study-dot" />
@@ -251,6 +288,24 @@ export function StudyPage({ onBack }: { onBack: () => void }) {
                 </button>
               </>
             )}
+            <div className="pomo">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={pomo.enabled}
+                  onChange={(e) => pomo.setEnabled(e.target.checked)}
+                />
+                🍅 뽀모도로 ({FOCUS_MIN}분 집중 / {BREAK_MIN}분 휴식)
+              </label>
+              {busy && pomo.enabled && (
+                <span className="pomo-phase">
+                  {pomo.phase === 'focus'
+                    ? `집중 ${mmss(pomo.focusLeftMs)} 남음`
+                    : `휴식 ${mmss(rest.remainingMs)} 남음`}
+                  {` · 완료 ${pomo.count}개`}
+                </span>
+              )}
+            </div>
             <SleepGauge progress={sleep.progress} sleeping={sleep.sleeping} />
             <div className="study-chips">
               {CHIPS.map((c) => (
@@ -268,6 +323,7 @@ export function StudyPage({ onBack }: { onBack: () => void }) {
             <ErrorMessage message={coach.pushError} />
             <ErrorMessage message={sleep.error} />
             <ErrorMessage message={screen.error} />
+            <ErrorMessage message={rec.error} />
             <div className="study-links">
               {busy ? (
                 <button type="button" className="study-link" disabled>
@@ -285,11 +341,46 @@ export function StudyPage({ onBack }: { onBack: () => void }) {
               >
                 분석하기
               </button>
+              <button type="button" className="study-link" onClick={() => setView('stats')}>
+                통계
+              </button>
             </div>
           </div>
         ) : (
           <>
             <div className="analysis-left">
+              <div className="tone-toggle">
+                <span className={tone === 'robot' ? 'on' : undefined}>🤖 로봇</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={tone === 'devil'}
+                  aria-label="멘트 말투: 로봇 또는 인간"
+                  className={tone === 'devil' ? 'tone-switch human' : 'tone-switch'}
+                  onClick={() => changeTone(tone === 'robot' ? 'devil' : 'robot')}
+                >
+                  <i />
+                </button>
+                <span className={tone === 'devil' ? 'on' : undefined}>🧑 인간</span>
+              </div>
+              <div className="pomo" style={{ justifyContent: 'flex-start' }}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={pomo.enabled}
+                    onChange={(e) => pomo.setEnabled(e.target.checked)}
+                  />
+                  🍅 뽀모도로 ({FOCUS_MIN}분 집중 / {BREAK_MIN}분 휴식)
+                </label>
+                {busy && pomo.enabled && (
+                  <span className="pomo-phase">
+                    {pomo.phase === 'focus'
+                      ? `집중 ${mmss(pomo.focusLeftMs)} 남음`
+                      : `휴식 ${mmss(rest.remainingMs)} 남음`}
+                    {` · 완료 ${pomo.count}개`}
+                  </span>
+                )}
+              </div>
               <ErrorMessage message={error} />
               <div className="row">
                 <button

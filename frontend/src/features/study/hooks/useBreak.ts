@@ -18,10 +18,11 @@ export function useBreak() {
   const lastEnd = useRef(0);
   const running = useRef(false);
 
-  const start = useCallback((minutes: number) => {
+  /** quiet: 뽀모도로 자동 휴식 (휴식 과다 꼽 생략) */
+  const start = useCallback((minutes: number, quiet = false) => {
     const ms = minutes * 60_000;
     const now = Date.now();
-    if (lastEnd.current && now - lastEnd.current < REST_COOLDOWN_MS) {
+    if (!quiet && lastEnd.current && now - lastEnd.current < REST_COOLDOWN_MS) {
       const msg = TOO_SOON[Math.floor(Math.random() * TOO_SOON.length)];
       notifyDesktop('휴식 과다', msg);
     }

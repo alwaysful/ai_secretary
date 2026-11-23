@@ -266,6 +266,101 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; border: 1
 .side-foot { display: flex; gap: 6px; align-items: center; }
 .side-foot .status { flex: 1; min-width: 0; }
 
+/* 폰 감시 */
+.phone-perms,
+.phone-apps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.phone-apps {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.phone-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.qr-img {
+  display: block;
+  width: 260px;
+  max-width: 100%;
+  margin: 8px auto;
+  background: #fff;
+  border-radius: 8px;
+}
+.qr-steps {
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+}
+.qr-scan {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+.qr-scan video {
+  width: 100%;
+  max-width: 420px;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 12px;
+  background: #000;
+}
+.setup-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.setup-step {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+.setup-step.done {
+  opacity: 0.6;
+  padding: 8px 12px;
+}
+.setup-step.current {
+  border-color: var(--accent);
+  border-width: 2px;
+}
+.setup-step h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.setup-step p {
+  margin: 0;
+}
+.setup-step .big {
+  width: 100%;
+  padding: 14px;
+  font-size: 1rem;
+}
+.setup-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+.setup-progress i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+
+/* 정보 페이지 */
+.info-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+
 /* 모델 다운로드 */
 .model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
 .model-card.installed { border-color: var(--accent); }

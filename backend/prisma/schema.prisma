@@ -69,3 +69,32 @@ model Memory {
 
   @@index([enabled, updatedAt])
 }
+
+/// 공부 집중 세션 1회 (시작~종료). 클라이언트가 진행 중 주기적으로 upsert.
+model StudySession {
+  id        String   @id @db.Uuid
+  startedAt DateTime
+  endedAt   DateTime
+  /// 휴식 제외 실제 집중 시간 (초)
+  focusSec  Int      @default(0)
+  /// 완료한 뽀모도로 집중 블록 수
+  pomodoros Int      @default(0)
+  posture   Int      @default(0)
+  phone     Int      @default(0)
+  slack     Int      @default(0)
+  sleep     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@index([startedAt])
+}
+
+/// 폰 감시: 공부 중 딴짓 앱 사용 (Android 앱이 기록)
+model PhoneEvent {
+  id      String   @id @default(uuid()) @db.Uuid
+  at      DateTime @default(now())
+  /// 앱 패키지명 (com.google.android.youtube 등)
+  package String
+  label   String
+
+  @@index([at])
+}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { notifyDesktop } from '../lib/notify';
-import { QUIT_DONE, QUIT_PROMPT, pickQuitMessage } from '../lib/quitMessages';
+import { quitDone, quitPrompt, pickQuitMessage } from '../lib/quitMessages';
 
 export const QUIT_TOTAL_MS = 5 * 60_000;
 // 단계별 알림 간격: 갈수록 잦아진다
@@ -21,7 +21,7 @@ export function useQuitGuard() {
     nextAlarm.current = now + INTERVALS_MS[0];
     setRemainingMs(QUIT_TOTAL_MS);
     setPhase('counting');
-    notifyDesktop('종료 보류', QUIT_PROMPT);
+    notifyDesktop('종료 보류', quitPrompt());
   }, [phase]);
 
   const reset = useCallback(() => {
@@ -36,7 +36,7 @@ export function useQuitGuard() {
       if (left <= 0) {
         setRemainingMs(0);
         setPhase('ready');
-        notifyDesktop('종료 가능', QUIT_DONE);
+        notifyDesktop('종료 가능', quitDone());
         return;
       }
       setRemainingMs(left);
