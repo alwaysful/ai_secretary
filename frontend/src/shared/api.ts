@@ -358,6 +358,62 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
 }
 
+export type Ranked = { name: string; count: number }[];
+
+export interface StatsOverview {
+  days: number;
+  dates: string[];
+  study: {
+    focusSec: number;
+    pomodoros: number;
+    sessions: number;
+    longestSec: number;
+    studiedDays: number;
+    avgPerDaySec: number;
+    streak: number;
+    daily: number[];
+    violations: { posture: number; phone: number; slack: number; sleep: number };
+    phoneApps: number;
+    topApps: Ranked;
+  };
+  chat: {
+    conversations: number;
+    conversationsAll: number;
+    userMessages: number;
+    aiMessages: number;
+    stopped: number;
+    tokens: number;
+    avgReplyMs: number;
+    daily: number[];
+    hours: number[];
+    models: Ranked;
+  };
+  news: { newPosts: number; unread: number; daily: number[]; bySite: Ranked; deadlines: { id: string; title: string; url: string; deadline: string }[] };
+  memory: { total: number; enabled: number };
+  shortcuts: number;
+  calendar: { connected: boolean; today: number; week: number; error?: string };
+}
+
+export interface UsageAgg {
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  audioSec: number;
+  cost: number;
+}
+
+export interface ApiUsageStats {
+  month: string;
+  prevMonth: string;
+  total: UsageAgg;
+  prevCost: number;
+  projected: number;
+  providers: (UsageAgg & { provider: string })[];
+  models: (UsageAgg & { provider: string; model: string; price: { input: number; output: number }; custom: boolean })[];
+  features: (UsageAgg & { feature: string })[];
+  daily: Record<string, number>[];
+}
+
 export const api = {
   health: () => req<Health>('/health'),
   warmup: () => req<{ state: string }>('/health/warmup', { method: 'POST' }),
@@ -442,6 +498,11 @@ export const api = {
   reorderShortcuts: (ids: string[], section: ShortcutSection = 'lobby') =>
     req<WebShortcut[]>('/shortcuts/order', { method: 'PUT', body: JSON.stringify({ ids, section }) }),
   toolsStatus: () => req<ToolsStatus>('/tools/status'),
+  statsOverview: (days: 7 | 30) => req<StatsOverview>(`/stats/overview?days=${days}`),
+  statsApi: (month?: string) => req<ApiUsageStats>(month ? `/stats/api?month=${month}` : '/stats/api'),
+  setApiPrice: (model: string, input: number, output: number) =>
+    req<unknown>(`/stats/prices/${encodeURIComponent(model)}`, { method: 'PUT', body: JSON.stringify({ input, output }) }),
+  resetApiPrice: (model: string) => req<void>(`/stats/prices/${encodeURIComponent(model)}`, { method: 'DELETE' }),
   ocr: (image: string, hint?: string) =>
     req<OcrResult>('/tools/ocr', { method: 'POST', body: JSON.stringify({ image, ...(hint ? { hint } : {}) }) }),
   stt: (audio: string, mime: string, language?: string, source: 'mic' | 'file' = 'file') =>

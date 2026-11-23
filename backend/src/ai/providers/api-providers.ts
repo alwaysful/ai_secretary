@@ -43,7 +43,56 @@ export interface CallOpts {
   temperature?: number;
   signal?: AbortSignal;
   timeoutMs: number;
+  /** 사용량 기록용 기능 구분 */
+  feature?: AiFeature;
 }
+
+/** API 호출 1회 토큰 사용량 */
+export interface UsageRecord {
+  provider: ApiProvider;
+  model: string;
+  feature: AiFeature;
+  inputTokens: number;
+  outputTokens: number;
+  audioSec?: number;
+}
+
+let usageSink: ((u: UsageRecord) => void) | null = null;
+
+/** 사용량 수신자 등록 (UsageService) */
+export function onApiUsage(fn: ((u: UsageRecord) => void) | null): void {
+  usageSink = fn;
+}
+
+function report(p: ApiProvider, model: string, o: CallOpts, input: number | undefined, output: number | undefined, audioSec?: number): void {
+  if (!usageSink) return;
+  const u: UsageRecord = { provider: p, model, feature: o.feature ?? 'chat', inputTokens: Math.max(0, input ?? 0), outputTokens: Math.max(0, output ?? 0), audioSec };
+  if (!u.inputTokens && !u.outputTokens && !audioSec) return;
+  try {
+    usageSink(u);
+  } catch {
+    /* 기록 실패는 무시 */
+  }
+}
+
+type ClaudeUsage = { input_tokens?: number | null; output_tokens?: number | null; cache_creation_input_tokens?: number | null; cache_read_input_tokens?: number | null };
+function reportClaude(model: string, o: CallOpts, u: ClaudeUsage | undefined): void {
+  if (!u) return;
+  report('anthropic', model, o, (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0), u.output_tokens ?? 0);
+}
+
+type OaUsage = { input_tokens?: number; output_tokens?: number };
+function reportOpenai(model: string, o: CallOpts, raw: unknown): void {
+  const u = (raw as { usage?: OaUsage })?.usage;
+  if (u) report('openai', model, o, u.input_tokens, u.output_tokens);
+}
+
+type GeminiUsage = { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
+function reportGemini(model: string, o: CallOpts, u: GeminiUsage | undefined): void {
+  if (u) report('gemini', model, o, u.promptTokenCount, (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0));
+}
+
+const geminiUsage = (raw: unknown) => (raw as { usageMetadata?: GeminiUsage })?.usageMetadata;
 
 const OPENAI = 'https://api.openai.com/v1';
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
@@ -239,6 +288,7 @@ export async function apiGenerate(p: ApiProvider, key: string, model: string, me
         } as Anthropic.MessageCreateParamsNonStreaming,
         { signal: o.signal },
       );
+      reportClaude(model, o, msg.usage);
       return claudeText(msg);
     } catch (e) {
       throw toErr(p, e, o.signal);
@@ -247,10 +297,14 @@ export async function apiGenerate(p: ApiProvider, key: string, model: string, me
   if (p === 'openai') {
     const input = rest.map((m) => ({ role: m.role, content: m.content }));
     const res = await http(p, `${OPENAI}/responses`, { method: 'POST', headers: openaiHeaders(key), body: JSON.stringify(openaiBody(model, system, input, o, false)) }, o);
-    return openaiText(await res.json());
+    const raw = await res.json();
+    reportOpenai(model, o, raw);
+    return openaiText(raw);
   }
   const res = await http(p, `${modelPath(model)}:generateContent`, { method: 'POST', headers: geminiHeaders(key), body: JSON.stringify(geminiBody(system, geminiContents(rest), o)) }, o);
-  return geminiText(await res.json());
+  const raw = await res.json();
+  reportGemini(model, o, geminiUsage(raw));
+  return geminiText(raw);
 }
 
 export async function* apiStream(p: ApiProvider, key: string, model: string, messages: ChatMessage[], o: CallOpts): AsyncGenerator<string> {
@@ -267,8 +321,20 @@ export async function* apiStream(p: ApiProvider, key: string, model: string, mes
         } as Anthropic.MessageStreamParams,
         { signal: o.signal },
       );
-      for await (const ev of stream) {
-        if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') yield ev.delta.text;
+      let inTok = 0;
+      let outTok = 0;
+      try {
+        for await (const ev of stream) {
+          if (ev.type === 'message_start') {
+            const u = ev.message.usage;
+            inTok = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+            outTok = u.output_tokens ?? 0;
+          } else if (ev.type === 'message_delta') outTok = ev.usage.output_tokens ?? outTok;
+          else if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') yield ev.delta.text;
+        }
+      } finally {
+        // 중단돼도 받은 만큼 기록
+        report('anthropic', model, o, inTok, outTok);
       }
       const final = await stream.finalMessage();
       if (final.stop_reason === 'refusal') throw new ModelError('BAD_RESPONSE', 'Claude가 요청을 거절함');
@@ -281,8 +347,9 @@ export async function* apiStream(p: ApiProvider, key: string, model: string, mes
     const input = rest.map((m) => ({ role: m.role, content: m.content }));
     const res = await http(p, `${OPENAI}/responses`, { method: 'POST', headers: openaiHeaders(key), body: JSON.stringify(openaiBody(model, system, input, o, true)) }, o);
     for await (const raw of sse(p, res, o.signal)) {
-      const ev = raw as { type?: string; delta?: string; error?: { message?: string }; response?: { error?: { message?: string } } };
+      const ev = raw as { type?: string; delta?: string; error?: { message?: string }; response?: { error?: { message?: string }; usage?: OaUsage } };
       if (ev.type === 'response.output_text.delta' && ev.delta) yield ev.delta;
+      else if (ev.type === 'response.completed' || ev.type === 'response.incomplete') reportOpenai(model, o, ev.response);
       else if (ev.type === 'error' || ev.type === 'response.failed') {
         throw new ModelError('BAD_RESPONSE', `OpenAI: ${ev.error?.message ?? ev.response?.error?.message ?? ev.type}`);
       }
@@ -290,9 +357,15 @@ export async function* apiStream(p: ApiProvider, key: string, model: string, mes
     return;
   }
   const res = await http(p, `${modelPath(model)}:streamGenerateContent?alt=sse`, { method: 'POST', headers: geminiHeaders(key), body: JSON.stringify(geminiBody(system, geminiContents(rest), o)) }, o);
-  for await (const raw of sse(p, res, o.signal)) {
-    const t = geminiText(raw);
-    if (t) yield t;
+  let usage: GeminiUsage | undefined;
+  try {
+    for await (const raw of sse(p, res, o.signal)) {
+      usage = geminiUsage(raw) ?? usage;
+      const t = geminiText(raw);
+      if (t) yield t;
+    }
+  } finally {
+    reportGemini(model, o, usage);
   }
 }
 
@@ -319,6 +392,7 @@ export async function apiVision(p: ApiProvider, key: string, model: string, syst
         } as Anthropic.MessageCreateParamsNonStreaming,
         { signal: o.signal },
       );
+      reportClaude(model, o, msg.usage);
       return claudeText(msg);
     } catch (e) {
       throw toErr(p, e, o.signal);
@@ -330,11 +404,15 @@ export async function apiVision(p: ApiProvider, key: string, model: string, syst
       { type: 'input_text', text: prompt },
     ];
     const res = await http(p, `${OPENAI}/responses`, { method: 'POST', headers: openaiHeaders(key), body: JSON.stringify(openaiBody(model, system, [{ role: 'user', content }], o, false)) }, o);
-    return openaiText(await res.json());
+    const raw = await res.json();
+    reportOpenai(model, o, raw);
+    return openaiText(raw);
   }
   const contents = [{ role: 'user', parts: [{ inline_data: { mime_type: mime, data: imageB64 } }, { text: prompt }] }];
   const res = await http(p, `${modelPath(model)}:generateContent`, { method: 'POST', headers: geminiHeaders(key), body: JSON.stringify(geminiBody(system, contents, { ...o, temperature: 0 })) }, o);
-  return geminiText(await res.json());
+  const raw = await res.json();
+  reportGemini(model, o, geminiUsage(raw));
+  return geminiText(raw);
 }
 
 /** 음성 → 텍스트. Anthropic 미지원 */
@@ -356,7 +434,10 @@ export async function apiTranscribe(
     form.append('response_format', 'json');
     if (language) form.append('language', language);
     const res = await http(p, `${OPENAI}/audio/transcriptions`, { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form }, o);
-    const data = (await res.json()) as { text?: string; language?: string };
+    const data = (await res.json()) as { text?: string; language?: string; duration?: number; usage?: { type?: string; seconds?: number; input_tokens?: number; output_tokens?: number } };
+    const u = data.usage;
+    if (u?.type === 'duration' || (!u && data.duration)) report(p, model, o, 0, 0, Math.ceil(u?.seconds ?? data.duration ?? 0));
+    else if (u) report(p, model, o, u.input_tokens, u.output_tokens);
     return { text: data.text ?? '', language: data.language ?? language ?? '' };
   }
   if (audio.length > 19 * 1024 * 1024) throw new ModelError('BAD_RESPONSE', 'Gemini 음성은 19MB 이하만 가능');
@@ -371,7 +452,9 @@ export async function apiTranscribe(
     },
   ];
   const res = await http(p, `${modelPath(model)}:generateContent`, { method: 'POST', headers: geminiHeaders(key), body: JSON.stringify(geminiBody('', contents, { ...o, temperature: 0 })) }, o);
-  return { text: geminiText(await res.json()).trim(), language: language ?? '' };
+  const raw = await res.json();
+  reportGemini(model, o, geminiUsage(raw));
+  return { text: geminiText(raw).trim(), language: language ?? '' };
 }
 
 const NOT_CHAT = /(embed|tts|audio|realtime|transcri|whisper|image|dall-e|moderation|search|live|veo|imagen|aqa|computer-use|babbage|davinci|codex)/i;

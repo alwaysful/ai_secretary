@@ -213,3 +213,28 @@ model NewsSite {
 
   @@index([categoryId, position])
 }
+
+/// 외부 AI API 호출 1회의 토큰 사용량 (비용 추정용)
+model ApiUsage {
+  id           String   @id @default(uuid()) @db.Uuid
+  at           DateTime @default(now())
+  /// gemini | anthropic | openai
+  provider     String
+  model        String
+  /// chat | ocr | stt
+  feature      String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  /// 길이 과금 음성 모델 (whisper-1)
+  audioSec     Int      @default(0)
+
+  @@index([at])
+}
+
+/// 모델별 단가 (USD / 100만 토큰). 사용자가 수정. 없으면 코드 기본값
+model ApiPrice {
+  model     String   @id
+  input     Float
+  output    Float
+  updatedAt DateTime @updatedAt
+}

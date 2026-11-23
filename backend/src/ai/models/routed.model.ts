@@ -46,6 +46,7 @@ export class RoutedModel extends BaseModel implements OnModuleDestroy {
       temperature: req.temperature,
       signal: req.signal,
       timeoutMs: req.timeoutMs ?? this.timeoutMs,
+      feature: 'chat',
     });
     return { content, model: `${a.provider}:${a.model}`, durationMs: Date.now() - started };
   }
@@ -62,6 +63,7 @@ export class RoutedModel extends BaseModel implements OnModuleDestroy {
       temperature: req.temperature,
       signal: req.signal,
       timeoutMs: req.timeoutMs ?? this.timeoutMs,
+      feature: 'chat',
     });
   }
 

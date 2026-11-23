@@ -128,7 +128,7 @@ export class ToolsService implements OnModuleDestroy {
     if (api) {
       if (!api.key) throw new BadRequestException({ code: 'NO_API_KEY', message: `${PROVIDER_LABEL[api.provider]} API 키 없음 (설정 → 모델)` });
       try {
-        const text = await apiVision(api.provider, api.key, api.model, OCR_SYSTEM, prompt, img, { timeoutMs: OCR_TIMEOUT_MS, maxTokens: 8192 });
+        const text = await apiVision(api.provider, api.key, api.model, OCR_SYSTEM, prompt, img, { timeoutMs: OCR_TIMEOUT_MS, maxTokens: 8192, feature: 'ocr' });
         return { text: cleanOcr(text), model: `${api.provider}:${api.model}`, ms: Date.now() - t0 };
       } catch (e) {
         throw this.apiFail(e, 'OCR_FAILED');
@@ -182,7 +182,7 @@ export class ToolsService implements OnModuleDestroy {
       const clean = mime.split(';')[0].trim().toLowerCase();
       const t0 = Date.now();
       try {
-        const r = await apiTranscribe(api.provider, api.key, api.model, buf, clean, EXT[clean] ?? 'webm', language || undefined, { timeoutMs: STT_TIMEOUT_MS });
+        const r = await apiTranscribe(api.provider, api.key, api.model, buf, clean, EXT[clean] ?? 'webm', language || undefined, { timeoutMs: STT_TIMEOUT_MS, feature: 'stt' });
         return { text: r.text, language: r.language, duration: 0, model: `${api.provider}:${api.model}`, ms: Date.now() - t0 };
       } catch (e) {
         throw this.apiFail(e, 'STT_FAILED');
