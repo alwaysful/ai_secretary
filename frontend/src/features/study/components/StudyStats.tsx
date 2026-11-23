@@ -10,6 +10,7 @@ const VIOLATIONS = [
   { key: 'phone', label: '핸드폰', color: '#d9534f' },
   { key: 'slack', label: '딴짓', color: '#7d5fd3' },
   { key: 'sleep', label: '수면', color: '#3d8fe8' },
+  { key: 'phoneApp', label: '폰 딴짓 앱', color: '#2bb673' },
 ] as const;
 
 const W = 560;
@@ -97,7 +98,7 @@ export function StudyStats({ onBack }: { onBack: () => void }) {
 
   const labels = data?.map((b) => label(b.date, unit)) ?? [];
   const totalFocus = data?.reduce((a, b) => a + b.focusSec, 0) ?? 0;
-  const totalViol = data?.reduce((a, b) => a + b.posture + b.phone + b.slack + b.sleep, 0) ?? 0;
+  const totalViol = data?.reduce((a, b) => a + b.posture + b.phone + b.slack + b.sleep + b.phoneApp, 0) ?? 0;
   const totalPomo = data?.reduce((a, b) => a + b.pomodoros, 0) ?? 0;
 
   return (

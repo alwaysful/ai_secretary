@@ -46,8 +46,20 @@ describe('study stats', () => {
       now,
     );
     expect(out).toEqual([
-      { ...zero, date: '2026-11-16', focusSec: 50 },
-      { ...zero, date: '2026-11-23', focusSec: 300, slack: 1 },
+      { ...zero, phoneApp: 0, date: '2026-11-16', focusSec: 50 },
+      { ...zero, phoneApp: 0, date: '2026-11-23', focusSec: 300, slack: 1 },
     ]);
+  });
+});
+
+describe('phone events', () => {
+  it('폰 딴짓 기록을 날짜별 phoneApp 으로 합산', () => {
+    const now = new Date('2026-11-23T03:00:00Z');
+    const out = bucketize([], 'day', 2, 'Asia/Seoul', now, [
+      new Date('2026-11-22T16:30:00Z'), // 서울 11-23
+      new Date('2026-11-23T01:00:00Z'), // 서울 11-23
+      new Date('2026-11-22T10:00:00Z'), // 서울 11-22
+    ]);
+    expect(out.map((b) => b.phoneApp)).toEqual([1, 2]);
   });
 });

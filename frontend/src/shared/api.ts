@@ -1,3 +1,5 @@
+import { apiBase } from './backend';
+
 export interface Conversation {
   id: string;
   title: string | null;
@@ -122,7 +124,6 @@ export interface MailSummary {
   important?: boolean;
 }
 
-const BASE = '/api';
 
 export class ApiError extends Error {
   constructor(
@@ -156,7 +157,7 @@ async function failure(res: Response): Promise<ApiError> {
 
 async function call(path: string, init?: RequestInit): Promise<Response> {
   try {
-    return await fetch(BASE + path, init);
+    return await fetch(apiBase() + path, init);
   } catch (e) {
     if (init?.signal?.aborted) throw e;
     throw backendDown();

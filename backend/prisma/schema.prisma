@@ -87,3 +87,14 @@ model StudySession {
 
   @@index([startedAt])
 }
+
+/// 폰 감시: 공부 중 딴짓 앱 사용 (Android 앱이 기록)
+model PhoneEvent {
+  id      String   @id @default(uuid()) @db.Uuid
+  at      DateTime @default(now())
+  /// 앱 패키지명 (com.google.android.youtube 등)
+  package String
+  label   String
+
+  @@index([at])
+}
