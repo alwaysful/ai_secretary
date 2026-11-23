@@ -54,6 +54,26 @@ const MAX_STEPS_DEFAULT = 25;
 const PENDING_TTL_MS = 10 * 60_000;
 /** 채팅: "PC: 목표", "/pc 목표", "컴퓨터 조작: 목표" */
 const PC_CMD = /^\s*(?:\/pc\s+|(?:pc|피씨|컴퓨터)\s*(?:조작)?\s*[:：]\s*)(.+)$/is;
+/** 접두어 없는 자연어 PC 조작 요청 */
+const APPS =
+  '메모장|계산기|그림판|크롬|구글 ?크롬|엣지|브라우저|인터넷|파일 ?탐색기|탐색기|내 ?pc|휴지통|엑셀|워드|파워 ?포인트|한글|카카오톡|카톡|디스코드|스팀|작업 ?관리자|명령 ?프롬프트|cmd|터미널|파워셸|vs ?code|비주얼 ?스튜디오 ?코드|노션|유튜브|네이버|구글|캡처 ?도구|제어판|윈도우 ?설정';
+const PC_NATURAL = [
+  new RegExp(`(${APPS})\\s*(을|를|좀|창)?\\s*(켜|열어|열고|실행|띄워|켜고|닫아|꺼)`, 'i'),
+  /(마우스|키보드)\s*(로|를|으로)?\s*.*(해|줘|클릭|움직|눌러|입력)/,
+  /(클릭해|더블 ?클릭|우클릭|스크롤해|타이핑해|창\s*(닫아|최소화|최대화))/,
+  /(화면|창|바탕\s*화면)에서\s*.+(눌러|클릭|열어)/,
+];
+const NOT_PC = /(어떻게|방법|뭐야|뭔가요|알려\s*줘|왜\s|\?$|？$|일정|메일|기억)/;
+
+/** "PC: 목표" 또는 자연어 조작 요청 → 목표. 아니면 null */
+export function pcGoal(text: string): string | null {
+  const m = PC_CMD.exec(text);
+  if (m) return m[1].trim() || null;
+  const t = text.trim();
+  if (t.length > 200 || t.includes('\n') || NOT_PC.test(t)) return null;
+  return PC_NATURAL.some((r) => r.test(t)) ? t : null;
+}
+
 const STEP_PAUSE_MS = 700;
 const MAX_PARSE_ERRORS = 3;
 
@@ -130,9 +150,7 @@ export class PcControlService implements OnModuleDestroy {
 
   /** 채팅 명령 → 확인 대기 작업 */
   plan(text: string, conversationId: string | null): ActionPlan | null {
-    const m = PC_CMD.exec(text);
-    if (!m) return null;
-    const goal = m[1].trim().slice(0, 500);
+    const goal = pcGoal(text)?.slice(0, 500);
     if (!goal) return null;
     this.prune();
     const action: PendingAction = {
@@ -147,7 +165,7 @@ export class PcControlService implements OnModuleDestroy {
     const context = [
       '<pc-action>',
       `[확인 대기] ${escapeTags(action.summary)}`,
-      '아직 시작 안 함. 사용자가 확인 버튼을 눌러야 AI가 마우스·키보드를 움직인다.',
+      '아직 시작 안 함. 화면의 확인 카드에서 시작을 누르면 AURA가 직접 마우스·키보드를 움직인다. 할 수 없다고 말하지 않는다.',
       '중간 취소: Esc, Ctrl+Alt+X, 마우스를 화면 모서리로, 또는 정지 버튼. 짧게 안내한다.',
       '</pc-action>',
     ].join('\n');

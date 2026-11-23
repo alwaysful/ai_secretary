@@ -30,3 +30,39 @@ describe('PcControlService.plan', () => {
     expect(svc.cancel()).toBeNull();
   });
 });
+
+import { pcGoal } from '../../src/pc-control/pc-control.service';
+import { filterThinkStream, stripThinkText } from '../../src/ai/models/think-filter';
+
+describe('pcGoal 자연어', () => {
+  it.each(['메모장 켜고 안녕 적어', '크롬 열어서 네이버 들어가', '계산기 실행해줘', '마우스로 휴지통 클릭해'])('조작: %s', (t) => {
+    expect(pcGoal(t)).toBe(t);
+  });
+  it.each(['메모장 어떻게 켜?', '크롬이 뭐야', '내일 일정 알려줘', '안녕', '메모장 켜는 방법'])('아님: %s', (t) => {
+    expect(pcGoal(t)).toBeNull();
+  });
+});
+
+describe('think 제거', () => {
+  const leak = 'Okay, the user wants me to open a note.\n\nHmm, but I cannot.\n\n메모장을 열어 "안녕"을 적을게요.';
+  it('태그·영어 추론', () => {
+    expect(stripThinkText('<think>a</think>답')).toBe('답');
+    expect(stripThinkText('reasoning...</think>\n답')).toBe('답');
+    expect(stripThinkText(leak)).toBe('메모장을 열어 "안녕"을 적을게요.');
+    expect(stripThinkText('안녕하세요')).toBe('안녕하세요');
+  });
+  const collect = async (toks: string[]) => {
+    async function* g() {
+      for (const t of toks) yield t;
+    }
+    let s = '';
+    for await (const t of filterThinkStream(g())) s += t;
+    return s;
+  };
+  it('스트림', async () => {
+    expect(await collect(['안녕', '하세요'])).toBe('안녕하세요');
+    expect(await collect(['<th', 'ink>생각', '</think>', '답', '변'])).toBe('답변');
+    expect(await collect(leak.match(/.{1,5}/gs)!)).toBe('메모장을 열어 "안녕"을 적을게요.');
+    expect(await collect(['Hello ', 'world'])).toBe('Hello world');
+  });
+});

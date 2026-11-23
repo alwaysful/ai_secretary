@@ -1,4 +1,5 @@
 import { Logger, OnModuleDestroy } from '@nestjs/common';
+import { filterThinkStream, stripThinkText as stripThink } from './think-filter';
 import {
   BaseModel,
   GenerateRequest,
@@ -28,9 +29,6 @@ interface OllamaChunk {
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
-function stripThink(text: string): string {
-  return text.replace(/<think>[\s\S]*?<\/think>/g, '').trimStart();
-}
 
 export class OllamaModel extends BaseModel implements OnModuleDestroy {
   private _name: string;
@@ -98,7 +96,11 @@ export class OllamaModel extends BaseModel implements OnModuleDestroy {
     };
   }
 
-  async *stream(req: GenerateRequest): AsyncIterable<string> {
+  stream(req: GenerateRequest): AsyncIterable<string> {
+    return filterThinkStream(this.rawStream(req));
+  }
+
+  private async *rawStream(req: GenerateRequest): AsyncIterable<string> {
     await this.ensureReady();
     const res = await this.request(
       '/api/chat',
