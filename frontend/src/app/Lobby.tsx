@@ -150,6 +150,9 @@ export function Lobby(props: { onNavigate: (p: PageId) => void }) {
           </span>
           <span>{today}</span>
           <ThemeButton />
+          <button className="ghost" onClick={() => props.onNavigate('info')}>
+            ℹ️ 정보
+          </button>
           <span className="muted">
             단축키 <kbd>?</kbd>
           </span>
