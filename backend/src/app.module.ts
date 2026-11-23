@@ -12,6 +12,7 @@ import { ScrapeModule } from './scrape/scrape.module';
 import { SystemModule } from './system/system.module';
 import { PcControlModule } from './pc-control/pc-control.module';
 import { ToolsModule } from './tools/tools.module';
+import { StatsModule } from './stats/stats.module';
 import { SettingsModule } from './settings/settings.module';
 import { validateEnv } from './config/env';
 import { ConversationModule } from './conversation/conversation.module';
@@ -36,6 +37,7 @@ import { PrismaModule } from './prisma/prisma.module';
     ModelHubModule,
     PcControlModule,
     ToolsModule,
+    StatsModule,
   ],
   controllers: [HealthController],
 })

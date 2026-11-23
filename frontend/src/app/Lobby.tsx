@@ -25,6 +25,7 @@ const MAIN: Item[] = [
   { id: 'settings', icon: '⚙️', label: '설정', hint: '모델·시스템 프롬프트' },
   { id: 'models', icon: '⬇️', label: '다른 모델 다운로드 하러 가기', hint: 'Ollama' },
   { id: 'tools', icon: '🛠️', label: '도구', hint: 'STT·OCR·사이트' },
+  { id: 'stats', icon: '📊', label: '통계', hint: '공부·채팅·API 비용' },
   { id: 'info', icon: 'ℹ️', label: '정보', hint: '기능 설명' },
 ];
 

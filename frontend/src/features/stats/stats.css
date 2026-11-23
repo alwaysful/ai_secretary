@@ -1,0 +1,75 @@
+/* 통계 탭 */
+.st { display: flex; flex-direction: column; gap: 16px; }
+.st h2 { margin: 0; font-size: 1.05rem; }
+.st h3 { margin: 6px 0 0; font-size: 0.82rem; font-weight: 600; color: var(--muted); letter-spacing: 0.02em; }
+.st .small { font-size: 0.82rem; }
+.st .err { color: var(--err); margin: 0; }
+.st-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; }
+.st-seg button { border: 0; background: none; color: var(--muted); padding: 5px 14px; border-radius: 999px; cursor: pointer; font: inherit; }
+.st-seg button.on { background: var(--accent); color: #fff; }
+.st-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 12px; }
+.st-kpi { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; min-width: 0; }
+.st-kpi small { color: var(--muted); }
+.st-kpi strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.st-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
+.st-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.st-card > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.st-wide { grid-column: 1 / -1; }
+.st-mini { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; }
+.st-mini > div { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.st-mini small { color: var(--muted); font-size: 0.75rem; }
+.st-mini b { font-variant-numeric: tabular-nums; }
+.st-bars { display: block; width: 100%; height: auto; }
+.st-bars .axis { stroke: var(--line); }
+.st-bars .tick { fill: var(--muted); font-size: 11px; }
+.st-bars .val { fill: currentColor; font-size: 11px; font-weight: 600; }
+.st-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.st-stack { display: flex; height: 12px; border-radius: 999px; overflow: hidden; gap: 2px; margin: 8px 0; background: var(--line); }
+.st-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: 0.82rem; }
+.st-legend i, .st .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
+.st-rank { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.st-rank li { display: grid; grid-template-columns: minmax(0, 9em) 1fr auto; gap: 8px; align-items: center; font-size: 0.86rem; }
+.st-rank .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-rank .track { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.st-rank .track i { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.st-rank b { font-variant-numeric: tabular-nums; font-size: 0.82rem; }
+.st-hours { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; }
+.st-hours i { height: 18px; border-radius: 4px; background: var(--accent2, var(--accent)); }
+.st-hours-lbl { display: flex; justify-content: space-between; }
+.st-dl { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.st-dl li { display: flex; gap: 8px; align-items: baseline; min-width: 0; font-size: 0.88rem; }
+.st-dl a { color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dday { flex: none; font-size: 0.75rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--line); }
+.dday.hot { background: color-mix(in srgb, var(--err) 22%, transparent); color: var(--err); }
+.st-month { display: inline-flex; align-items: center; gap: 8px; }
+.st-month .ghost { padding: 2px 10px; }
+.st-cost-head { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: flex-end; }
+.st-cost-head > div { display: flex; flex-direction: column; gap: 2px; }
+.st-cost-head small { color: var(--muted); font-size: 0.78rem; }
+.st-cost-head strong { font-size: 2rem; line-height: 1.1; font-variant-numeric: tabular-nums; background: var(--grad, var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.st-cost-head b { font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.st-prov { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.st-prov-card { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: color-mix(in srgb, var(--pc) 8%, transparent); }
+.st-prov-card .row { display: flex; align-items: center; gap: 4px; }
+.st-prov-card .row .small { margin-left: auto; }
+.st-prov-card .dot { background: var(--pc); }
+.st-prov-card strong { font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+.st-prov-card .pbar { height: 5px; border-radius: 999px; background: var(--line); overflow: hidden; margin-top: 4px; }
+.st-prov-card .pbar i { display: block; height: 100%; background: var(--pc); }
+.st-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.st .chip { font-size: 0.8rem; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.st-table-wrap { overflow-x: auto; }
+.st-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.st-table th { text-align: left; color: var(--muted); font-weight: 500; font-size: 0.78rem; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.st-table td { padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.st-table .r { text-align: right; }
+.st .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; }
+.st .link-btn { background: none; border: 0; color: inherit; cursor: pointer; font: inherit; text-decoration: underline dotted; padding: 0; }
+.st-price-edit { display: inline-flex; gap: 4px; align-items: center; }
+.st-price-edit input { width: 64px; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: inherit; font: inherit; }
+.st-price-edit .ghost { padding: 3px 8px; }
+@media (max-width: 480px) {
+  .st-grid { grid-template-columns: 1fr; }
+  .st-kpis { grid-template-columns: repeat(2, 1fr); }
+  .st-kpi strong { font-size: 1.2rem; }
+}
