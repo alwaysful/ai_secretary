@@ -617,3 +617,16 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; border: 1
 .guide-log.done { border-color: var(--ok); }
 .guide-log.error { border-color: var(--err); }
 .guide-log pre { margin: 0; white-space: pre-wrap; word-break: break-all; color: var(--muted); font-size: 12px; max-height: 120px; overflow: auto; }
+
+/* TTS 감정 칩 · 좁은 채팅 (PR TTS) */
+.emo-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.emo-picker .emo { border: 1px solid var(--line); background: transparent; color: inherit; border-radius: 999px; padding: 6px 12px; font: inherit; cursor: pointer; }
+.emo-picker.compact .emo { padding: 4px 10px; font-size: 0.9em; }
+.emo-picker .emo.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* 좁은 칸 채팅: 대화 목록은 서랍 */
+.app.compact { grid-template-columns: 1fr; position: relative; }
+.app.compact .side { position: absolute; inset: 0 20% 0 0; z-index: 10; transform: translateX(-100%); transition: transform 0.2s; }
+.app.compact .side.open { transform: none; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35); }
+.app.compact .menu { display: inline-block; }
+

@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, HttpCode, Param, Post, Put, Query, Req } from '@nestjs/common';
-import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { TTS_ENGINES, TtsEngine } from '../ai/providers/tts';
 import { AiFeature, API_PROVIDERS, ApiProvider, isProvider } from '../ai/providers/api-providers';
 import type { Request } from 'express';
 import { isLocalRequest } from '../system/system.controller';
@@ -20,6 +21,28 @@ export class UpdateSettingsDto {
   /** 빈 문자열 = .env 기본값 */
   @IsOptional() @IsString() @MaxLength(50)
   sttModel?: string;
+
+  /** AI 여자친구 성격. 빈 문자열 = 기본값 */
+  @IsOptional() @IsString() @MaxLength(4000)
+  companionPrompt?: string;
+}
+
+export class TtsDto {
+  @IsOptional() @IsIn([...TTS_ENGINES])
+  engine?: TtsEngine;
+
+  /** 빈 문자열 = 기본 */
+  @IsOptional() @IsString() @MaxLength(200)
+  model?: string;
+
+  @IsOptional() @IsString() @MaxLength(200)
+  voice?: string;
+
+  @IsOptional() @IsNumber() @Min(0.5) @Max(2)
+  rate?: number;
+
+  @IsOptional() @IsBoolean()
+  autoRead?: boolean;
 }
 
 export class PermissionsDto {
@@ -132,6 +155,19 @@ export class SettingsController {
   testKey(@Req() req: Request, @Param('provider') p: string, @Body() dto: ApiKeyDto) {
     if (dto.key) localOnly(req);
     return this.settings.testKey(provider(p), dto.key);
+  }
+
+  /** TTS 엔진·모델·목소리·속도·자동 읽기 */
+  @Put('tts')
+  tts(@Body() dto: TtsDto) {
+    return this.settings.setTts(dto);
+  }
+
+  /** TTS 엔진별 모델·목소리 목록 (browser 제외: 브라우저가 목록 제공) */
+  @Get('tts-options')
+  ttsOptions(@Query('engine') engine: string) {
+    if (!['edge', 'openai', 'gemini'].includes(engine)) throw new BadRequestException({ code: 'BAD_ENGINE', message: engine });
+    return this.settings.ttsOptions(engine as 'edge' | 'openai' | 'gemini');
   }
 
   /** faster-whisper 모델 크기 */

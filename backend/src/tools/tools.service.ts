@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, OnModuleDe
 import { ConfigService } from '@nestjs/config';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { unlink, writeFile } from 'node:fs/promises';
+import { readFile, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -11,6 +11,17 @@ import { PcAgentProcess } from '../pc-control/pc-agent.process';
 import { SettingsService } from '../settings/settings.service';
 import { ModelError } from '../ai/models/base-model';
 import { apiTranscribe, apiVision, PROVIDER_LABEL } from '../ai/providers/api-providers';
+import { apiSpeak, Emotion, EMOTION_PROSODY, SpeechOut, TTS_MAX_CHARS, TTS_MODELS, TTS_VOICES, TtsEngine } from '../ai/providers/tts';
+
+const TTS_TIMEOUT_MS = 90_000;
+
+export interface SpeakOpts {
+  engine?: TtsEngine;
+  model?: string;
+  voice?: string;
+  rate?: number;
+  emotion?: Emotion;
+}
 
 const OCR_TIMEOUT_MS = 180_000;
 const STT_TIMEOUT_MS = 15 * 60_000;
@@ -250,5 +261,58 @@ export class ToolsService implements OnModuleDestroy {
     clearTimeout(this.idle);
     this.stt?.stop();
     this.stt = null;
+  }
+
+  /** 텍스트 → 음성. browser 엔진은 프론트가 직접 처리 */
+  async speak(text: string, o: SpeakOpts = {}): Promise<{ audio: string; mime: string; engine: TtsEngine; voice: string; ms: number }> {
+    const cfg = this.settings.tts();
+    const engine = o.engine ?? cfg.engine;
+    if (engine === 'browser') throw new BadRequestException({ code: 'BROWSER_TTS', message: '브라우저 TTS는 화면에서 직접 재생' });
+    const same = engine === cfg.engine;
+    const voice = o.voice || (same ? cfg.voice : null) || TTS_VOICES[engine][0];
+    const model = o.model || (same ? cfg.model : null) || TTS_MODELS[engine][0];
+    const rate = o.rate ?? cfg.rate;
+    const emotion = o.emotion ?? 'neutral';
+    const input = text.trim().slice(0, TTS_MAX_CHARS);
+    if (!input) throw new BadRequestException({ code: 'NO_TEXT', message: '읽을 글 없음' });
+    const t0 = Date.now();
+    let out: SpeechOut;
+    if (engine === 'edge') out = await this.edgeTts(input, voice, rate * EMOTION_PROSODY[emotion].rate, EMOTION_PROSODY[emotion].pitchHz);
+    else {
+      const key = this.settings.apiKey(engine);
+      if (!key) throw new BadRequestException({ code: 'NO_API_KEY', message: `${PROVIDER_LABEL[engine]} API 키 없음 (설정 → API 키)` });
+      try {
+        out = await apiSpeak(engine, key, model, voice, input, rate, emotion, { timeoutMs: TTS_TIMEOUT_MS });
+      } catch (e) {
+        throw this.apiFail(e, 'TTS_FAILED');
+      }
+    }
+    return { audio: out.audio.toString('base64'), mime: out.mime, engine, voice, ms: Date.now() - t0 };
+  }
+
+  /** edge-tts (pip install edge-tts). 무료, 인터넷 필요 */
+  private async edgeTts(text: string, voice: string, rate: number, pitchHz: number): Promise<SpeechOut> {
+    const id = randomUUID();
+    const inFile = join(tmpdir(), `aura-tts-${id}.txt`);
+    const outFile = join(tmpdir(), `aura-tts-${id}.mp3`);
+    await writeFile(inFile, text, 'utf8');
+    const pct = Math.round((rate - 1) * 100);
+    const args = ['-m', 'edge_tts', '--file', inFile, '--voice', voice, `--rate=${pct >= 0 ? '+' : ''}${pct}%`, `--pitch=${pitchHz >= 0 ? '+' : ''}${pitchHz}Hz`, '--write-media', outFile];
+    try {
+      await new Promise<void>((done, fail) => {
+        execFile(this.python, args, { timeout: TTS_TIMEOUT_MS, windowsHide: true }, (err, _out, stderr) => {
+          if (!err) return done();
+          const msg = String(stderr || err.message).trim();
+          if (/No module named/i.test(msg)) {
+            return fail(new ServiceUnavailableException({ code: 'TTS_NOT_INSTALLED', message: 'edge-tts 미설치. 설치: python -m pip install -r pc-agent/requirements-tts.txt' }));
+          }
+          fail(new ServiceUnavailableException({ code: 'TTS_FAILED', message: `edge-tts 실패: ${msg.split('\n').slice(-2).join(' ').slice(0, 300)}` }));
+        });
+      });
+      return { audio: await readFile(outFile), mime: 'audio/mpeg' };
+    } finally {
+      unlink(inFile).catch(() => undefined);
+      unlink(outFile).catch(() => undefined);
+    }
   }
 }

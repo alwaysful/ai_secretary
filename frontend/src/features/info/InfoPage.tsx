@@ -109,6 +109,16 @@ const FEATURES: Feature[] = [
     ],
   },
   {
+    icon: '🔊',
+    title: 'TTS 읽어주기',
+    page: 'tts',
+    lines: [
+      '글 → 음성. 감정(기쁨·슬픔·화남·차분·설렘·다정) 골라 읽기.',
+      '엔진: 브라우저(무료·오프라인), edge-tts(무료·자연스러움), OpenAI·Gemini(감정 연기, 과금).',
+      'AI 채팅 답변마다 🔊 버튼. 설정에서 자동 읽기 가능.',
+    ],
+  },
+  {
     icon: '📊',
     title: '통계',
     page: 'stats',

@@ -16,9 +16,13 @@ enum MessageRole {
 model Conversation {
   id        String    @id @default(uuid()) @db.Uuid
   title     String?
+  /// null = 일반 채팅, girlfriend = AI 여자친구 화면
+  persona   String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   messages  Message[]
+
+  @@index([persona])
 }
 
 model Message {
@@ -75,6 +79,15 @@ model AppSettings {
   sttSource    String   @default("local")
   sttProvider  String?
   sttApiModel  String?
+  /// TTS 엔진: browser | edge | openai | gemini
+  ttsEngine    String   @default("browser")
+  ttsModel     String?
+  ttsVoice     String?
+  ttsRate      Float    @default(1)
+  /// 채팅 답변 자동 읽기
+  ttsAutoRead  Boolean  @default(false)
+  /// AI 여자친구 성격 프롬프트. null = 기본값
+  companionPrompt String?
   updatedAt    DateTime @updatedAt
 }
 
