@@ -29,17 +29,7 @@ if errorlevel 1 (
 )
 timeout /t 5 /nobreak >nul
 
-rem 새 마이그레이션 자동 적용 (업데이트 후 Internal error 방지)
-pushd backend
-call npx prisma migrate deploy
-if errorlevel 1 (
-  popd
-  echo DB 마이그레이션 실패. 위 오류 확인.
-  pause
-  exit /b 1
-)
-call npx prisma generate >nul
-popd
+rem 마이그레이션·generate는 npm run dev(scripts/dev.mjs)가 자동 실행
 
 curl -s -o nul http://127.0.0.1:11434
 if errorlevel 1 (
