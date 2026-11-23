@@ -49,24 +49,29 @@ def _patch_av():
 
 
 _model = None
+_name = None
 
 
-def model():
-    global _model
-    if _model is None:
+def model(name=None):
+    """name 바뀌면 새로 로드 (설정에서 모델 변경)"""
+    global _model, _name
+    name = name or MODEL
+    if _model is None or _name != name:
         _patch_av()
         from faster_whisper import WhisperModel
 
+        _model = None
         try:
-            _model = WhisperModel(MODEL, device=DEVICE, compute_type="default")
+            _model = WhisperModel(name, device=DEVICE, compute_type="default")
         except Exception:  # GPU 실패 → CPU int8
-            _model = WhisperModel(MODEL, device="cpu", compute_type="int8")
+            _model = WhisperModel(name, device="cpu", compute_type="int8")
+        _name = name
     return _model
 
 
 def transcribe(req):
     lang = req.get("language") or None
-    segs, info = model().transcribe(req["path"], language=lang, vad_filter=True, beam_size=5)
+    segs, info = model(req.get("model")).transcribe(req["path"], language=lang, vad_filter=True, beam_size=5)
     text = "\n".join(s.text.strip() for s in segs if s.text.strip())
     return {"text": text, "language": info.language, "duration": round(info.duration, 1)}
 

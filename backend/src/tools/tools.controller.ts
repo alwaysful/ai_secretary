@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
-import { IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { ToolsService } from './tools.service';
 
 const B64_MAX = 38 * 1024 * 1024;
@@ -24,6 +24,10 @@ export class SttDto {
   /** ko, en ... 비우면 자동 감지 */
   @IsOptional() @IsString() @Matches(/^[a-z]{2,3}$/)
   language?: string;
+
+  /** mic = 마이크 녹음 (마이크 스위치 적용), file = 파일 업로드 */
+  @IsOptional() @IsIn(['mic', 'file'])
+  source?: 'mic' | 'file';
 }
 
 /** 도구 탭. 인증 없음: HOST=127.0.0.1 유지. */
@@ -43,6 +47,6 @@ export class ToolsController {
 
   @Post('stt')
   stt(@Body() dto: SttDto) {
-    return this.tools.transcribe(dto.audio, dto.mime, dto.language);
+    return this.tools.transcribe(dto.audio, dto.mime, dto.language, dto.source);
   }
 }
