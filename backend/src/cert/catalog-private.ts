@@ -129,9 +129,6 @@ const POPULAR: Record<string, P[]> = {
     ['mp-somm', '소믈리에', null, '여러 협회', null, { prep: '2~3개월' }],
     ['mp-barista1', '바리스타 1급', '1급', '한국커피협회', 'https://www.kca-coffee.org', { prep: '2~3개월' }],
   ],
-  기타: [
-    ['mp-drone', '드론 조종자 (초경량비행장치 1~4종)', '1~4종', '한국교통안전공단', 'https://www.kotsa.or.kr', { kind: '국가전문', prep: '교육 1~3주', summary: '종별 교육 시간 다름', validity: '없음' }],
-  ],
 };
 
 const build = (src: Record<string, P[]>, kind: string): PrivateCert[] =>
