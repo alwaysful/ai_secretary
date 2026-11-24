@@ -19,7 +19,7 @@ export interface AdminGuideStep {
 
 export interface InProgressItem {
   title: string;
-  status: '계획' | '진행 중' | '일부 완료';
+  status: '계획' | '진행 중' | '일부 완료' | '완료';
   note: string;
 }
 
