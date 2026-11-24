@@ -80,7 +80,7 @@ const GROUPS: { field: string; org: readonly [string, string | null]; rows: R[] 
   {
     field: '건설/건축',
     org: QNET,
-    rows: [['np-heritage', '문화재수리기술자', null, '1~2년']],
+    rows: [['np-heritage', '국가유산수리기술자', null, '1~2년', '옛 문화재수리기술자']],
   },
   {
     field: '디자인/미디어',
