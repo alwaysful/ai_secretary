@@ -296,6 +296,12 @@ model Certificate {
   userValidity String?
   /// 사용자가 매긴 유용도 0~10 (없으면 참고값 계산)
   userScore    Float?
+  /// Q-net 종목코드 (취득자 통계 조회용, 종목 목록 확인 때 이름으로 채움)
+  jmCd         String?
+  /// 취득자 통계: 연도별 [{year, count}] + 누적, 받은 시각 (30일마다 갱신)
+  statsYears   Json?
+  statsTotal   Int?
+  statsAt      DateTime?
   /// Q-net 종목 목록에서 새로 찾아 추가한 시각
   discoveredAt DateTime?
   starred      Boolean    @default(false)

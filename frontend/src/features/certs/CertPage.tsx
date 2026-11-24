@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { gcalUrl } from '../news/gcal';
 import { CertCalendar } from './CertCalendar';
 import { CertKeyBox } from './CertKeyBox';
-import { Cert, CertExam, CertFilter, CertInput, CertMeta, certApi, ExamInput } from './certApi';
+import { Cert, CertStats, CertExam, CertFilter, CertInput, CertMeta, certApi, ExamInput } from './certApi';
 import './certs.css';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -53,6 +53,64 @@ function nearest(c: Cert): CertExam | undefined {
     const end = e.regEnd ?? e.regStart;
     return end && new Date(end) >= today;
   }) ?? c.exams[0];
+}
+
+const fmt = new Intl.NumberFormat('ko-KR');
+
+/** 「설명」 펼침: 항목별 설명 + 취득자 통계 (열 때 1번 불러옴) */
+function CertAbout({ cert }: { cert: Cert }) {
+  const [st, setSt] = useState<CertStats | null>(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    certApi.stats(cert.id).then(setSt, (e: unknown) => setErr(errMsg(e)));
+  }, [cert.id]);
+  const s = st?.stats;
+  const last = s?.years[s.years.length - 1];
+  return (
+    <div className="cert-about">
+      <dl>
+        <div>
+          <dt>취득자</dt>
+          <dd>
+            {!st && !err && <span className="muted">불러오는 중…</span>}
+            {err && <span className="muted">{err}</span>}
+            {s && last && (
+              <>
+                <b>{last.year}년 {fmt.format(last.count)}명</b> · 누적 <b>{fmt.format(s.total)}명</b>
+                <span className="cert-years">
+                  {s.years.map((y) => (
+                    <span key={y.year}>
+                      {y.year} <b>{fmt.format(y.count)}</b>
+                    </span>
+                  ))}
+                </span>
+              </>
+            )}
+            {st && !s && <span className="muted">{st.note ?? '통계 없음'}</span>}
+            {st && s && st.note && <small className="muted"> ({st.note})</small>}
+          </dd>
+        </div>
+        {cert.detail?.map((d) => (
+          <div key={d.label}>
+            <dt>{d.label}</dt>
+            <dd>
+              {d.text}
+              {d.links && (
+                <span className="cert-about-links">
+                  {d.links.map((l) => (
+                    <a key={l.url} href={l.url} target="_blank" rel="noreferrer">
+                      {l.label} ↗
+                    </a>
+                  ))}
+                </span>
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {!cert.detail && <p className="muted">아직 설명 없음. 공식 사이트 참고.</p>}
+    </div>
+  );
 }
 
 /** 준비기간·응시료 고치기 (빈칸 저장 = 기본값) */
@@ -411,22 +469,7 @@ export function CertPage(props: { onBack: () => void }) {
                           </button>
                         )}
                       </span>
-                      {about === c.id && (
-                        <div className="cert-about">
-                          {c.detail ? (
-                            <dl>
-                              {c.detail.map((d) => (
-                                <div key={d.label}>
-                                  <dt>{d.label}</dt>
-                                  <dd>{d.text}</dd>
-                                </div>
-                              ))}
-                            </dl>
-                          ) : (
-                            <p className="muted">아직 설명 없음. 공식 사이트 참고.</p>
-                          )}
-                        </div>
-                      )}
+                      {about === c.id && <CertAbout cert={c} />}
                       {expanded && (
                         <div className="cert-exams">
                           {c.exams.length === 0 && (

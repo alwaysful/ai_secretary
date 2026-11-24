@@ -1,13 +1,14 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomUUID } from 'node:crypto';
-import type { CertExam, Certificate, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { CertExam, Certificate } from '@prisma/client';
 import { EnvVars } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { baseOfVariant, CATALOG, CERT_FIELDS, CERT_KINDS, defaultsOf, fieldOfName, fieldOfPrivate, fieldOfQnet, isTechGrade, joinTags, SERIES_LABEL, seriesOfGrade } from './catalog';
 import { scoreOf } from './score';
 import { CERT_DETAILS, CertDetail } from './details';
-import { KPrivate, kprivateUrl, norm, parseJmList, parseKPrivate, parseQnet, QNET_PAGE, QnetGb, QnetJm, qnetJmUrl, QnetPhase, qnetUrl, seriesOf } from './qnet';
+import { CertStats, KPrivate, kprivateUrl, norm, parseCertStats, parseJmList, parseKPrivate, parseQnet, QNET_PAGE, QnetGb, QnetJm, qnetJmUrl, QnetPhase, qnetStatUrl, qnetUrl, seriesOf } from './qnet';
 
 const DAY = 86_400_000;
 const CATALOG_IDS = new Set(CATALOG.map((c) => c.id));
@@ -25,6 +26,8 @@ const kstDay = (d = new Date()) => new Date(d.getTime() + 9 * 3_600_000).toISOSt
 const CATALOG_EVERY_MS = 7 * DAY;
 /** 새로 찾은 자격증 '새' 표시 기간 */
 const NEW_FOR_MS = 30 * DAY;
+/** 취득자 통계 다시 받는 주기 (해마다 바뀌는 값이라 한 달이면 충분) */
+const STATS_EVERY_MS = 30 * DAY;
 const QNET_HOME = 'https://www.q-net.or.kr';
 const HRD = '한국산업인력공단';
 /** 민간자격정보서비스 (공인민간 상세 확인처) */
@@ -513,6 +516,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
       errors.push(`공인민간: ${errOf(e, '공인민간자격 목록')} (「공인민간자격등록현황」 활용신청 확인)`);
     }
     const now = new Date();
+    if (list.length) await this.fillJmCd(list).catch((e: Error) => this.log.warn(`종목코드 채우기 실패: ${e.message}`));
     const fresh = await this.freshRows(list, priv, now);
     if (fresh.length) await this.prisma.certificate.createMany({ data: fresh, skipDuplicates: true });
     const error = errors.join(' / ') || null;
@@ -520,6 +524,44 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
     this.log.log(`새 자격증 ${fresh.length}개 추가 (Q-net 종목 ${list.length}개, 공인민간 ${priv.length}개 확인)`);
     if (!list.length && !priv.length && error) throw new BadRequestException(error);
     return this.getConfig();
+  }
+
+  /** 이름이 같은 자격증에 Q-net 종목코드 저장 (취득자 통계 조회용) */
+  private async fillJmCd(list: QnetJm[]): Promise<void> {
+    const byName = new Map(list.map((j) => [norm(j.name), j.jmCd]));
+    const rows = await this.prisma.certificate.findMany({ where: { jmCd: null }, select: { id: true, name: true } });
+    const ops = rows
+      .map((r) => ({ id: r.id, jm: r.id.startsWith('qnet-') ? r.id.slice(5) : byName.get(norm(r.name)) }))
+      .filter((r): r is { id: string; jm: string } => !!r.jm)
+      .map((r) => this.prisma.certificate.update({ where: { id: r.id }, data: { jmCd: r.jm } }));
+    if (ops.length) await this.prisma.$transaction(ops);
+  }
+
+  /**
+   * 취득자 통계 (「설명」 열 때). Q-net 종목만, 종목마다 1회 호출 → DB에 30일 보관.
+   * 키 없거나 한도 넘으면 저장된 값(없으면 null) + 이유.
+   */
+  async stats(id: string): Promise<{ stats: CertStats | null; at: Date | null; note: string | null }> {
+    const c = await this.get(id);
+    const saved = c.statsYears ? { years: c.statsYears as CertStats['years'], total: c.statsTotal ?? 0 } : null;
+    if (!c.jmCd) return { stats: null, at: null, note: c.org === '한국산업인력공단' ? '새 자격증 확인(🔎) 한 번 돌면 연결됨' : '취득자 통계는 Q-net(한국산업인력공단) 시행 자격만 제공' };
+    if (c.statsAt && Date.now() - c.statsAt.getTime() < STATS_EVERY_MS) return { stats: saved, at: c.statsAt, note: saved ? null : '통계 없음' };
+    const key = await this.key();
+    if (!key) return { stats: saved, at: c.statsAt, note: 'Q-net 키 없음' };
+    // 지난해까지 (올해는 아직 진행 중)
+    const base = new Date().getFullYear() - 1;
+    try {
+      const st = parseCertStats(await this.fetchText(qnetStatUrl(key, base, c.jmCd)), base);
+      const now = new Date();
+      await this.prisma.certificate.update({
+        where: { id },
+        data: { statsYears: st ? st.years : Prisma.DbNull, statsTotal: st?.total ?? null, statsAt: now },
+      });
+      return { stats: st, at: now, note: st ? null : '통계 없음' };
+    } catch (e) {
+      const msg = errOf(e, '취득자 통계');
+      return { stats: saved, at: c.statsAt, note: /SERVICE_KEY|등록되지/.test(msg) ? '「산업인력 국가기술자격 통계 정보」 API 활용신청 필요' : msg };
+    }
   }
 
   /** 받은 목록 중 DB에 없는 것만 행으로 */
