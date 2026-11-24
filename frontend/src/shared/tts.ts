@@ -210,6 +210,13 @@ async function speakServer(text: string, o: { engine: TtsEngine; model?: string;
   });
 }
 
+let voiceOverride: Partial<TtsSettings> | null = null;
+
+/** 화면 전용 목소리 (AI 여자친구). null = 전역 설정 */
+export function setVoiceOverride(v: Partial<TtsSettings> | null): void {
+  voiceOverride = v;
+}
+
 /**
  * 읽기. 같은 id 다시 누르면 정지(토글).
  * override: 설정 화면 미리 듣기용
@@ -222,7 +229,7 @@ export async function speak(id: string, text: string, override?: Partial<TtsSett
   const my = ++seq;
   setCurrent(id);
   try {
-    const t = { ...(await loadTts()), ...override };
+    const t = { ...(await loadTts()), ...voiceOverride, ...override };
     const emo = override?.emotion ?? emotion;
     if (t.engine === 'browser') await speakBrowser(clean, t, emo, my);
     else await speakServer(clean, { engine: t.engine, ...(t.model ? { model: t.model } : {}), ...(t.voice ? { voice: t.voice } : {}), rate: t.rate, emotion: emo }, my);

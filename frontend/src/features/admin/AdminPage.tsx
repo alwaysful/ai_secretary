@@ -3,6 +3,7 @@ import { AdminLog, AdminOverview, AdminResetKind, api, ApiError } from '../../sh
 import { currentToken, setAdminToken } from './session';
 import type { PageId } from '../../app/App';
 import { useAdminDocs } from './useAdminDocs';
+import { UpdateCard } from './UpdateCard';
 import './admin.css';
 
 const RESET: { kind: AdminResetKind; label: string }[] = [
@@ -197,6 +198,8 @@ export function AdminPage(props: { onBack: () => void; onNavigate: (p: PageId) =
                 </table>
               </section>
             )}
+
+            <UpdateCard guard={guard} />
 
             <section className="card adm-card">
               <h2>🖥️ 서버</h2>

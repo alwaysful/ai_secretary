@@ -148,3 +148,10 @@ frontend/public/models/*
 
 # 외부 AI API 키 암호화 키 (자동 생성)
 .aura-secret
+
+# 관리자 재시작 표시·로그
+.aura-restart
+aura-restart.log
+
+# 업로드한 Live2D 모델
+data/live2d/

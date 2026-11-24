@@ -64,6 +64,17 @@ export function onApiUsage(fn: ((u: UsageRecord) => void) | null): void {
   usageSink = fn;
 }
 
+let gate: (() => void) | null = null;
+
+/** 호출 전 검사 등록 (BudgetService: 월 한도 넘으면 throw) */
+export function setApiGate(fn: (() => void) | null): void {
+  gate = fn;
+}
+
+function checkGate(): void {
+  gate?.();
+}
+
 function report(p: ApiProvider, model: string, o: CallOpts, input: number | undefined, output: number | undefined, audioSec?: number): void {
   if (!usageSink) return;
   const u: UsageRecord = { provider: p, model, feature: o.feature ?? 'chat', inputTokens: Math.max(0, input ?? 0), outputTokens: Math.max(0, output ?? 0), audioSec };
@@ -275,6 +286,7 @@ const modelPath = (model: string) => `${GEMINI}/models/${encodeURIComponent(mode
 // ───────── 공개 함수 ─────────
 
 export async function apiGenerate(p: ApiProvider, key: string, model: string, messages: ChatMessage[], o: CallOpts): Promise<string> {
+  checkGate();
   const { system, rest } = splitSystem(messages);
   if (p === 'anthropic') {
     try {
@@ -308,6 +320,7 @@ export async function apiGenerate(p: ApiProvider, key: string, model: string, me
 }
 
 export async function* apiStream(p: ApiProvider, key: string, model: string, messages: ChatMessage[], o: CallOpts): AsyncGenerator<string> {
+  checkGate();
   const { system, rest } = splitSystem(messages);
   if (p === 'anthropic') {
     try {
@@ -371,6 +384,7 @@ export async function* apiStream(p: ApiProvider, key: string, model: string, mes
 
 /** 이미지 + 지시문 → 텍스트 (OCR) */
 export async function apiVision(p: ApiProvider, key: string, model: string, system: string, prompt: string, imageB64: string, o: CallOpts): Promise<string> {
+  checkGate();
   const mime = imageMime(imageB64);
   if (p === 'anthropic') {
     try {
@@ -426,6 +440,7 @@ export async function apiTranscribe(
   language: string | undefined,
   o: CallOpts,
 ): Promise<{ text: string; language: string }> {
+  checkGate();
   if (p === 'anthropic') throw new ModelError('NOT_FOUND', 'Anthropic은 음성 인식(STT) 미지원');
   if (p === 'openai') {
     const form = new FormData();

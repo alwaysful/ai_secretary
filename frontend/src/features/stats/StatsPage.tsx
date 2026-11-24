@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { api, ApiUsageStats, Ranked, StatsOverview } from '../../shared/api';
+import { BudgetCard, KeysCard } from './BudgetCard';
 import './stats.css';
 
 const PROVIDERS: { id: string; label: string; color: string }[] = [
@@ -510,6 +511,12 @@ export function StatsPage(props: { onBack: () => void }) {
           </div>
         )}
         <ApiCard />
+        <div className="st-grid st-api-tools">
+          <BudgetCard />
+          <div className="st-keys">
+            <KeysCard />
+          </div>
+        </div>
         {o && (
           <div className="st-grid">
             <StudyCard s={o.study} dates={o.dates} />

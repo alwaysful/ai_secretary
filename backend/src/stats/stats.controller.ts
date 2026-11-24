@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Put, Query } from '@nestjs/common';
-import { IsNumber, Max, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsNumber, IsOptional, Max, Min } from 'class-validator';
+import { BudgetService } from './budget.service';
 import { StatsService } from './stats.service';
 
 class PriceDto {
@@ -14,9 +15,40 @@ class PriceDto {
   output!: number;
 }
 
+class BudgetDto {
+  /** null = 한도 없음 */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100_000)
+  limitUsd!: number | null;
+
+  @IsInt()
+  @Min(10)
+  @Max(100)
+  warnPct!: number;
+
+  @IsBoolean()
+  block!: boolean;
+}
+
 @Controller('stats')
 export class StatsController {
-  constructor(private readonly stats: StatsService) {}
+  constructor(
+    private readonly stats: StatsService,
+    private readonly budget: BudgetService,
+  ) {}
+
+  /** 월 비용 한도·경고 상태 */
+  @Get('budget')
+  getBudget() {
+    return this.budget.status();
+  }
+
+  @Put('budget')
+  setBudget(@Body() dto: BudgetDto) {
+    return this.budget.set({ limitUsd: dto.limitUsd ?? null, warnPct: dto.warnPct, block: dto.block });
+  }
 
   @Get('overview')
   overview(@Query('days') days?: string) {
@@ -29,13 +61,16 @@ export class StatsController {
   }
 
   @Put('prices/:model')
-  setPrice(@Param('model') model: string, @Body() dto: PriceDto) {
-    return this.stats.setPrice(model.slice(0, 200), { input: dto.input, output: dto.output });
+  async setPrice(@Param('model') model: string, @Body() dto: PriceDto) {
+    const r = await this.stats.setPrice(model.slice(0, 200), { input: dto.input, output: dto.output });
+    this.budget.bump();
+    return r;
   }
 
   @Delete('prices/:model')
   @HttpCode(204)
-  resetPrice(@Param('model') model: string) {
-    return this.stats.resetPrice(model);
+  async resetPrice(@Param('model') model: string) {
+    await this.stats.resetPrice(model);
+    this.budget.bump();
   }
 }

@@ -49,5 +49,10 @@ if errorlevel 1 (
 
 start "" /min cmd /c "timeout /t 10 /nobreak >nul & start http://127.0.0.1:5173"
 call npm run dev
+rem 관리자 재시작이면 이 창은 닫음 (새 창이 이어서 실행)
+if exist .aura-restart (
+  del .aura-restart 2>nul
+  exit
+)
 echo AURA 종료됨. 다시 켜려면 start-aura.bat 실행.
 pause

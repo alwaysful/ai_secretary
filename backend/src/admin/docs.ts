@@ -44,6 +44,8 @@ export const ADMIN_FEATURES: AdminFeatureDoc[] = [
       '데이터 개수, 백업 JSON 저장 (API 키·메일 토큰 제외).',
       'API 사용량 30일, 스크래퍼 사이트별 상태·지금 실행.',
       '권한 강제 변경 (원격 기기에서도 켜기), 데이터 초기화, 서버 로그.',
+      '⬆ 업데이트: 새 버전 확인(git fetch) → git pull → 의존성 바뀌면 npm install 자동.',
+      '🔄 재시작: 새 창에서 start-aura 다시 실행, 기존 창은 자동 종료.',
       '구현 중인 기능 목록.',
     ],
   },
@@ -53,9 +55,11 @@ export const ADMIN_FEATURES: AdminFeatureDoc[] = [
     page: 'companion',
     hint: 'Live2D·음성 대화',
     lines: [
-      '왼쪽 채팅, 오른쪽 Live2D 캐릭터 자리. 대화는 일반 채팅과 분리 저장.',
-      '감정 골라 음성으로 답변 (TTS). 자동 읽기 켜고 끔.',
-      '성격·말투: 화면의 성격 버튼 또는 설정 → 관리자.',
+      '왼쪽 채팅, 오른쪽 Live2D 캐릭터. 대화는 일반 채팅과 분리 저장.',
+      'Live2D 모델 업로드: Cubism 3 이상 모델 폴더를 zip으로 (*.model3.json 포함). 여러 개 저장·전환.',
+      '말할 때 입 움직임, 감정 바꾸면 표정·모션 (모델에 있을 때).',
+      '음성 프리셋: 엔진·목소리·속도·감정 묶음. 여자친구 화면에만 적용. 직접 저장 가능.',
+      '성격 프리셋: 다정·츤데레·활발·차분·장난꾸러기 + 직접 만든 것.',
     ],
   },
 ];
@@ -67,7 +71,20 @@ export const ADMIN_GUIDE: AdminGuideStep[] = [
   },
   {
     title: 'AI 여자친구 준비',
-    lines: ['설정 → TTS 엔진 고르기 (edge-tts 무료 권장).', '설정 → 관리자 → 성격·말투 편집.', '로비 💕 AI 여자친구 카드로 시작.'],
+    lines: [
+      '로비 💕 AI 여자친구 → 오른쪽 ⚙ 꾸미기.',
+      'Live2D: 모델 폴더 zip 업로드 (Cubism 3+, 30MB 이하). 무료 샘플은 Live2D 공식 사이트.',
+      '음성 프리셋 고르기 (edge-tts 무료 권장). 성격 프리셋 고르기.',
+      '렌더러는 Live2D Cubism Core를 공식 CDN에서 받음 → 인터넷 필요. 오프라인이면 frontend/public/live2dcubismcore.min.js 넣기.',
+    ],
+  },
+  {
+    title: '업데이트·재시작',
+    lines: [
+      '서버 관리하기 → ⬆ 업데이트 확인 → 새 커밋 보이면 업데이트.',
+      '로컬에서 고친 파일 있으면 pull 실패할 수 있음 → 목록 확인.',
+      '"재시작 필요" 뜨면 🔄 재시작. 새 AURA 창 뜨고 30초쯤 뒤 다시 접속.',
+    ],
   },
   {
     title: '정기 점검',
@@ -76,7 +93,7 @@ export const ADMIN_GUIDE: AdminGuideStep[] = [
 ];
 
 export const IN_PROGRESS: InProgressItem[] = [
-  { title: 'Live2D 캐릭터', status: '계획', note: 'AI 여자친구 오른쪽 화면. 모델 파일·입 모양 동기화' },
+  { title: 'Live2D 캐릭터', status: '일부 완료', note: '업로드·전환·입 모양 됨. 실제 음성 크기 기반 립싱크·시선 추적 예정' },
   { title: '음성 대화', status: '계획', note: '마이크 → STT → 답변 → TTS 연속 대화' },
   { title: 'Multi-agent', status: '계획', note: '작업별 에이전트 분담' },
   { title: '클라우드 LLM 라우팅', status: '일부 완료', note: '기능별 로컬/API 선택 됨. 자동 전환 예정' },

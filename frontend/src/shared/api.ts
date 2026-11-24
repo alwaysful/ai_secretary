@@ -466,6 +466,65 @@ export interface AdminLog {
   context: string;
   message: string;
 }
+export interface BudgetStatus {
+  limitUsd: number | null;
+  warnPct: number;
+  block: boolean;
+  month: string;
+  costUsd: number;
+  pct: number | null;
+  level: 'none' | 'ok' | 'warn' | 'over';
+}
+export interface VoicePreset {
+  id: string;
+  name: string;
+  engine: TtsEngine;
+  model?: string | null;
+  voice?: string | null;
+  rate: number;
+  emotion: string;
+  builtin?: boolean;
+}
+export interface PersonaPreset {
+  id: string;
+  name: string;
+  prompt: string;
+  builtin?: boolean;
+}
+export interface Live2dModel {
+  id: string;
+  name: string;
+  entry: string;
+  files: number;
+  bytes: number;
+  createdAt: string;
+}
+export interface CompanionView {
+  prompt: string;
+  default: string;
+  voice: VoicePreset | null;
+  model: string | null;
+  personas: PersonaPreset[];
+  voices: VoicePreset[];
+  models: Live2dModel[];
+}
+export interface UpdateStatus {
+  branch: string;
+  commit: string;
+  subject: string;
+  behind: number;
+  ahead: number;
+  dirty: string[];
+  incoming: string[];
+  error?: string;
+}
+export interface UpdateResult {
+  ok: boolean;
+  log: string;
+  changed: string[];
+  installed: string[];
+  restartNeeded: boolean;
+}
 export interface AdminDocs {
   features: { icon: string; title: string; page?: string; hint?: string; lines: string[] }[];
   guide: { title: string; lines: string[] }[];
@@ -494,9 +553,25 @@ export const api = {
     req<{ deleted: number }>(`/admin/data/${kind}?confirm=${kind}`, { method: 'DELETE', headers: adminH(t) }),
   adminBackup: (t: string) => req<unknown>('/admin/backup', { headers: adminH(t) }),
   adminDocs: (t: string) => req<AdminDocs>('/admin/docs', { headers: adminH(t) }),
-  adminCompanion: (t: string) => req<{ prompt: string; default: string }>('/admin/companion', { headers: adminH(t) }),
+  adminCompanion: (t: string) => req<CompanionView>('/admin/companion', { headers: adminH(t) }),
   adminSetCompanion: (t: string, prompt: string) =>
-    req<{ prompt: string; default: string }>('/admin/companion', { method: 'PUT', headers: adminH(t), body: JSON.stringify({ prompt }) }),
+    req<CompanionView>('/admin/companion', { method: 'PUT', headers: adminH(t), body: JSON.stringify({ prompt }) }),
+  adminSetCompanionVoice: (t: string, voice: Omit<VoicePreset, 'id' | 'builtin'> | null) =>
+    req<CompanionView>('/admin/companion/voice', { method: 'PUT', headers: adminH(t), body: JSON.stringify({ voice }) }),
+  adminSetCompanionModel: (t: string, id: string | null) =>
+    req<CompanionView>('/admin/companion/model', { method: 'PUT', headers: adminH(t), body: JSON.stringify({ id }) }),
+  adminAddPersona: (t: string, name: string, prompt: string) =>
+    req<CompanionView>('/admin/companion/presets/persona', { method: 'POST', headers: adminH(t), body: JSON.stringify({ name, prompt }) }),
+  adminAddVoice: (t: string, v: Omit<VoicePreset, 'id' | 'builtin'>) =>
+    req<CompanionView>('/admin/companion/presets/voice', { method: 'POST', headers: adminH(t), body: JSON.stringify(v) }),
+  adminDeletePreset: (t: string, kind: 'persona' | 'voice', id: string) =>
+    req<CompanionView>(`/admin/companion/presets/${kind}/${encodeURIComponent(id)}`, { method: 'DELETE', headers: adminH(t) }),
+  adminUploadLive2d: (t: string, name: string, zip: string) =>
+    req<Live2dModel>('/admin/live2d', { method: 'POST', headers: adminH(t), body: JSON.stringify({ name, zip }) }),
+  adminDeleteLive2d: (t: string, id: string) => req<CompanionView>(`/admin/live2d/${id}`, { method: 'DELETE', headers: adminH(t) }),
+  adminUpdateStatus: (t: string) => req<UpdateStatus>('/admin/update', { headers: adminH(t) }),
+  adminUpdate: (t: string) => req<UpdateResult>('/admin/update', { method: 'POST', headers: adminH(t) }),
+  adminRestart: (t: string) => req<{ ok: boolean }>('/admin/restart', { method: 'POST', headers: adminH(t) }),
   warmup: () => req<{ state: string }>('/health/warmup', { method: 'POST' }),
   conversations: (q?: string, persona?: Persona) => {
     const p = new URLSearchParams();
@@ -593,6 +668,8 @@ export const api = {
   statsApi: (month?: string) => req<ApiUsageStats>(month ? `/stats/api?month=${month}` : '/stats/api'),
   setApiPrice: (model: string, input: number, output: number) =>
     req<unknown>(`/stats/prices/${encodeURIComponent(model)}`, { method: 'PUT', body: JSON.stringify({ input, output }) }),
+  budget: () => req<BudgetStatus>('/stats/budget'),
+  setBudget: (b: Pick<BudgetStatus, 'limitUsd' | 'warnPct' | 'block'>) => req<BudgetStatus>('/stats/budget', { method: 'PUT', body: JSON.stringify(b) }),
   resetApiPrice: (model: string) => req<void>(`/stats/prices/${encodeURIComponent(model)}`, { method: 'DELETE' }),
   ocr: (image: string, hint?: string) =>
     req<OcrResult>('/tools/ocr', { method: 'POST', body: JSON.stringify({ image, ...(hint ? { hint } : {}) }) }),

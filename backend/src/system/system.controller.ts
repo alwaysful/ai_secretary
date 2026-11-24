@@ -18,7 +18,7 @@ export function isLocalRequest(remote: string | undefined, forwarded: string | s
  * npm run dev(scripts/dev.mjs)로 실행 중이면 AURA_DEV_PID 트리 전체(백엔드·nest watch·vite) 종료.
  * 아니면 백엔드만 정상 종료.
  */
-function stopAll(log: Logger): void {
+export function stopAll(log: Logger): void {
   const root = Number(process.env.AURA_DEV_PID);
   if (root > 1 && root !== process.pid) {
     if (process.platform === 'win32') {
