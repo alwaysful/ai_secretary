@@ -53,6 +53,10 @@ export interface CertConfig {
   lastCatalogAt: string | null;
   lastCatalogNew: number;
   lastCatalogError: string | null;
+  apiDayCount: number;
+  apiMonthCount: number;
+  apiDayLimit: number;
+  apiMonthLimit: number;
 }
 
 export interface CertFilter {

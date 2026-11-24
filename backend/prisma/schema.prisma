@@ -343,6 +343,11 @@ model CertConfig {
   lastCatalogAt    DateTime?
   lastCatalogNew   Int       @default(0)
   lastCatalogError String?
+  /// 공공데이터 API 호출 수 (일·월 한도 관리). 날짜는 KST YYYY-MM-DD / YYYY-MM
+  apiDay           String?
+  apiDayCount      Int       @default(0)
+  apiMonth         String?
+  apiMonthCount    Int       @default(0)
 }
 
 /// 단어장 (사용자가 JSON 업로드). 간격 반복 복습 + 회독 + 퀴즈
