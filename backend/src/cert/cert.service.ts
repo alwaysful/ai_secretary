@@ -8,6 +8,7 @@ import { CATALOG, CERT_FIELDS, CERT_KINDS, defaultsOf, fieldOfQnet, SERIES_LABEL
 import { norm, parseJmList, parseQnet, QnetGb, qnetJmUrl, QnetPhase, qnetUrl, seriesOf } from './qnet';
 
 const DAY = 86_400_000;
+const CATALOG_IDS = new Set(CATALOG.map((c) => c.id));
 /** 자동 수집 주기 */
 const SYNC_EVERY_MS = 24 * 3_600_000;
 const FETCH_TIMEOUT_MS = 20_000;
@@ -48,8 +49,11 @@ export interface CertView {
   /** 응시료 (사용자 값 우선) */
   fee: string | null;
   /** 사용자가 고친 값인지 */
+  /** 유효기간 (사용자 값 우선) */
+  validity: string | null;
   prepEdited: boolean;
   feeEdited: boolean;
+  validityEdited: boolean;
   /** 최근 Q-net 종목 목록에서 새로 추가됨 */
   isNew: boolean;
   starred: boolean;
@@ -82,6 +86,7 @@ export interface CertInput {
   /** 빈 문자열/null = 기본값으로 */
   prep?: string | null;
   fee?: string | null;
+  validity?: string | null;
   starred?: boolean;
 }
 
@@ -133,9 +138,12 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
 
   /** 기본 목록: 없으면 추가, 있으면 내용만 최신화 (별표 유지) */
   private async seed(): Promise<void> {
-    const have = new Set((await this.prisma.certificate.findMany({ select: { id: true } })).map((c) => c.id));
+    const all = await this.prisma.certificate.findMany({ select: { id: true, name: true } });
+    const have = new Set(all.map((c) => c.id));
+    // 다른 id로 이미 있는 이름(새 자격증 확인·직접 추가)은 건너뜀
+    const names = new Set(all.filter((c) => !CATALOG_IDS.has(c.id)).map((c) => norm(c.name)));
     const rows = CATALOG.map((c, i) => ({ ...c, position: i }));
-    const fresh = rows.filter((r) => !have.has(r.id));
+    const fresh = rows.filter((r) => !have.has(r.id) && !names.has(norm(r.name)));
     if (fresh.length) await this.prisma.certificate.createMany({ data: fresh, skipDuplicates: true });
     const old = rows.filter((r) => have.has(r.id));
     if (old.length) {
@@ -180,8 +188,10 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
       seriesLabel: c.series ? (SERIES_LABEL[c.series] ?? c.series) : null,
       prep: c.userPrep ?? c.prep,
       fee: c.userFee ?? c.fee,
+      validity: c.userValidity ?? c.validity,
       prepEdited: c.userPrep !== null,
       feeEdited: c.userFee !== null,
+      validityEdited: c.userValidity !== null,
       isNew: !!c.discoveredAt && Date.now() - c.discoveredAt.getTime() < NEW_FOR_MS,
       starred: c.starred,
       custom: c.custom,
@@ -280,6 +290,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
         summary: b.summary?.trim() || null,
         userPrep: b.prep?.trim() || null,
         userFee: b.fee?.trim() || null,
+        userValidity: b.validity?.trim() || null,
         starred: b.starred ?? true,
         custom: true,
         position: (max._max.position ?? 0) + 1,
@@ -297,6 +308,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
     // 준비기간·응시료는 모든 자격증에서 고칠 수 있음 (기본값은 그대로 보관)
     if (b.prep !== undefined) data.userPrep = b.prep?.trim() || null;
     if (b.fee !== undefined) data.userFee = b.fee?.trim() || null;
+    if (b.validity !== undefined) data.userValidity = b.validity?.trim() || null;
     if (c.custom) {
       if (b.name !== undefined) data.name = b.name.trim();
       if (b.field !== undefined) data.field = b.field;
@@ -440,6 +452,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
             series,
             prep: d.prep,
             fee: d.fee,
+            validity: '평생 (만료 없음)',
             position: pos++,
             discoveredAt: now,
           };

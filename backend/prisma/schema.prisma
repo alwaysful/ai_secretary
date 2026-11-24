@@ -291,6 +291,9 @@ model Certificate {
   /// 사용자가 고친 준비기간·응시료 (기본값보다 우선)
   userPrep     String?
   userFee      String?
+  /// 유효기간 (참고값)
+  validity     String?
+  userValidity String?
   /// Q-net 종목 목록에서 새로 찾아 추가한 시각
   discoveredAt DateTime?
   starred      Boolean    @default(false)

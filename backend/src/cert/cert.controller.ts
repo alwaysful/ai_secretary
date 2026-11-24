@@ -56,6 +56,9 @@ export class CertUpdateDto {
   @IsOptional() @Transform(emptyNull) @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(80)
   fee?: string | null;
 
+  @IsOptional() @Transform(emptyNull) @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(60)
+  validity?: string | null;
+
   @IsOptional() @IsBoolean()
   starred?: boolean;
 }

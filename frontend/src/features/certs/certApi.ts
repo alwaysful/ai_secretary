@@ -28,8 +28,10 @@ export interface Cert {
   seriesLabel: string | null;
   prep: string | null;
   fee: string | null;
+  validity: string | null;
   prepEdited: boolean;
   feeEdited: boolean;
+  validityEdited: boolean;
   isNew: boolean;
   starred: boolean;
   custom: boolean;
@@ -70,6 +72,7 @@ export interface CertInput {
   summary?: string | null;
   prep?: string | null;
   fee?: string | null;
+  validity?: string | null;
   starred?: boolean;
 }
 
