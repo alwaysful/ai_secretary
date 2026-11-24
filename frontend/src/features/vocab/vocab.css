@@ -124,3 +124,13 @@
 .vc-g.pron { border-color: #a78bfa; color: #a78bfa; }
 .vc-g.show { border-color: var(--accent); color: var(--accent); }
 @media (max-width: 560px) { .vc-round4 { grid-template-columns: repeat(2, 1fr); } }
+.vc-round2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.vc-big-btn { display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; padding: 16px 10px; font-size: 16px; font-weight: 700; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: inherit; }
+.vc-big-btn kbd { font-size: 10px; opacity: 0.7; background: rgba(0, 0, 0, 0.18); border-color: transparent; color: inherit; }
+.vc-big-btn:disabled { opacity: 0.5; cursor: default; }
+.vc-big-btn.ok { background: #22a06b; border-color: #22a06b; color: #fff; }
+.vc-big-btn.ng { background: #d64545; border-color: #d64545; color: #fff; }
+.vc-big-btn.show { border-color: var(--accent); color: var(--accent); }
+.vc-big-btn.pron { border-color: #a78bfa; color: #a78bfa; }
+.vc-again-btn { border: 1px solid #d64545; color: #e5687a; background: none; border-radius: 999px; padding: 4px 12px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+.vc-again-btn:disabled { opacity: 0.4; cursor: default; }

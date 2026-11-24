@@ -68,6 +68,8 @@ export interface Round {
   total: number;
   left: number;
   known: number;
+  /** 다시 공부 목록 수 */
+  again: number;
   cards: VCard[];
 }
 
@@ -116,6 +118,7 @@ export const vocab = {
   queue: (id: string) => req<Queue>(`/vocab/decks/${id}/queue`),
   review: (cardId: string, grade: 1 | 2 | 3 | 4) => post<VCard>(`/vocab/cards/${cardId}/review`, { grade }),
   round: (id: string, shuffle: boolean) => req<Round>(`/vocab/decks/${id}/round${shuffle ? '?shuffle=1' : ''}`),
+  again: (id: string) => req<{ total: number; cards: VCard[] }>(`/vocab/decks/${id}/again`),
   roundAnswer: (cardId: string, known: boolean) => post<VCard>(`/vocab/cards/${cardId}/round`, { known }),
   nextRound: (id: string, unknownOnly: boolean) => post<Round>(`/vocab/decks/${id}/round/next`, { unknownOnly }),
   quiz: (id: string, n: number, dir: QuizDir, pool: QuizPool) => req<QuizQ[]>(`/vocab/decks/${id}/quiz?n=${n}&dir=${dir}&pool=${pool}`),

@@ -12,7 +12,7 @@ import './vocab.css';
 
 type Tab = 'review' | 'round' | 'quiz' | 'list' | 'stats' | 'settings';
 const TABS: [Tab, string][] = [
-  ['review', '🔁 복습'],
+  ['review', '🧠 간격 반복'],
   ['round', '📖 회독'],
   ['quiz', '❓ 퀴즈'],
   ['list', '📋 단어'],
@@ -62,7 +62,7 @@ function DeckCard(props: { d: Deck; onOpen: (t: Tab) => void }) {
       </button>
       <div className="chips">
         <button className="primary" onClick={() => props.onOpen('review')}>
-          {due > 0 ? `복습 ${due}` : '복습'}
+          {due > 0 ? `간격 반복 ${due}` : '간격 반복'}
         </button>
         <button className="ghost" onClick={() => props.onOpen('round')}>
           회독
@@ -142,7 +142,7 @@ export function VocabPage(props: { onBack: () => void }) {
             </>
           )}
           <p className="muted vc-keys">
-            단축키: Space 뒤집기 · 복습 1~4 평가 · 회독 1 발음 · 2 정답 · ← 다시 공부 · → 알고 있음 · S 발음
+            단축키: 간격 반복 Space 뒤집기 · 1~4 평가 · 회독 Space 정답 · R 발음 · → 이해 완료 · ← 다시 공부 · S 발음
           </p>
         </div>
       </div>
