@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client';
 import type { CertExam, Certificate } from '@prisma/client';
 import { EnvVars } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
-import { baseOfVariant, CATALOG, CERT_FIELDS, CERT_KINDS, defaultsOf, fieldOfName, fieldOfPrivate, fieldOfQnet, isTechGrade, joinTags, SERIES_LABEL, seriesOfGrade } from './catalog';
+import { aliasOf, baseOfVariant, CATALOG, CERT_FIELDS, CERT_KINDS, defaultsOf, fieldOfName, fieldOfPrivate, fieldOfQnet, isTechGrade, joinTags, singleGradeIsPublic, SERIES_LABEL, seriesOfGrade } from './catalog';
 import { scoreOf } from './score';
 import { CERT_DETAILS, CertDetail } from './details';
 import { CertStats, KPrivate, KPro, kproUrl, parseKPro, kprivateUrl, norm, parseCertStats, parseJmList, parseKPrivate, parseQnet, QNET_PAGE, QnetGb, QnetJm, qnetJmUrl, QnetPhase, qnetStatUrl, qnetUrl, seriesOf } from './qnet';
@@ -544,27 +544,58 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
    * 목록에서 빠진(공인 만료) 자격은 공인 표시만 지움.
    */
   private async markPublic(priv: KPrivate[]): Promise<void> {
-    const rows = await this.prisma.certificate.findMany({ select: { id: true, name: true, kind: true, publicGrades: true, publicUntil: true } });
+    const rows = await this.prisma.certificate.findMany({
+      select: { id: true, name: true, kind: true, grade: true, starred: true, publicGrades: true, publicUntil: true, exams: { where: { source: 'manual' }, select: { id: true } } },
+    });
+    // 이름이 다른 공인 종목(SQL ↔ SQLD 등)은 별칭으로 연결, 예전에 따로 추가된 kp-* 중복은 지움
+    const target = new Map<string, { grades: string | null; until: string | null }>();
+    const aliasKeys = new Set<string>();
+    for (const p of priv) {
+      const al = aliasOf(p.name);
+      if (!al) continue;
+      nameKeys(p.name).forEach((k) => aliasKeys.add(k));
+      for (const [id, label] of Object.entries(al.ids)) {
+        const hit = label === '*' ? joinTags(p.grades) ?? '등급 없음' : p.grades.find((g) => norm(g) === norm(label)) ?? null;
+        target.set(id, { grades: hit, until: p.until?.slice(0, 10) ?? null });
+      }
+    }
     const byKey = new Map<string, KPrivate>();
-    for (const p of priv) for (const k of nameKeys(p.name)) if (k.length >= 3 && !byKey.has(k)) byKey.set(k, p);
+    for (const p of priv) if (!aliasOf(p.name)) for (const k of nameKeys(p.name)) if (k.length >= 3 && !byKey.has(k)) byKey.set(k, p);
     const ops: Prisma.PrismaPromise<unknown>[] = [];
+    const del: string[] = [];
     let matched = 0;
     for (const r of rows) {
-      const p = nameKeys(r.name).map((k) => byKey.get(k)).find(Boolean);
-      if (!p) {
-        if (r.publicGrades) ops.push(this.prisma.certificate.update({ where: { id: r.id }, data: { publicGrades: null, publicUntil: null } }));
+      if (r.id.startsWith('kp-') && nameKeys(r.name).some((k) => aliasKeys.has(k))) {
+        if (!r.starred && !r.exams.length) del.push(r.id);
         continue;
       }
-      matched++;
-      const grades = joinTags(p.grades) ?? '등급 없음';
-      const until = p.until?.slice(0, 10) ?? null;
-      const kind = r.kind === '민간' ? '국가공인민간' : r.kind;
+      let grades: string | null = null;
+      let until: string | null = null;
+      let isPublic = false;
+      const t = target.get(r.id);
+      if (t) {
+        grades = t.grades;
+        until = t.until;
+        isPublic = !!t.grades;
+      } else {
+        const p = nameKeys(r.name).map((k) => byKey.get(k)).find(Boolean);
+        if (p) {
+          grades = joinTags(p.grades) ?? '등급 없음';
+          until = p.until?.slice(0, 10) ?? null;
+          // '네트워크관리사 1급'인데 2급만 공인이면 이 자격은 공인 아님 (공인 등급은 표시)
+          isPublic = singleGradeIsPublic(r.grade, p.grades);
+        }
+      }
+      if (grades) matched++;
+      // 공인 목록과 이어졌는데 이 등급은 공인 아님 → 민간
+      const kind = isPublic && r.kind === '민간' ? '국가공인민간' : grades && !isPublic && r.kind === '국가공인민간' ? '민간' : r.kind;
       if (grades !== r.publicGrades || until !== r.publicUntil || kind !== r.kind) {
         ops.push(this.prisma.certificate.update({ where: { id: r.id }, data: { publicGrades: grades, publicUntil: until, kind } }));
       }
     }
+    if (del.length) ops.push(this.prisma.certificate.deleteMany({ where: { id: { in: del } } }));
     if (ops.length) await this.prisma.$transaction(ops);
-    this.log.log(`공인민간 ${priv.length}종목 중 ${matched}개 자격과 연결`);
+    this.log.log(`공인민간 ${priv.length}종목 → 자격 ${matched}개 연결, 이름 다른 중복 ${del.length}개 정리`);
   }
 
   /** 이름이 같은 자격증에 Q-net 종목코드 저장 (취득자 통계 조회용) */
@@ -690,7 +721,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
       });
     }
     for (const p of priv) {
-      if (nameKeys(p.name).some((k) => names.has(k))) continue;
+      if (aliasOf(p.name) || nameKeys(p.name).some((k) => names.has(k))) continue;
       const id = `kp-${createHash('sha1').update(norm(p.name)).digest('hex').slice(0, 10)}`;
       if (ids.has(id)) continue;
       nameKeys(p.name).forEach((k) => names.add(k));
