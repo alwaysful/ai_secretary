@@ -25,6 +25,16 @@ function group(detail: Item[]) {
   })).filter((g) => g.items.length);
 }
 
+const squash = (v: string) => v.replace(/[^0-9A-Za-z가-힣~]/g, '');
+/** '1급만 공인' (일부 등급만) / '공인' (전 등급) + 만료일 */
+function publicLabel(c: Cert): string | null {
+  const pg = c.publicGrades;
+  if (!pg) return null;
+  const partial = pg !== '등급 없음' && !!c.grade && squash(c.grade) !== squash(pg);
+  const base = pg === '등급 없음' ? '공인' : partial ? `${pg}만 공인 (부분공인)` : `${pg} 공인`;
+  return c.publicUntil ? `${base} · ~${c.publicUntil}` : base;
+}
+
 /** 최근 5년 취득자 막대 */
 function Bars({ years }: { years: { year: number; count: number }[] }) {
   const max = Math.max(1, ...years.map((y) => y.count));
@@ -61,6 +71,7 @@ export function CertAbout({ cert }: { cert: Cert }) {
     ['응시료', cert.fee],
     ['유효기간', cert.validity],
     ['주관', cert.org],
+    ['국가공인', publicLabel(cert)],
   ];
 
   return (
