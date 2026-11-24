@@ -17,6 +17,7 @@ import { PcControlPage } from '../features/pc/PcControlPage';
 import { PcRunBar } from '../features/pc/PcRunBar';
 import { ToolsPage } from '../features/tools/ToolsPage';
 import { StatsPage } from '../features/stats/StatsPage';
+import { CertPage } from '../features/certs/CertPage';
 import { TtsPage } from '../features/tts/TtsPage';
 import { getBackendUrl, isNative } from '../shared/backend';
 import { ShortcutHelp, useGlobalShortcuts } from './Shortcuts';
@@ -32,7 +33,7 @@ const AdminPage = lazy(() => import('../features/admin/AdminPage').then((m) => (
 const CompanionPage = lazy(() => import('../features/companion/CompanionPage').then((m) => ({ default: m.CompanionPage })));
 const StudyPage = lazy(() => import('../features/study/pages/StudyView').then((m) => ({ default: m.StudyPage })));
 
-export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study' | 'phone' | 'info' | 'news' | 'landing' | 'models' | 'pc' | 'tools' | 'stats' | 'guide' | 'admin' | 'tts' | 'companion';
+export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study' | 'phone' | 'info' | 'news' | 'landing' | 'models' | 'pc' | 'tools' | 'stats' | 'guide' | 'admin' | 'tts' | 'companion' | 'certs';
 
 function Page(props: { page: PageId; go: (p: PageId) => void }) {
   const { page, go } = props;
@@ -74,6 +75,8 @@ function Page(props: { page: PageId; go: (p: PageId) => void }) {
       return <ToolsPage onBack={back} />;
     case 'stats':
       return <StatsPage onBack={back} />;
+    case 'certs':
+      return <CertPage onBack={back} />;
     case 'admin':
       return (
         <Suspense fallback={null}>

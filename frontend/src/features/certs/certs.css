@@ -1,0 +1,22 @@
+/* 자격증 탭: 새 소식(공모전) 표·달력 스타일 위에 추가분만 */
+.cert-head { display: flex; align-items: center; gap: 6px; }
+.cert-star { background: none; border: 0; padding: 0 2px; font-size: 18px; line-height: 1; cursor: pointer; color: var(--muted); }
+.cert-star.on { color: #f5b301; }
+.cert-table .news-links .link-like { color: var(--accent); font-size: 13px; }
+.cert-table .link-like.danger { color: var(--err); }
+.cert-next { display: block; font-size: 12px; margin-top: 2px; }
+.cert-exams { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding: 8px 10px; border-left: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); border-radius: 0 8px 8px 0; }
+.cert-exam { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-size: 13px; }
+.cert-exam b { font-weight: 600; }
+.cert-form h3 { margin: 0; font-size: 15px; color: var(--accent); }
+.cert-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.cert-form-grid .wide { grid-column: 1 / -1; }
+.cert-form-grid label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+.cert-form-btns { display: flex; gap: 8px; margin-top: 6px; }
+.cert-exam-form { margin-top: 6px; }
+.cert-key { display: flex; flex-direction: column; gap: 8px; }
+.cert-key p { margin: 0; }
+.cert-key-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.cert-key-row input { flex: 1 1 240px; min-width: 0; }
+.ncal-bar.cb-exam { font-weight: 700; }
+.ncal-bar.cb-result { background: none; color: hsl(var(--h) 60% 40%); }
