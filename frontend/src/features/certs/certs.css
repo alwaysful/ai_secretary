@@ -23,14 +23,25 @@
 .cert-table tr .news-title { color: var(--text, inherit); font-weight: 600; }
 .cert-info { font-size: 13px; min-width: 88px; max-width: 170px; overflow-wrap: anywhere; }
 .cert-note { margin: 0; font-size: 12px; }
-@media (max-width: 720px) {
+/* 좁은 창(1000px 이하)은 표 대신 카드로 (가로 스크롤 방지) */
+@media (max-width: 1000px) {
+  .cert-table thead { display: none; }
+  .cert-table, .cert-table tbody, .cert-table tr, .cert-table td { display: block; width: auto; }
+  .cert-table tr { border-top: 1px solid var(--line); padding: 10px 12px; }
+  .cert-table tbody tr:first-child { border-top: 0; }
+  .cert-table td { border: 0; padding: 2px 0; }
+  .cert-table td.nt-main { display: flex; flex-direction: column; gap: 5px; }
+  .cert-table .nt-period:not(:has(.muted:only-child))::before { content: attr(data-label) ' '; color: var(--muted); font-size: 12px; }
+  .cert-table .nt-period:has(> .muted:only-child) { display: none; }
+  .cert-table tr.ca-row { border-top: 0; padding-top: 0; }
+  .cert-score::before { content: attr(data-label) ' '; color: var(--muted); font-size: 12px; }
   .cert-info { max-width: none; }
   .cert-info::before { content: attr(data-label) ' '; color: var(--muted); font-size: 12px; }
 }
 .cert-more { align-self: center; margin: 8px auto; display: block; }
 /* 내용 열 넓게: 나머지 열은 좁게 */
 .subbody.cert-body { width: min(1400px, 100%); }
-@media (min-width: 721px) {
+@media (min-width: 1001px) {
   .cert-table td.nt-main { display: table-cell; width: 40%; min-width: 360px; }
   .cert-table td.nt-main > * + * { margin-top: 5px; }
   .cert-table .nt-summary { -webkit-line-clamp: 4; }
@@ -41,9 +52,6 @@
 .cert-score { white-space: nowrap; font-size: 14px; }
 /* 점수 높을수록 진한 초록 */
 .cert-score b { display: inline-block; min-width: 2.6em; text-align: center; padding: 1px 6px; border-radius: 6px; font-variant-numeric: tabular-nums; background: color-mix(in srgb, #2e9d5b calc(var(--s) * 7%), transparent); }
-@media (max-width: 720px) {
-  .cert-score::before { content: attr(data-label) ' '; color: var(--muted); font-size: 12px; }
-}
 /* 「설명」 버튼 */
 .cert-about-btn { font-size: 12px; border: 1px solid var(--accent); color: var(--accent); background: none; border-radius: 999px; padding: 1px 10px; cursor: pointer; }
 .cert-about-btn.on { background: var(--accent); color: var(--bg); }

@@ -234,3 +234,61 @@ export function parseCertStats(text: string, baseYY: number): CertStats | null {
   const total = sum('ilpcnt1') + years.reduce((a, y) => a + y.count, 0);
   return { years, total };
 }
+
+/** 공공데이터포털(odcloud): 한국직업능력연구원 국가전문자격정보 (20250601본, 약 210줄 → 1회 호출) */
+export const KPRO_URL = 'https://api.odcloud.kr/api/15090299/v1/uddi:4bbc44e3-f420-4533-a582-fcf901e1b259';
+
+export function kproUrl(key: string, page = 1): string {
+  const k = key.includes('%') ? key : encodeURIComponent(key);
+  return `${KPRO_URL}?page=${page}&perPage=${KPRIVATE_PAGE}&returnType=JSON&serviceKey=${k}`;
+}
+
+/** 국가전문 1종목 */
+export interface KPro {
+  name: string;
+  grades: string[];
+  law: string;
+  ministry: string;
+  org: string;
+  url: string | null;
+}
+
+/** odcloud 응답 → 국가전문 목록. 오류 응답이면 throw */
+export function parseKPro(text: string): KPro[] {
+  let j: { data?: unknown; code?: number; msg?: string };
+  try {
+    j = JSON.parse(text.trim());
+  } catch {
+    throw new Error(`국가전문자격 API 응답 해석 실패: ${text.trim().slice(0, 120)}`);
+  }
+  if (!Array.isArray(j.data)) throw new Error(`국가전문자격 API 오류: ${j.msg ?? j.code ?? '데이터 없음'}`);
+  const clean = (v: unknown) => {
+    const s = blank(v);
+    return /^내용\s*없음$/.test(s) ? '' : s;
+  };
+  const seen = new Set<string>();
+  const out: KPro[] = [];
+  for (const o of j.data as Record<string, unknown>[]) {
+    const name = clean(o['자격명']);
+    if (!name || seen.has(norm(name))) continue;
+    seen.add(norm(name));
+    // 등급: 괄호 밖 쉼표로만 나눔 ('제1종(보통, 대형), 제2종' → 2개)
+    const raw = clean(o['등급']);
+    const grades: string[] = [];
+    let depth = 0;
+    let cur = '';
+    for (const ch of raw) {
+      if (ch === '(' || ch === '（') depth++;
+      if (ch === ')' || ch === '）') depth = Math.max(0, depth - 1);
+      if (ch === ',' && depth === 0) {
+        if (cur.trim()) grades.push(cur.trim());
+        cur = '';
+      } else cur += ch;
+    }
+    if (cur.trim()) grades.push(cur.trim());
+    const home = clean(o['시행기관홈페이지']);
+    const url = home ? (/^https?:\/\//i.test(home) ? home : `https://${home}`) : null;
+    out.push({ name, grades, law: clean(o['관련법']), ministry: clean(o['소관부처']), org: clean(o['시행기관']), url });
+  }
+  return out;
+}

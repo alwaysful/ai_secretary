@@ -544,7 +544,7 @@ export function fieldOfName(name: string): string | null {
     [/경영지도|기술지도|가맹|품질관리사|물류/, '경영/사무/OA'],
     [/행정사|경비|노무|변리|법무|감정평가|공인중개/, '법률/행정'],
     [/청소년|국가유산|문화재|학예|평생교육|상담|한자|국어/, '교육/상담/인문'],
-    [/산업안전|산업보건|정수시설|소방|위험물|원자|방사/, '안전/환경/에너지'],
+    [/산업안전|산업보건|정수시설|소방|위험물|원자력|원자로|방사/, '안전/환경/에너지'],
     [/손해평가|농산물|수산물|산림|나무|조경|경매사/, '농림/조경'],
     [/회계|세무/, '회계/세무'],
     [/보험|금융|투자|자산|신용|부동산|주택/, '금융/부동산'],
@@ -566,6 +566,8 @@ export function fieldOfPrivate(name: string, ministry: string): string {
   const byName = fieldOfName(name);
   if (byName) return byName;
   if (/금융위/.test(m)) return '금융/부동산';
+  if (/법무부|대법원|경찰청|행정안전부|인사혁신/.test(m)) return '법률/행정';
+  if (/국세청|관세청|기획재정/.test(m)) return '회계/세무';
   if (/과학기술정보통신|과기정통/.test(m)) return '정보통신/IT';
   if (/식품의약품|보건복지/.test(m)) return '보건/의료/복지';
   if (/교육부/.test(m)) return '교육/상담/인문';
