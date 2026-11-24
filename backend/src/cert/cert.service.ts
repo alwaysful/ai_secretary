@@ -688,6 +688,13 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
    * 폐지된 기능사보 삭제. 별표·직접 넣은 일정 있는 건 지우지 않음.
    */
   private async tidyDiscovered(): Promise<void> {
+    // 국가전문자격정보(kn-*) 분야 다시 계산 (이름 키워드 규칙이 바뀌면 따라감)
+    const kn = await this.prisma.certificate.findMany({ where: { id: { startsWith: 'kn-' } }, select: { id: true, name: true, field: true, summary: true } });
+    const knOps = kn
+      .map((r) => ({ id: r.id, field: fieldOfPrivate(r.name, (r.summary ?? '').split(' · ')[0]), old: r.field }))
+      .filter((r) => r.field !== r.old)
+      .map((r) => this.prisma.certificate.update({ where: { id: r.id }, data: { field: r.field } }));
+    if (knOps.length) await this.prisma.$transaction(knOps);
     const rows = await this.prisma.certificate.findMany({
       where: { id: { startsWith: 'qnet-' }, discoveredAt: { not: null } },
       include: { exams: { where: { source: 'manual' }, select: { id: true } } },
