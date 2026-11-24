@@ -39,7 +39,7 @@ export interface Cert {
   starred: boolean;
   custom: boolean;
   /** 간단 설명 (「설명」 버튼) */
-  detail: { label: string; text: string; links?: { label: string; url: string }[] }[] | null;
+  detail: { label: string; text: string; items?: string[]; links?: { label: string; url: string }[] }[] | null;
   exams: CertExam[];
 }
 
