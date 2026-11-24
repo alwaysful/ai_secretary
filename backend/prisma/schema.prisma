@@ -294,6 +294,8 @@ model Certificate {
   /// 유효기간 (참고값)
   validity     String?
   userValidity String?
+  /// 사용자가 매긴 유용도 0~10 (없으면 참고값 계산)
+  userScore    Float?
   /// Q-net 종목 목록에서 새로 찾아 추가한 시각
   discoveredAt DateTime?
   starred      Boolean    @default(false)

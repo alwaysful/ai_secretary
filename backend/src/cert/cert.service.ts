@@ -5,6 +5,7 @@ import type { CertExam, Certificate, Prisma } from '@prisma/client';
 import { EnvVars } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { baseOfVariant, CATALOG, CERT_FIELDS, CERT_KINDS, defaultsOf, fieldOfName, fieldOfPrivate, fieldOfQnet, isTechGrade, joinTags, SERIES_LABEL, seriesOfGrade } from './catalog';
+import { scoreOf } from './score';
 import { KPrivate, kprivateUrl, norm, parseJmList, parseKPrivate, parseQnet, QNET_PAGE, QnetGb, QnetJm, qnetJmUrl, QnetPhase, qnetUrl, seriesOf } from './qnet';
 
 const DAY = 86_400_000;
@@ -75,6 +76,9 @@ export interface CertView {
   prepEdited: boolean;
   feeEdited: boolean;
   validityEdited: boolean;
+  /** 유용도 0~10 (사용자 값 우선) */
+  score: number;
+  scoreEdited: boolean;
   /** 최근 Q-net 종목 목록에서 새로 추가됨 */
   isNew: boolean;
   starred: boolean;
@@ -113,6 +117,8 @@ export interface CertInput {
   prep?: string | null;
   fee?: string | null;
   validity?: string | null;
+  /** 유용도 0~10, null = 기본값으로 */
+  score?: number | null;
   starred?: boolean;
 }
 
@@ -219,6 +225,8 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
       prepEdited: c.userPrep !== null,
       feeEdited: c.userFee !== null,
       validityEdited: c.userValidity !== null,
+      score: c.userScore ?? scoreOf(c),
+      scoreEdited: c.userScore !== null,
       isNew: !!c.discoveredAt && Date.now() - c.discoveredAt.getTime() < NEW_FOR_MS,
       starred: c.starred,
       custom: c.custom,
@@ -336,6 +344,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
     if (b.prep !== undefined) data.userPrep = b.prep?.trim() || null;
     if (b.fee !== undefined) data.userFee = b.fee?.trim() || null;
     if (b.validity !== undefined) data.userValidity = b.validity?.trim() || null;
+    if (b.score !== undefined) data.userScore = b.score === null ? null : Math.round(Math.min(10, Math.max(0, b.score)) * 10) / 10;
     if (c.custom) {
       if (b.name !== undefined) data.name = b.name.trim();
       if (b.field !== undefined) data.field = b.field;
