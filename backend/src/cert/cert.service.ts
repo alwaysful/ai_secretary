@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { baseOfVariant, CATALOG, CERT_FIELDS, CERT_KINDS, defaultsOf, fieldOfName, fieldOfPrivate, fieldOfQnet, isTechGrade, joinTags, SERIES_LABEL, seriesOfGrade } from './catalog';
 import { scoreOf } from './score';
 import { CERT_DETAILS, CertDetail } from './details';
-import { CertStats, KPrivate, kprivateUrl, norm, parseCertStats, parseJmList, parseKPrivate, parseQnet, QNET_PAGE, QnetGb, QnetJm, qnetJmUrl, QnetPhase, qnetStatUrl, qnetUrl, seriesOf } from './qnet';
+import { CertStats, KPrivate, KPro, kproUrl, parseKPro, kprivateUrl, norm, parseCertStats, parseJmList, parseKPrivate, parseQnet, QNET_PAGE, QnetGb, QnetJm, qnetJmUrl, QnetPhase, qnetStatUrl, qnetUrl, seriesOf } from './qnet';
 
 const DAY = 86_400_000;
 const CATALOG_IDS = new Set(CATALOG.map((c) => c.id));
@@ -36,7 +36,8 @@ const PQI = 'https://www.pqi.or.kr';
 /** 이름 비교 키: 전체, 괄호 뺀 기본 이름, 괄호 안 이름(3자 이상). 'TESAT' ↔ '경제이해력검증시험(TESAT)' 중복 방지 */
 function nameKeys(name: string): string[] {
   const { base } = baseOfVariant(name);
-  const keys = [norm(name), norm(base)];
+  // '의사 국가시험' ↔ '의사'
+  const keys = [norm(name), norm(base), norm(base.replace(/\s*국가시험$/, ''))];
   const inner = /[(（]([^)）]+)[)）]/.exec(name)?.[1];
   if (inner && norm(inner).length >= 3) keys.push(norm(inner));
   return [...new Set(keys.filter(Boolean))];
@@ -515,14 +516,20 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
     } catch (e) {
       errors.push(`공인민간: ${errOf(e, '공인민간자격 목록')} (「공인민간자격등록현황」 활용신청 확인)`);
     }
+    let pro: KPro[] = [];
+    try {
+      pro = parseKPro(await this.fetchText(kproUrl(key)));
+    } catch (e) {
+      errors.push(`국가전문: ${errOf(e, '국가전문자격 목록')} (「국가전문자격정보」 활용신청 확인)`);
+    }
     const now = new Date();
     if (list.length) await this.fillJmCd(list).catch((e: Error) => this.log.warn(`종목코드 채우기 실패: ${e.message}`));
-    const fresh = await this.freshRows(list, priv, now);
+    const fresh = await this.freshRows(list, priv, now, pro);
     if (fresh.length) await this.prisma.certificate.createMany({ data: fresh, skipDuplicates: true });
     const error = errors.join(' / ') || null;
     await this.prisma.certConfig.update({ where: { id: 1 }, data: { lastCatalogAt: now, lastCatalogNew: fresh.length, lastCatalogError: error } });
-    this.log.log(`새 자격증 ${fresh.length}개 추가 (Q-net 종목 ${list.length}개, 공인민간 ${priv.length}개 확인)`);
-    if (!list.length && !priv.length && error) throw new BadRequestException(error);
+    this.log.log(`새 자격증 ${fresh.length}개 추가 (Q-net 종목 ${list.length}개, 공인민간 ${priv.length}개, 국가전문 ${pro.length}개 확인)`);
+    if (!list.length && !priv.length && !pro.length && error) throw new BadRequestException(error);
     return this.getConfig();
   }
 
@@ -565,7 +572,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** 받은 목록 중 DB에 없는 것만 행으로 */
-  private async freshRows(list: QnetJm[], priv: KPrivate[], now: Date): Promise<Prisma.CertificateCreateManyInput[]> {
+  private async freshRows(list: QnetJm[], priv: KPrivate[], now: Date, kpro: KPro[] = []): Promise<Prisma.CertificateCreateManyInput[]> {
     const have = await this.prisma.certificate.findMany({ select: { id: true, name: true } });
     const ids = new Set(have.map((c) => c.id));
     const names = new Set(have.flatMap((c) => nameKeys(c.name)));
@@ -620,6 +627,30 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
         url: QNET_HOME,
         series: null,
         validity: '평생 (만료 없음)',
+        position: pos++,
+        discoveredAt: now,
+      });
+    }
+    // 국가전문 전체 대조: 이름이 같거나, 기존 이름이 이 이름을 품으면('자가용조종사' ⊃ '조종사') 건너뜀
+    const haveKeys = () => [...names];
+    for (const p of kpro) {
+      const keys = nameKeys(p.name);
+      if (keys.some((k) => names.has(k))) continue;
+      const n = norm(p.name);
+      if (n.length >= 3 && haveKeys().some((k) => k.includes(n))) continue;
+      const id = `kn-${createHash('sha1').update(n).digest('hex').slice(0, 10)}`;
+      if (ids.has(id)) continue;
+      keys.forEach((k) => names.add(k));
+      out.push({
+        id,
+        name: p.name,
+        field: fieldOfPrivate(p.name, p.ministry),
+        kind: '국가전문',
+        grade: joinTags(p.grades),
+        org: p.org || p.ministry || '-',
+        url: p.url,
+        summary: [p.ministry, p.law].filter(Boolean).join(' · ') || null,
+        series: null,
         position: pos++,
         discoveredAt: now,
       });
