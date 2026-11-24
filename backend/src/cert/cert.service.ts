@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client';
 import type { CertExam, Certificate } from '@prisma/client';
 import { EnvVars } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
-import { aliasOf, baseOfVariant, CATALOG, CERT_FIELDS, CERT_KINDS, defaultsOf, fieldOfName, fieldOfPrivate, fieldOfQnet, isTechGrade, joinTags, singleGradeIsPublic, SERIES_LABEL, seriesOfGrade } from './catalog';
+import { aliasOf, baseOfVariant, findGrade, CATALOG, CERT_FIELDS, CERT_KINDS, defaultsOf, fieldOfName, fieldOfPrivate, fieldOfQnet, isTechGrade, joinTags, singleGradeIsPublic, SERIES_LABEL, seriesOfGrade } from './catalog';
 import { scoreOf } from './score';
 import { CERT_DETAILS, CertDetail } from './details';
 import { CertStats, KPrivate, KPro, kproUrl, parseKPro, kprivateUrl, norm, parseCertStats, parseJmList, parseKPrivate, parseQnet, QNET_PAGE, QnetGb, QnetJm, qnetJmUrl, QnetPhase, qnetStatUrl, qnetUrl, seriesOf } from './qnet';
@@ -555,7 +555,8 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
       if (!al) continue;
       nameKeys(p.name).forEach((k) => aliasKeys.add(k));
       for (const [id, label] of Object.entries(al.ids)) {
-        const hit = label === '*' ? joinTags(p.grades) ?? '등급 없음' : p.grades.find((g) => norm(g) === norm(label)) ?? null;
+        // 등급 칸이 비어 있으면 종목 전체 공인으로 봄
+        const hit = label === '*' || !p.grades.length ? joinTags(p.grades) ?? '등급 없음' : findGrade(p.grades, label);
         target.set(id, { grades: hit, until: p.until?.slice(0, 10) ?? null });
       }
     }
