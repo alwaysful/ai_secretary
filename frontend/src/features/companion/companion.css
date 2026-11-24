@@ -45,3 +45,18 @@
 .cmp-form { display: flex; flex-direction: column; gap: 6px; }
 .cmp-form select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
 .cmp-form .rename, .cmp-upload .rename { flex: 1; min-width: 140px; }
+
+.cmp-delta { position: absolute; top: 18px; right: 18px; font-weight: 700; font-size: 20px; color: #ec4899; animation: cmp-up 2.2s ease-out forwards; pointer-events: none; }
+.cmp-delta.down { color: var(--muted); }
+@keyframes cmp-up { 0% { opacity: 0; transform: translateY(10px) scale(0.8); } 15% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-30px); } }
+.cmp-mic { position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; font-size: 13px; background: color-mix(in srgb, var(--bg) 85%, transparent); border: 1px solid var(--line); }
+.cmp-mic i { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); transition: transform 0.08s; }
+.cmp-mic.listening i, .cmp-mic.hearing i { background: #ef4444; }
+.cmp-mic.thinking i { background: var(--accent); animation: cmp-wave 0.5s infinite alternate; }
+.cmp-bond { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
+.cmp-bond-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cmp-bond-top button { margin-left: auto; padding: 2px 8px; font-size: 12px; }
+.cmp-bar { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--line) 70%, transparent); overflow: hidden; }
+.cmp-bar span { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #f9a8d4, #ec4899); transition: width 0.6s ease; }
+.cmp-controls select { font: inherit; font-size: 13px; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; max-width: 100%; }
+@media (prefers-reduced-motion: reduce) { .cmp-delta { animation: none; } }

@@ -507,6 +507,15 @@ export interface CompanionView {
   personas: PersonaPreset[];
   voices: VoicePreset[];
   models: Live2dModel[];
+  bond: CompanionBond;
+}
+export interface CompanionBond {
+  affinity: number;
+  index: number;
+  name: string;
+  tone: string;
+  next: { name: string; at: number } | null;
+  lastAt: string | null;
 }
 export interface UpdateStatus {
   branch: string;
@@ -554,6 +563,9 @@ export const api = {
   adminBackup: (t: string) => req<unknown>('/admin/backup', { headers: adminH(t) }),
   adminDocs: (t: string) => req<AdminDocs>('/admin/docs', { headers: adminH(t) }),
   adminCompanion: (t: string) => req<CompanionView>('/admin/companion', { headers: adminH(t) }),
+  adminBond: (t: string) => req<CompanionBond>('/admin/companion/bond', { headers: adminH(t) }),
+  adminSetBond: (t: string, affinity: number) =>
+    req<CompanionBond>('/admin/companion/bond', { method: 'PUT', headers: adminH(t), body: JSON.stringify({ affinity }) }),
   adminSetCompanion: (t: string, prompt: string) =>
     req<CompanionView>('/admin/companion', { method: 'PUT', headers: adminH(t), body: JSON.stringify({ prompt }) }),
   adminSetCompanionVoice: (t: string, voice: Omit<VoicePreset, 'id' | 'builtin'> | null) =>

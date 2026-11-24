@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, Emotion, TtsEngine, TtsSettings } from './api';
+import { stripTag } from './companionReply';
 
 /** 설정 캐시. 설정 화면 저장 시 setTtsSettings로 갱신 */
 let cfg: TtsSettings | null = null;
@@ -35,7 +36,7 @@ export function useTtsSettings(): TtsSettings | null {
 
 /** 마크다운·코드·URL 제거 → 읽을 글 */
 export function speakable(md: string): string {
-  return md
+  return stripTag(md)
     .replace(/<think>[\s\S]*?<\/think>/g, '')
     .replace(/```[\s\S]*?```/g, ' 코드 생략. ')
     .replace(/`([^`]+)`/g, '$1')

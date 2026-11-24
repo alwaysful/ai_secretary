@@ -54,7 +54,8 @@ type Model = {
     settings: { expressions?: { Name?: string; name?: string }[] };
   };
   expression: (id?: string | number) => Promise<boolean>;
-  motion: (group: string) => Promise<boolean>;
+  motion: (group: string, index?: number, priority?: number) => Promise<boolean>;
+  focus: (x: number, y: number, instant?: boolean) => void;
   destroy: () => void;
 };
 
@@ -70,7 +71,7 @@ const EXPR: Record<string, string[]> = {
 };
 
 /** Live2D 캐릭터 (pixi-live2d-display, Cubism 3+). speaking 동안 입 움직임 */
-export function Live2DStage(props: { url: string; speaking: boolean; emotion: string; onError?: (msg: string) => void }) {
+export function Live2DStage(props: { url: string; speaking: boolean; emotion: string; onError?: (msg: string) => void; onTap?: () => void }) {
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const modelRef = useRef<Model | null>(null);
@@ -120,6 +121,7 @@ export function Live2DStage(props: { url: string; speaking: boolean; emotion: st
     let dead = false;
     let app: { destroy: (a?: boolean, b?: unknown) => void; stage: { addChild: (m: unknown) => void }; renderer: { width: number; height: number; resolution: number } } | null = null;
     let ro: ResizeObserver | null = null;
+    let offMove: (() => void) | null = null;
     setState('loading');
     (async () => {
       await loadCore();
@@ -156,6 +158,13 @@ export function Live2DStage(props: { url: string; speaking: boolean; emotion: st
         model.internalModel.coreModel.setParameterValueById?.('ParamMouthOpenY', v);
         if (!m.speaking) m.level = 0;
       });
+      // 시선: 마우스 따라감
+      const onMove = (e: PointerEvent) => {
+        const r = canvas.current?.getBoundingClientRect();
+        if (r) model.focus(e.clientX - r.left, e.clientY - r.top);
+      };
+      window.addEventListener('pointermove', onMove);
+      offMove = () => window.removeEventListener('pointermove', onMove);
       setState('ready');
     })().catch((e: unknown) => {
       if (dead) return;
@@ -167,6 +176,7 @@ export function Live2DStage(props: { url: string; speaking: boolean; emotion: st
     return () => {
       dead = true;
       ro?.disconnect();
+      offMove?.();
       modelRef.current = null;
       try {
         app?.destroy(false, { children: true });
@@ -189,9 +199,19 @@ export function Live2DStage(props: { url: string; speaking: boolean; emotion: st
     else if (props.emotion !== 'neutral') void m.motion('TapBody').catch(() => false);
   }, [props.emotion, state]);
 
+  // 터치 반응: 탭 모션 (그룹 이름은 모델마다 다름)
+  const tap = () => {
+    const m = modelRef.current;
+    if (!m || state !== 'ready') return;
+    void (async () => {
+      for (const g of ['TapBody', 'Tap', 'tap_body', 'Flick', 'Idle']) if (await m.motion(g, undefined, 3).catch(() => false)) break;
+    })();
+    props.onTap?.();
+  };
+
   return (
     <div className="l2d" ref={box}>
-      <canvas ref={canvas} />
+      <canvas ref={canvas} onClick={tap} />
       {state === 'loading' && <p className="l2d-msg muted">모델 불러오는 중…</p>}
       {state === 'error' && <p className="l2d-msg error">{err}</p>}
     </div>

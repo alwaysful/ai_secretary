@@ -19,6 +19,7 @@ import { PcControlService } from '../pc-control/pc-control.service';
 import { SettingsService } from '../settings/settings.service';
 import { EnvVars } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
+import { CompanionService } from '../admin/companion.service';
 
 /** tools: 도구 조회, queued: 다른 응답 대기, loading: 모델 메모리 적재, generating: 생성 중 */
 export type StreamPhase = 'tools' | 'queued' | 'loading' | 'generating';
@@ -54,6 +55,7 @@ export class ConversationService {
     private readonly actions: CalendarActionService,
     private readonly memory: MemoryService,
     private readonly pc: PcControlService,
+    private readonly companion: CompanionService,
   ) {}
 
   create(title?: string, persona?: string) {
@@ -125,6 +127,7 @@ export class ConversationService {
           durationMs: result.durationMs,
         },
       });
+      if (!plan?.reply) await this.afterCompanion(id, result.content);
       return { userMessage, assistantMessage, action: plan?.action ?? null };
     } finally {
       release();
@@ -229,6 +232,7 @@ export class ConversationService {
               stopped: Boolean(signal?.aborted),
             },
           });
+          await this.afterCompanion(id, full);
         }
       }
     } finally {
@@ -255,9 +259,21 @@ export class ConversationService {
       .map((m) => ({ role: m.role.toLowerCase() as ChatMessage['role'], content: m.content }));
     const memory = await this.memory.context();
     const conv = await this.prisma.conversation.findUnique({ where: { id }, select: { persona: true } });
-    const persona = conv?.persona === 'girlfriend' ? this.settings.companionPrompt() : null;
-    const system = [persona ?? this.settings.systemPrompt(), this.settings.pcControl() ? CAPABILITIES : CAPABILITIES_PC_OFF, memory, extra].filter(Boolean).join('\n\n');
+    const gf = conv?.persona === 'girlfriend';
+    const persona = gf ? this.settings.companionPrompt() : null;
+    const bond = gf ? await this.companion.promptContext(id).catch(() => null) : null;
+    const system = [persona ?? this.settings.systemPrompt(), this.settings.pcControl() ? CAPABILITIES : CAPABILITIES_PC_OFF, memory, extra, bond].filter(Boolean).join('\n\n');
     return system ? [{ role: 'system', content: system }, ...history] : history;
+  }
+
+  /** AI 친구 대화면 호감도·마지막 대화 시각 갱신 (실패 무시) */
+  private async afterCompanion(id: string, text: string): Promise<void> {
+    try {
+      const c = await this.prisma.conversation.findUnique({ where: { id }, select: { persona: true } });
+      if (c?.persona === 'girlfriend') await this.companion.afterReply(text);
+    } catch {
+      /* 무시 */
+    }
   }
 
   private toHttpError(e: unknown): Error {
