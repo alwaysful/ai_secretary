@@ -40,6 +40,10 @@ export interface CatalogCert {
   url: string;
   series: string | null;
   summary: string | null;
+  /** 평균 준비기간 (참고값) */
+  prep: string | null;
+  /** 응시료 (참고값) */
+  fee: string | null;
 }
 
 const QNET = 'https://www.q-net.or.kr';
@@ -257,6 +261,126 @@ const DATA: Record<string, Row[]> = {
   ],
 };
 
+/** 등급·종류별 기본 준비기간·응시료 (참고값, 해마다 바뀔 수 있음) */
+function defaults(kind: string, grade: string | null, series: string | null): { prep: string | null; fee: string | null } {
+  if (series?.startsWith('qnet-')) {
+    if (grade === '기술사') return { prep: '6~12개월', fee: '필기 67,800원 · 면접 87,100원' };
+    if (grade === '기능장') return { prep: '4~6개월', fee: '필기 34,400원 · 실기 종목별' };
+    if (grade === '기사') return { prep: '3~4개월', fee: '필기 19,400원 · 실기 종목별' };
+    if (grade === '기능사') return { prep: '1~2개월', fee: '필기 14,500원 · 실기 종목별' };
+    return { prep: '2~3개월', fee: '필기 19,400원 · 실기 종목별' };
+  }
+  if (kind === '어학') return { prep: '1~3개월', fee: null };
+  if (kind === '국가공인민간' || kind === '민간') return { prep: '1~2개월', fee: null };
+  return { prep: null, fee: null };
+}
+
+/** 종목별 참고값 (기본값 덮어씀). 응시료 '약'은 대략치 */
+const EXTRA: Record<string, { prep?: string; fee?: string }> = {
+  'it-ipe': { prep: '2~3개월', fee: '필기 19,400원 · 실기 22,600원' },
+  'it-ipie': { prep: '2~3개월', fee: '필기 19,400원 · 실기 20,800원' },
+  'it-sec': { prep: '4~6개월', fee: '필기·실기 각 약 2만원' },
+  'it-sec2': { prep: '3~4개월', fee: '필기·실기 각 약 2만원' },
+  'it-bigdata': { prep: '2~3개월', fee: '필기 17,800원 · 실기 40,800원' },
+  'it-sqld': { prep: '2~4주', fee: '50,000원' },
+  'it-sqlp': { prep: '2~3개월', fee: '100,000원' },
+  'it-adsp': { prep: '3~4주', fee: '50,000원' },
+  'it-adp': { prep: '6개월 이상', fee: '필기·실기 각 100,000원' },
+  'it-comm': { prep: '3~4개월', fee: '필기·실기 각 약 2~3만원' },
+  'it-radio': { prep: '3~4개월', fee: '필기·실기 각 약 2~3만원' },
+  'it-linux': { prep: '1~2개월', fee: '1차 약 2만원 · 2차 약 2.5만원' },
+  'it-net': { prep: '1개월', fee: '약 4만원' },
+  'it-aws-saa': { prep: '1~2개월', fee: 'US$150' },
+  'it-cka': { prep: '1~2개월', fee: 'US$445 (재응시 1회 포함)' },
+  'el-ee': { prep: '4~6개월' },
+  'el-ec': { prep: '2~3개월' },
+  'sf-ind': { prep: '2~3개월' },
+  'of-cos1': { prep: '1~2개월', fee: '필기 19,000원 · 실기 22,500원' },
+  'of-cos2': { prep: '2~4주', fee: '필기 19,000원 · 실기 22,500원' },
+  'of-word': { prep: '2~4주', fee: '필기 19,000원 · 실기 약 2.2만원' },
+  'of-itq': { prep: '2~3주', fee: '과목당 약 2만원' },
+  'of-erp': { prep: '1개월', fee: '과목당 약 2~4만원' },
+  'of-dist2': { prep: '1~2개월', fee: '약 3만원' },
+  'of-sec2': { prep: '1개월', fee: '필기 약 2만원 · 실기 약 2.3만원' },
+  'of-survey': { prep: '2~3개월' },
+  'of-logis': { prep: '3~6개월', fee: '약 2만원' },
+  'of-mgmt': { prep: '6~12개월' },
+  'ac-cpa': { prep: '2~4년' },
+  'ac-tax': { prep: '2~3년' },
+  'ac-ca1': { prep: '1~2개월', fee: '약 2.5만원' },
+  'ac-ct2': { prep: '2~3개월', fee: '약 2.5만원' },
+  'ac-fin': { prep: '2~3개월', fee: '약 7만원' },
+  'ac-acc1': { prep: '1~2개월', fee: '약 7만원' },
+  'fn-invest': { prep: '1~2개월', fee: '약 5만원' },
+  'fn-fund': { prep: '3~4주', fee: '약 3.5만원' },
+  'fn-sec': { prep: '3~4주', fee: '약 3.5만원' },
+  'fn-credit': { prep: '3~6개월' },
+  'fn-afpk': { prep: '3~6개월 (교육 수료 필요)' },
+  'fn-cfa': { prep: '레벨당 300시간 이상', fee: 'US$1,000 안팎 (레벨당)' },
+  'fn-realtor': { prep: '6~12개월', fee: '1차 13,700원 · 2차 14,300원' },
+  'fn-apprais': { prep: '1.5~3년' },
+  'lw-bar': { prep: '로스쿨 3년' },
+  'lw-patent': { prep: '2~3년' },
+  'lw-customs': { prep: '1~2년' },
+  'lw-labor': { prep: '1~2년' },
+  'lw-admin': { prep: '3~6개월' },
+  'lw-judicial': { prep: '2~4년' },
+  'cv-housing': { prep: '6~12개월' },
+  'cv-architect': { prep: '1~2년' },
+  'hc-sw1': { prep: '3~6개월' },
+  'hc-nurse': { prep: '졸업 전 4~6개월' },
+  'hc-care': { prep: '교육 240시간 + 2~4주' },
+  'ed-history': { prep: '2~4주', fee: '심화 약 2.7만원' },
+  'ed-hanja': { prep: '급수별 2주~3개월', fee: '급수별 상이' },
+  'ed-job2': { prep: '2~3개월' },
+  'ed-clinpsy2': { prep: '수련 1년 + 2~3개월' },
+  'ed-youthcoun': { prep: '3~6개월' },
+  'ed-korteach': { prep: '3~6개월' },
+  'sf-fire1': { prep: '강습 + 2~4주' },
+  'ck-barista': { prep: '1~2개월', fee: '필기·실기 합산 약 10만원' },
+  'tr-guide': { prep: '6개월 (어학 성적 별도)' },
+  'ln-toeic': { fee: '52,500원' },
+  'ln-toeics': { fee: '84,000원' },
+  'ln-opic': { fee: '84,000원' },
+  'ln-teps': { fee: '약 4.6만원' },
+  'ln-toefl': { prep: '2~4개월', fee: 'US$220 안팎' },
+  'ln-ielts': { prep: '2~4개월', fee: '약 30만원' },
+  'ln-jlpt': { prep: '급수별 1~6개월', fee: '급수별 약 4~6만원' },
+  'ln-jpt': { fee: '약 5만원' },
+  'ln-hsk': { prep: '급수별 1~6개월', fee: '급수별 상이' },
+  'ln-topik': { fee: '약 4~5.5만원' },
+};
+
 export const CATALOG: CatalogCert[] = Object.entries(DATA).flatMap(([field, rows]) =>
-  rows.map(([id, name, kind, grade, org, url, series, summary]) => ({ id, name, field, kind, grade, org, url, series, summary: summary ?? null })),
+  rows.map(([id, name, kind, grade, org, url, series, summary]) => {
+    const d = defaults(kind, grade, series);
+    const x = EXTRA[id] ?? {};
+    return { id, name, field, kind, grade, org, url, series, summary: summary ?? null, prep: x.prep ?? d.prep, fee: x.fee ?? d.fee };
+  }),
 );
+
+/** Q-net 직무분야 → 자격증 분야 */
+export function fieldOfQnet(obligfld: string): string {
+  const f = obligfld.replace(/\s/g, '');
+  const map: [RegExp, string][] = [
+    [/정보통신/, '정보통신/IT'],
+    [/전기|전자/, '전기/전자'],
+    [/기계|재료/, '기계/자동차'],
+    [/건설/, '건설/건축'],
+    [/안전|환경|에너지/, '안전/환경/에너지'],
+    [/화학|식품/, '화학/식품/바이오'],
+    [/경영|회계|사무/, '경영/사무/OA'],
+    [/디자인|문화|예술|방송/, '디자인/미디어'],
+    [/음식|이용|숙박|여행|스포츠|미용/, '조리/미용/관광'],
+    [/농림|어업/, '농림/조경'],
+    [/보건|의료|사회복지/, '보건/의료/복지'],
+    [/교육|과학/, '교육/상담/인문'],
+  ];
+  return map.find(([re]) => re.test(f))?.[1] ?? '기타';
+}
+
+/** 등급 → Q-net 정기 묶음 (상시 여부는 알 수 없어 정기로) */
+export const seriesOfGrade = (grade: string) =>
+  /기술사/.test(grade) ? 'qnet-기술사' : /기능장/.test(grade) ? 'qnet-기능장' : /기능사/.test(grade) ? 'qnet-기능사' : 'qnet-기사';
+
+export const defaultsOf = defaults;

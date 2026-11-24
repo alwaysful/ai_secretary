@@ -61,8 +61,8 @@ function toRound(o: Record<string, unknown>): QnetRound {
   };
 }
 
-/** JSON 또는 XML 응답 → 회차 목록. 오류 응답이면 throw */
-export function parseQnet(text: string): QnetRound[] {
+/** JSON 또는 XML 응답 → item 레코드 목록. 오류 응답이면 throw */
+export function parseItems(text: string): Record<string, unknown>[] {
   const t = text.trim();
   if (t.startsWith('<')) {
     const $ = load(t, { xml: true });
@@ -78,7 +78,7 @@ export function parseQnet(text: string): QnetRound[] {
           .each((_, c) => {
             o[(c as { name: string }).name] = $(c).text();
           });
-        return toRound(o);
+        return o;
       });
   }
   let j: unknown;
@@ -94,7 +94,43 @@ export function parseQnet(text: string): QnetRound[] {
   if (items && !Array.isArray(items) && typeof items === 'object') items = (items as { item?: unknown }).item;
   if (!items) return [];
   const arr = Array.isArray(items) ? items : [items];
-  return arr.filter((x): x is Record<string, unknown> => !!x && typeof x === 'object').map(toRound);
+  return arr.filter((x): x is Record<string, unknown> => !!x && typeof x === 'object');
+}
+
+/** 시험 일정 응답 → 회차 목록 */
+export const parseQnet = (text: string): QnetRound[] => parseItems(text).map(toRound);
+
+/** 국가자격 종목 1개 */
+export interface QnetJm {
+  jmCd: string;
+  name: string;
+  /** 기사·기능사 등 */
+  grade: string;
+  /** 직무분야 (정보통신 등) */
+  obligfld: string;
+  /** 국가기술자격 등 */
+  qualgb: string;
+}
+
+/** 종목 목록 응답 → 종목 */
+export function parseJmList(text: string): QnetJm[] {
+  return parseItems(text)
+    .map((o) => ({
+      jmCd: String(pick(o, 'jmcd') ?? '').trim(),
+      name: String(pick(o, 'jmfldnm') ?? '').trim(),
+      grade: String(pick(o, 'seriesnm') ?? '').trim(),
+      obligfld: String(pick(o, 'obligfldnm') ?? '').trim(),
+      qualgb: String(pick(o, 'qualgbnm') ?? '').trim(),
+    }))
+    .filter((j) => j.jmCd && j.name);
+}
+
+/** 공공데이터포털: 한국산업인력공단 국가자격 종목 목록 */
+export const QNET_JM_URL = 'http://openapi.q-net.or.kr/api/service/rest/InquiryListNationalQualifcationSVC/getList';
+
+export function qnetJmUrl(key: string): string {
+  const k = key.includes('%') ? key : encodeURIComponent(key);
+  return `${QNET_JM_URL}?serviceKey=${k}`;
 }
 
 /** 국가기술 회차 설명 → 일정 묶음 */

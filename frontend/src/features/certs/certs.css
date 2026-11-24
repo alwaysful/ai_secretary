@@ -20,3 +20,10 @@
 .cert-key-row input { flex: 1 1 240px; min-width: 0; }
 .ncal-bar.cb-exam { font-weight: 700; }
 .ncal-bar.cb-result { background: none; color: hsl(var(--h) 60% 40%); }
+.cert-table tr .news-title { color: var(--text, inherit); font-weight: 600; }
+.cert-info { font-size: 13px; min-width: 88px; max-width: 170px; overflow-wrap: anywhere; }
+.cert-note { margin: 0; font-size: 12px; }
+@media (max-width: 720px) {
+  .cert-info { max-width: none; }
+  .cert-info::before { content: attr(data-label) ' '; color: var(--muted); font-size: 12px; }
+}

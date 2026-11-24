@@ -51,3 +51,12 @@ describe('qnet', () => {
     expect(ymd('2026-02-3')).toBeNull();
   });
 });
+
+describe('qnet 종목 목록', () => {
+  it('XML 종목 파싱', () => {
+    const { parseJmList } = jest.requireActual('../../src/cert/qnet') as typeof import('../../src/cert/qnet');
+    const xml =
+      '<response><header><resultCode>00</resultCode></header><body><items><item><jmcd>1320</jmcd><jmfldnm>정보처리기사</jmfldnm><obligfldnm>정보통신</obligfldnm><qualgbnm>국가기술자격</qualgbnm><seriesnm>기사</seriesnm></item><item><jmcd></jmcd></item></items></body></response>';
+    expect(parseJmList(xml)).toEqual([{ jmCd: '1320', name: '정보처리기사', grade: '기사', obligfld: '정보통신', qualgb: '국가기술자격' }]);
+  });
+});

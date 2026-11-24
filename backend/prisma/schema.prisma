@@ -54,57 +54,57 @@ model MailAccount {
 
 /// 앱 설정 (단일 행 id=1). null 이면 .env 기본값 사용.
 model AppSettings {
-  id           Int      @id @default(1)
-  model        String?
-  systemPrompt String?
+  id                Int       @id @default(1)
+  model             String?
+  systemPrompt      String?
   /// AI PC 조작(마우스·키보드) 허용
-  pcControl    Boolean  @default(true)
+  pcControl         Boolean   @default(true)
   /// 화면 읽기(스크린샷 분석) 허용. 끄면 공부 화면 감시·PC 조작 불가
-  screenRead   Boolean  @default(true)
+  screenRead        Boolean   @default(true)
   /// 마이크 사용 허용 (STT 녹음)
-  mic          Boolean  @default(true)
+  mic               Boolean   @default(true)
   /// 웹캠 사용 허용 (공부 집중 자세 분석)
-  webcam       Boolean  @default(true)
+  webcam            Boolean   @default(true)
   /// 도구 탭 OCR 비전 모델. null = .env
-  ocrModel     String?
+  ocrModel          String?
   /// 도구 탭 STT whisper 모델. null = .env
-  sttModel     String?
+  sttModel          String?
   /// 기능별 실행 위치: local | api
-  chatSource   String   @default("local")
-  chatProvider String?
-  chatApiModel String?
-  ocrSource    String   @default("local")
-  ocrProvider  String?
-  ocrApiModel  String?
-  sttSource    String   @default("local")
-  sttProvider  String?
-  sttApiModel  String?
+  chatSource        String    @default("local")
+  chatProvider      String?
+  chatApiModel      String?
+  ocrSource         String    @default("local")
+  ocrProvider       String?
+  ocrApiModel       String?
+  sttSource         String    @default("local")
+  sttProvider       String?
+  sttApiModel       String?
   /// TTS 엔진: browser | edge | openai | gemini
-  ttsEngine    String   @default("browser")
-  ttsModel     String?
-  ttsVoice     String?
-  ttsRate      Float    @default(1)
+  ttsEngine         String    @default("browser")
+  ttsModel          String?
+  ttsVoice          String?
+  ttsRate           Float     @default(1)
   /// 채팅 답변 자동 읽기
-  ttsAutoRead  Boolean  @default(false)
+  ttsAutoRead       Boolean   @default(false)
   /// AI 여자친구 성격 프롬프트. null = 기본값
-  companionPrompt String?
+  companionPrompt   String?
   /// AI 여자친구 전용 목소리 {engine,model,voice,rate,emotion}. null = 전역 TTS
-  companionVoice  Json?
+  companionVoice    Json?
   /// 사용자 저장 프리셋 {persona:[{id,name,prompt}], voice:[{id,name,...}]}
-  companionPresets Json?
+  companionPresets  Json?
   /// 사용할 Live2D 모델 id (data/live2d/<id>)
-  companionModel  String?
+  companionModel    String?
   /// AI 친구 호감도 0~100
-  companionAffinity Int     @default(30)
+  companionAffinity Int       @default(30)
   /// AI 친구 마지막 대화 시각
   companionLastAt   DateTime?
   /// 외부 API 월 비용 한도 (USD). null = 없음
-  budgetUsd     Float?
+  budgetUsd         Float?
   /// 한도 대비 경고 비율 (%)
-  budgetWarnPct Int      @default(80)
+  budgetWarnPct     Int       @default(80)
   /// 한도 넘으면 API 호출 차단
-  budgetBlock   Boolean  @default(false)
-  updatedAt    DateTime @updatedAt
+  budgetBlock       Boolean   @default(false)
+  updatedAt         DateTime  @updatedAt
 }
 
 /// 외부 AI API 키 (gemini | anthropic | openai). AES-256-GCM 암호문만 저장
@@ -176,33 +176,33 @@ model WebShortcut {
 
 /// 웹 스크래핑으로 모은 글 (학사공지·공모전 등). source+externalId 로 중복 방지.
 model ScrapedPost {
-  id         String    @id @default(uuid()) @db.Uuid
+  id            String    @id @default(uuid()) @db.Uuid
   /// NewsSite.id
-  source     String
+  source        String
   /// 사이트의 글 번호
-  externalId String
-  title      String
-  url        String
+  externalId    String
+  title         String
+  url           String
   /// 분류 (장학/납입금, 공모 분야 등)
-  category   String?
+  category      String?
   /// 작성자·주최사
-  author     String?
+  author        String?
   /// 게시일
-  postedAt   DateTime?
+  postedAt      DateTime?
   /// 마감일 (공모전)
-  deadline   DateTime?
+  deadline      DateTime?
   /// 접수 시작일 (공모전, 상세 페이지에서 보충)
-  startsAt   DateTime?
+  startsAt      DateTime?
   /// 행사·활동 진행 기간
   eventStartsAt DateTime?
   eventEndsAt   DateTime?
   /// 간단한 내용 (대상·본문 앞부분 등)
-  summary    String?
+  summary       String?
   /// 상세 페이지 확인 시각. null = 아직
-  detailAt   DateTime?
+  detailAt      DateTime?
   /// 읽음 처리 시각. null = 새 글
-  seenAt     DateTime?
-  createdAt  DateTime  @default(now())
+  seenAt        DateTime?
+  createdAt     DateTime  @default(now())
 
   @@unique([source, externalId])
   @@index([source, createdAt])
@@ -270,26 +270,35 @@ model ApiPrice {
 
 /// 자격증 목록. 기본 목록은 고정 id(slug), 사용자가 추가한 건 custom=true
 model Certificate {
-  id        String     @id
-  name      String
+  id           String     @id
+  name         String
   /// 분야 (정보통신/IT 등)
-  field     String
+  field        String
   /// 국가기술 | 국가전문 | 국가공인민간 | 민간 | 어학
-  kind      String
+  kind         String
   /// 등급 (기사, 1급 등)
-  grade     String?
+  grade        String?
   /// 시행기관
-  org       String
-  url       String?
-  summary   String?
+  org          String
+  url          String?
+  summary      String?
   /// 일정 묶음 (qnet-기사 등). 같은 묶음은 같은 회차 일정 공유
-  series    String?
-  starred   Boolean    @default(false)
-  custom    Boolean    @default(false)
-  position  Int        @default(0)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  exams     CertExam[]
+  series       String?
+  /// 평균 준비기간 (참고값)
+  prep         String?
+  /// 응시료 (참고값)
+  fee          String?
+  /// 사용자가 고친 준비기간·응시료 (기본값보다 우선)
+  userPrep     String?
+  userFee      String?
+  /// Q-net 종목 목록에서 새로 찾아 추가한 시각
+  discoveredAt DateTime?
+  starred      Boolean    @default(false)
+  custom       Boolean    @default(false)
+  position     Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  exams        CertExam[]
 
   @@index([field])
 }
@@ -322,11 +331,15 @@ model CertExam {
 
 /// 자격증 일정 연동 설정 (공공데이터포털 Q-net API 키)
 model CertConfig {
-  id         Int       @id @default(1)
-  qnetKey    String?
-  lastSyncAt DateTime?
-  lastError  String?
-  lastCount  Int       @default(0)
+  id               Int       @id @default(1)
+  qnetKey          String?
+  lastSyncAt       DateTime?
+  lastError        String?
+  lastCount        Int       @default(0)
+  /// 새 자격증 확인 (Q-net 종목 목록, 주 1회)
+  lastCatalogAt    DateTime?
+  lastCatalogNew   Int       @default(0)
+  lastCatalogError String?
 }
 
 /// 단어장 (사용자가 JSON 업로드). 간격 반복 복습 + 회독 + 퀴즈
