@@ -4,6 +4,8 @@ import { api, ApiError, DeviceLogin, Health, MailStatus, PcCheck, PullJob, Setup
 import { CopyButton } from '../../shared/CopyButton';
 import { markGuideDone } from './seen';
 import { useAdminDocs } from '../admin/useAdminDocs';
+import { CertKeyBox } from '../certs/CertKeyBox';
+import '../certs/certs.css';
 
 type State = 'ok' | 'todo' | 'optional' | 'wait';
 
@@ -367,11 +369,13 @@ export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) =
           </div>
         </Step>
 
-        <Step n={8} title="자격증 시험 일정 자동 수집" state="optional">
+        <Step n={8} title="공공데이터포털 API 키 (자격증)" state="optional">
           <p>
-            공공데이터포털에서 「한국산업인력공단_국가자격 시험일정 조회」 활용신청 → 인증키를 「🎓 자격증」 ⚙ 일정 연동(또는 설정)에 붙여넣기.
-            기사·기능사·국가전문 회차 접수·시험일이 하루 1번 자동으로 채워져요. 키 없어도 검색·직접 입력은 가능.
+            공공데이터포털 인증키는 계정당 하나라 승인받은 API 전부 같은 키로 써요. 마이페이지 → 개발계정 → 「일반 인증키(Decoding)」를 아래에 붙여넣고 저장.
+            저장하면 바로 Q-net 시험 일정·새 종목을 받아오고, 이후 일정은 하루 1번, 새 자격증은 주 1번 자동 확인해요.
           </p>
+          <p className="muted">필요한 활용신청: 한국산업인력공단 「국가자격 시험일정 조회」, 「국가자격 종목 목록 정보」. 키 없어도 검색·직접 입력은 가능.</p>
+          <CertKeyBox />
           <div className="chips no-print">
             <button className="ghost" onClick={go('certs')}>
               🎓 자격증
