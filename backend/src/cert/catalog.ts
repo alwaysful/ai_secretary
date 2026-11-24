@@ -181,7 +181,7 @@ const DATA: Record<string, Row[]> = {
     ['ac-acc1', '회계관리 1급', '국가공인민간', '1급', '삼일회계법인', 'https://www.samilexam.com', null],
   ],
   '금융/부동산': [
-    ['fn-invest', '투자자산운용사', '국가공인민간', null, '금융투자협회', 'https://license.kofia.or.kr', null],
+    ['fn-invest', '투자자산운용사', '민간', null, '금융투자협회', 'https://license.kofia.or.kr', null],
     ['fn-fund', '펀드투자권유자문인력', '민간', null, '금융투자협회', 'https://license.kofia.or.kr', null],
     ['fn-sec', '증권투자권유자문인력', '민간', null, '금융투자협회', 'https://license.kofia.or.kr', null],
     ['fn-credit', '신용분석사', '국가공인민간', null, '한국금융연수원', 'https://www.kbi.or.kr', null],
@@ -609,3 +609,38 @@ export function joinTags(tags: string[]): string | null {
   const s = u.join('·');
   return s.length > 60 ? `${u.slice(0, 5).join('·')} 외 ${u.length - 5}` : s;
 }
+
+/** 공인 등급 문자열들 → 낱개 등급 ('1~3급' → 1급·2급·3급) */
+export function gradeTokens(grades: string[]): string[] {
+  const out: string[] = [];
+  for (const g of grades.flatMap((x) => x.split(/[,·/]/))) {
+    const t = g.replace(/\s/g, '');
+    const r = /^(\D*)(\d)~(\d)급$/.exec(t);
+    if (r) for (let i = Number(r[2]); i <= Number(r[3]); i++) out.push(`${r[1]}${i}급`.toLowerCase());
+    else if (t) out.push(t.toLowerCase());
+  }
+  return out;
+}
+
+/** 자격 등급이 낱개('1급', '2종')이고 공인 등급에 없으면 false. 판단 못 하면 true */
+export function singleGradeIsPublic(grade: string | null, publicGrades: string[]): boolean {
+  const g = grade?.replace(/\s/g, '').toLowerCase();
+  if (!g || !/^(\d|준\d|사범)(급|종)$/.test(g) || !publicGrades.length) return true;
+  return gradeTokens(publicGrades).some((t) => t === g || t.endsWith(g));
+}
+
+/**
+ * 공인민간자격등록현황 이름이 목록 이름과 다른 것 → 연결할 자격 id와 그 자격의 공인 등급 이름('*' = 전체).
+ * 등급 이름이 API 등급에 없으면 그 자격은 공인 아님.
+ */
+export const PUBLIC_ALIASES: { re: RegExp; ids: Record<string, string> }[] = [
+  { re: /^SQL$/i, ids: { 'it-sqld': '개발자', 'it-sqlp': '전문가' } },
+  { re: /^데이터분석/, ids: { 'it-adsp': '준전문가', 'it-adp': '전문가' } },
+  { re: /^데이터아키텍처/, ids: { 'pv-dap': '전문가', 'pv-dasp': '준전문가' } },
+  { re: /^ERP.*정보관리사/i, ids: { 'of-erp': '*', 'pv-erp1': '1급' } },
+  { re: /^전산세무회계/, ids: { 'ac-ca1': '전산회계1급', 'pv-ca2': '전산회계2급', 'pv-ct1': '전산세무1급', 'ac-ct2': '전산세무2급' } },
+  { re: /^한자능력급수/, ids: { 'ed-hanja': '*' } },
+  { re: /^외환전문역/, ids: { 'pv-fx1': '*', 'pv-fx2': '*' } },
+  { re: /^AT$/i, ids: { 'pv-tat1': 'TAT1급', 'pv-tat2': 'TAT2급', 'pv-fat1': 'FAT1급', 'pv-fat2': 'FAT2급' } },
+];
+export const aliasOf = (apiName: string) => PUBLIC_ALIASES.find((a) => a.re.test(apiName.trim()));

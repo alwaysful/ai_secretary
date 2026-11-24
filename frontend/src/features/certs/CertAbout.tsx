@@ -26,12 +26,25 @@ function group(detail: Item[]) {
 }
 
 const squash = (v: string) => v.replace(/[^0-9A-Za-z가-힣~]/g, '');
-/** '1급만 공인' (일부 등급만) / '공인' (전 등급) + 만료일 */
+/** '1~3급' → 1급·2급·3급 */
+function tokens(pg: string): string[] {
+  return pg.split(/[,·/]/).flatMap((g) => {
+    const t = g.replace(/\s/g, '').toLowerCase();
+    const r = /^(\D*)(\d)~(\d)급$/.exec(t);
+    return r ? Array.from({ length: Number(r[3]) - Number(r[2]) + 1 }, (_, i) => `${r[1]}${Number(r[2]) + i}급`) : t ? [t] : [];
+  });
+}
+/** '공인' / '1급 공인' / '1급만 공인 (부분공인)' / '이 등급은 공인 아님 (2급만 공인)' + 만료일 */
 function publicLabel(c: Cert): string | null {
   const pg = c.publicGrades;
   if (!pg) return null;
-  const partial = pg !== '등급 없음' && !!c.grade && squash(c.grade) !== squash(pg);
-  const base = pg === '등급 없음' ? '공인' : partial ? `${pg}만 공인 (부분공인)` : `${pg} 공인`;
+  const g = c.grade?.replace(/\s/g, '').toLowerCase() ?? '';
+  const single = /^(\d|준\d|사범)(급|종)$/.test(g);
+  let base: string;
+  if (pg === '등급 없음') base = '공인';
+  else if (single && !tokens(pg).some((t) => t === g || t.endsWith(g))) base = `이 등급은 공인 아님 (${pg}만 공인)`;
+  else if (!single && c.grade && squash(c.grade) !== squash(pg)) base = `${pg}만 공인 (부분공인)`;
+  else base = `${pg} 공인`;
   return c.publicUntil ? `${base} · ~${c.publicUntil}` : base;
 }
 
