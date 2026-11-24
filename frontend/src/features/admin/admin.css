@@ -37,3 +37,8 @@
   .adm-log .ctx { display: none; }
   .adm-log .txt { grid-column: 1 / -1; }
 }
+.adm-feats { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.adm-feat { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+.adm-feat ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.55; }
+.adm-feat button { align-self: flex-start; }
+.adm-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: color-mix(in srgb, var(--accent) 18%, transparent); white-space: nowrap; }

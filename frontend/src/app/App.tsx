@@ -43,7 +43,7 @@ function Page(props: { page: PageId; go: (p: PageId) => void }) {
     case 'memory':
       return <MemoryPage onBack={back} />;
     case 'settings':
-      return <SettingsPage onBack={back} onModels={() => go('models')} />;
+      return <SettingsPage onBack={back} onModels={() => go('models')} onAdmin={() => go('admin')} />;
     case 'models':
       return <ModelsPage onBack={back} onSettings={() => go('settings')} />;
     case 'briefing':
@@ -77,7 +77,7 @@ function Page(props: { page: PageId; go: (p: PageId) => void }) {
     case 'admin':
       return (
         <Suspense fallback={null}>
-          <AdminPage onBack={back} />
+          <AdminPage onBack={back} onNavigate={go} />
         </Suspense>
       );
     case 'tts':

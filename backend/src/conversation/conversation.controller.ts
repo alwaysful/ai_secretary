@@ -9,9 +9,13 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   Res,
+  UnauthorizedException,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
+import { AdminAuthService } from '../admin/admin-auth.service';
+import { bearer } from '../admin/admin.guard';
 import { sse } from '../common/sse';
 import { CreateConversationDto, CreateMessageDto, ListConversationsDto, UpdateConversationDto } from './conversation.dto';
 import { ConversationService, StreamHooks, StreamPhase } from './conversation.service';
@@ -32,15 +36,27 @@ function pipe(res: Response, run: StreamFactory): Promise<void> {
 
 @Controller('conversations')
 export class ConversationController {
-  constructor(private readonly conversations: ConversationService) {}
+  constructor(
+    private readonly conversations: ConversationService,
+    private readonly admin: AdminAuthService,
+  ) {}
+
+  /** persona(AI 여자친구)는 관리자 전용 */
+  private personaGuard(req: Request, persona?: string): void {
+    if (persona && !this.admin.verify(bearer(req))) {
+      throw new UnauthorizedException({ code: 'ADMIN_REQUIRED', message: '관리자 전용' });
+    }
+  }
 
   @Post()
-  create(@Body() dto: CreateConversationDto) {
+  create(@Req() req: Request, @Body() dto: CreateConversationDto) {
+    this.personaGuard(req, dto.persona);
     return this.conversations.create(dto.title, dto.persona);
   }
 
   @Get()
-  list(@Query() q: ListConversationsDto) {
+  list(@Req() req: Request, @Query() q: ListConversationsDto) {
+    this.personaGuard(req, q.persona);
     return this.conversations.list(q.q, q.persona);
   }
 

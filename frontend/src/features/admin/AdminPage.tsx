@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AdminLog, AdminOverview, AdminResetKind, api, ApiError } from '../../shared/api';
 import { currentToken, setAdminToken } from './session';
+import type { PageId } from '../../app/App';
+import { useAdminDocs } from './useAdminDocs';
 import './admin.css';
 
 const RESET: { kind: AdminResetKind; label: string }[] = [
@@ -46,7 +48,8 @@ function Stat(props: { k: string; v: string; tone?: 'ok' | 'bad' }) {
 }
 
 /** 관리자 로비. 서버 세션 토큰 필수, 만료 시 로비로 */
-export function AdminPage(props: { onBack: () => void }) {
+export function AdminPage(props: { onBack: () => void; onNavigate: (p: PageId) => void }) {
+  const docs = useAdminDocs();
   const [ov, setOv] = useState<AdminOverview | null>(null);
   const [logs, setLogs] = useState<AdminLog[]>([]);
   const [level, setLevel] = useState<(typeof LEVELS)[number]>('');
@@ -144,6 +147,57 @@ export function AdminPage(props: { onBack: () => void }) {
           <p className="muted">불러오는 중</p>
         ) : (
           <div className="adm-grid">
+            {docs && (
+              <section className="card adm-card wide">
+                <h2>🔐 관리자 기능</h2>
+                <div className="adm-feats">
+                  {docs.features.map((f) => (
+                    <div key={f.title} className="adm-feat">
+                      <strong>
+                        {f.icon} {f.title}
+                      </strong>
+                      <ul>
+                        {f.lines.map((l) => (
+                          <li key={l}>{l}</li>
+                        ))}
+                      </ul>
+                      {f.page && f.page !== 'admin' && (
+                        <button className="ghost" onClick={() => props.onNavigate(f.page as PageId)}>
+                          열기 →
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {docs && (
+              <section className="card adm-card wide">
+                <h2>🚧 구현 중인 기능</h2>
+                <table className="adm-table">
+                  <thead>
+                    <tr>
+                      <th>기능</th>
+                      <th>상태</th>
+                      <th>메모</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {docs.inProgress.map((i) => (
+                      <tr key={i.title}>
+                        <td>{i.title}</td>
+                        <td>
+                          <span className="adm-badge">{i.status}</span>
+                        </td>
+                        <td className="muted">{i.note}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            )}
+
             <section className="card adm-card">
               <h2>🖥️ 서버</h2>
               <div className="adm-stats">

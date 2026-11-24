@@ -1,4 +1,5 @@
 import type { PageId } from '../../app/App';
+import { useAdminDocs } from '../admin/useAdminDocs';
 
 interface Feature {
   icon: string;
@@ -179,6 +180,9 @@ const FEATURES: Feature[] = [
 ];
 
 export function InfoPage(props: { onBack: () => void; onNavigate: (p: PageId) => void }) {
+  const admin = useAdminDocs();
+  // 관리자 모드: 관리자 전용 기능도 포함
+  const list: Feature[] = admin ? [...admin.features.map((f) => ({ ...f, page: f.page as PageId | undefined })), ...FEATURES] : FEATURES;
   return (
     <div className="subpage">
       <header className="bar">
@@ -195,7 +199,7 @@ export function InfoPage(props: { onBack: () => void; onNavigate: (p: PageId) =>
           <h2>AURA 810</h2>
           <p>내 PC에서 돌아가는 개인 AI 비서. 대화·메일·일정·기억은 PC의 DB에만 저장.</p>
         </section>
-        {FEATURES.map((f) => (
+        {list.map((f) => (
           <section key={f.title} className="card">
             <h2>
               {f.icon} {f.title}

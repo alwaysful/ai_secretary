@@ -22,9 +22,6 @@ export class UpdateSettingsDto {
   @IsOptional() @IsString() @MaxLength(50)
   sttModel?: string;
 
-  /** AI 여자친구 성격. 빈 문자열 = 기본값 */
-  @IsOptional() @IsString() @MaxLength(4000)
-  companionPrompt?: string;
 }
 
 export class TtsDto {
