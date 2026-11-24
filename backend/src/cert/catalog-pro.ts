@@ -75,8 +75,12 @@ const GROUPS: { field: string; org: readonly [string, string | null]; rows: R[] 
     org: QNET,
     rows: [
       ['np-curator', '박물관및미술관 준학예사', null, '6개월'],
-      ['np-heritage', '문화재수리기술자', null, '1~2년'],
     ],
+  },
+  {
+    field: '건설/건축',
+    org: QNET,
+    rows: [['np-heritage', '문화재수리기술자', null, '1~2년']],
   },
   {
     field: '디자인/미디어',
