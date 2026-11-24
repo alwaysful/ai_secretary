@@ -51,5 +51,8 @@ describe('공인민간·국가전문 정리', () => {
     expect(fieldOfName('경영지도사')).toBe('경영/사무/OA');
     expect(fieldOfName('청소년지도사')).toBe('교육/상담/인문');
     expect(fieldOfName('행정사')).toBe('법률/행정');
+    expect(fieldOfName('국가유산수리기능자')).toBe('건설/건축');
+    expect(fieldOfName('검량사')).toBe('경영/사무/OA');
+    expect(fieldOfName('기상감정사')).toBeNull();
   });
 });

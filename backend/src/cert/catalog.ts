@@ -538,6 +538,8 @@ export const isTechGrade = (g: string | null | undefined): boolean => !!g && (TE
 export function fieldOfName(name: string): string | null {
   const n = name.replace(/\s/g, '');
   const map: [RegExp, string][] = [
+    [/국가유산수리|문화재수리/, '건설/건축'],
+    [/^(검수사|검량사|감정사)$/, '경영/사무/OA'],
     [/관광|호텔|여행|조리|미용/, '조리/미용/관광'],
     [/경영지도|기술지도|가맹|품질관리사|물류/, '경영/사무/OA'],
     [/행정사|경비|노무|변리|법무|감정평가|공인중개/, '법률/행정'],
