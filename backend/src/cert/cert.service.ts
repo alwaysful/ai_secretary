@@ -5,13 +5,20 @@ import type { CertExam, Certificate, Prisma } from '@prisma/client';
 import { EnvVars } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { CATALOG, CERT_FIELDS, CERT_KINDS, defaultsOf, fieldOfQnet, SERIES_LABEL, seriesOfGrade } from './catalog';
-import { norm, parseJmList, parseQnet, QnetGb, qnetJmUrl, QnetPhase, qnetUrl, seriesOf } from './qnet';
+import { norm, parseJmList, parseQnet, QNET_PAGE, QnetGb, qnetJmUrl, QnetPhase, qnetUrl, seriesOf } from './qnet';
 
 const DAY = 86_400_000;
 const CATALOG_IDS = new Set(CATALOG.map((c) => c.id));
 /** 자동 수집 주기 */
 const SYNC_EVERY_MS = 24 * 3_600_000;
 const FETCH_TIMEOUT_MS = 20_000;
+/** 공공데이터 API 호출 한도 (개발계정 기준 보수적으로). 넘기 전에 멈춤 */
+export const API_DAY_LIMIT = 500;
+export const API_MONTH_LIMIT = 10_000;
+/** 수동 수집 최소 간격 (연속 클릭으로 호출 낭비 방지) */
+const MANUAL_COOLDOWN_MS = 10 * 60_000;
+/** KST 날짜 YYYY-MM-DD */
+const kstDay = (d = new Date()) => new Date(d.getTime() + 9 * 3_600_000).toISOString().slice(0, 10);
 /** 새 자격증 확인 주기 (목록은 DB에 두고 가끔만) */
 const CATALOG_EVERY_MS = 7 * DAY;
 /** 새로 찾은 자격증 '새' 표시 기간 */
@@ -73,6 +80,11 @@ export interface CertConfigView {
   lastCatalogAt: Date | null;
   lastCatalogNew: number;
   lastCatalogError: string | null;
+  /** 오늘·이번 달 API 호출 수와 한도 */
+  apiDayCount: number;
+  apiMonthCount: number;
+  apiDayLimit: number;
+  apiMonthLimit: number;
 }
 
 export interface CertInput {
@@ -376,13 +388,17 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
       lastCatalogAt: c.lastCatalogAt,
       lastCatalogNew: c.lastCatalogNew,
       lastCatalogError: c.lastCatalogError,
+      apiDayCount: c.apiDay === kstDay() ? c.apiDayCount : 0,
+      apiMonthCount: c.apiMonth === kstDay().slice(0, 7) ? c.apiMonthCount : 0,
+      apiDayLimit: API_DAY_LIMIT,
+      apiMonthLimit: API_MONTH_LIMIT,
     };
   }
 
   /** null = 화면 키 삭제 */
   async setKey(key: string | null): Promise<CertConfigView> {
     await this.cfg();
-    await this.prisma.certConfig.update({ where: { id: 1 }, data: { qnetKey: key?.trim() || null, lastError: null } });
+    await this.prisma.certConfig.update({ where: { id: 1 }, data: { qnetKey: key?.trim() || null, lastError: null, lastSyncAt: null, lastCatalogAt: null, lastCatalogError: null } });
     return this.getConfig();
   }
 
@@ -401,6 +417,9 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
 
   /** 지금 수집. 동시 요청은 하나로 */
   async sync(): Promise<CertConfigView> {
+    const c = await this.cfg();
+    // 최근 성공한 수집이 있으면 다시 부르지 않고 DB 값 사용
+    if (c.lastSyncAt && !c.lastError && Date.now() - c.lastSyncAt.getTime() < MANUAL_COOLDOWN_MS) return this.getConfig();
     if (!this.syncing) this.syncing = this.doSync().finally(() => (this.syncing = null));
     try {
       await this.syncing;
@@ -410,7 +429,31 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
     return this.getConfig();
   }
 
+  /** 페이지 나눠 받기 (한 페이지 50개 제한). 덜 찬 페이지가 오면 끝 */
+  private async pages<T>(url: (page: number) => string, parse: (text: string) => T[]): Promise<T[]> {
+    const out: T[] = [];
+    for (let page = 1; page <= 40; page++) {
+      const items = parse(await this.fetchText(url(page)));
+      out.push(...items);
+      if (items.length < QNET_PAGE) break;
+    }
+    return out;
+  }
+
+  /** 호출 1회 기록. 한도 넘으면 호출 전에 막음 */
+  private async countCall(): Promise<void> {
+    const c = await this.cfg();
+    const day = kstDay();
+    const month = day.slice(0, 7);
+    const dayCount = c.apiDay === day ? c.apiDayCount : 0;
+    const monthCount = c.apiMonth === month ? c.apiMonthCount : 0;
+    if (dayCount >= API_DAY_LIMIT) throw new Error(`오늘 공공데이터 API 호출 한도(${API_DAY_LIMIT}회) 도달. 내일 자동으로 다시 수집`);
+    if (monthCount >= API_MONTH_LIMIT) throw new Error(`이번 달 공공데이터 API 호출 한도(${API_MONTH_LIMIT}회) 도달. 다음 달에 다시 수집`);
+    await this.prisma.certConfig.update({ where: { id: 1 }, data: { apiDay: day, apiDayCount: dayCount + 1, apiMonth: month, apiMonthCount: monthCount + 1 } });
+  }
+
   private async fetchText(url: string): Promise<string> {
+    await this.countCall();
     const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), headers: { Accept: 'application/json, application/xml' } });
     const text = await res.text();
     if (!res.ok) throw new Error(`Q-net API HTTP ${res.status}: ${text.slice(0, 120)}`);
@@ -422,11 +465,14 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
    * 목록 전체는 DB에 저장해 두고 이 확인만 주 1회 (또는 버튼).
    */
   async discover(): Promise<CertConfigView> {
+    const last = await this.cfg();
+    if (last.lastCatalogAt && !last.lastCatalogError && Date.now() - last.lastCatalogAt.getTime() < MANUAL_COOLDOWN_MS) return this.getConfig();
     const key = await this.key();
     if (!key) throw new BadRequestException('Q-net API 키 없음. 공공데이터포털에서 활용신청 후 입력');
     await this.cfg();
     try {
-      const list = parseJmList(await this.fetchText(qnetJmUrl(key)));
+      const seenJm = new Set<string>();
+      const list = (await this.pages((p) => qnetJmUrl(key, p), parseJmList)).filter((j) => !seenJm.has(j.jmCd) && !!seenJm.add(j.jmCd));
       if (!list.length) throw new Error('Q-net 종목 목록이 비어 있음 (종목 목록 API 활용신청 확인)');
       const have = await this.prisma.certificate.findMany({ select: { id: true, name: true } });
       const ids = new Set(have.map((c) => c.id));
@@ -480,7 +526,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
     try {
       for (const y of [year, year + 1]) {
         for (const gb of ['T', 'S'] as QnetGb[]) {
-          const rounds = parseQnet(await this.fetchText(qnetUrl(key, y, gb)));
+          const rounds = await this.pages((p) => qnetUrl(key, y, gb, p), parseQnet);
           const keys: string[] = [];
           for (const r of rounds) {
             const d = norm(r.description);

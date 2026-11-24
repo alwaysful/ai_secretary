@@ -73,6 +73,11 @@ export function CertKeyBox(props: { onSynced?: () => void }) {
           새 자격증 확인 {when.format(new Date(cfg.lastCatalogAt))} · {cfg.lastCatalogError ? '실패' : `${cfg.lastCatalogNew}개 추가`} (주 1회 자동)
         </small>
       )}
+      {cfg && hasKey && (
+        <small className="muted">
+          API 호출 오늘 {cfg.apiDayCount}/{cfg.apiDayLimit} · 이번 달 {cfg.apiMonthCount}/{cfg.apiMonthLimit}회. 목록·일정은 DB에 저장해 두고, 일정은 하루 1번·새 자격증은 주 1번만 호출. 10분 안 재수집은 저장된 값 사용.
+        </small>
+      )}
       {(error || cfg?.lastError || cfg?.lastCatalogError) && <p className="error">{error || cfg?.lastError || cfg?.lastCatalogError}</p>}
     </div>
   );

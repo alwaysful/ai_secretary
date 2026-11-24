@@ -128,9 +128,9 @@ export function parseJmList(text: string): QnetJm[] {
 /** 공공데이터포털: 한국산업인력공단 국가자격 종목 목록 */
 export const QNET_JM_URL = 'http://openapi.q-net.or.kr/api/service/rest/InquiryListNationalQualifcationSVC/getList';
 
-export function qnetJmUrl(key: string): string {
+export function qnetJmUrl(key: string, page = 1): string {
   const k = key.includes('%') ? key : encodeURIComponent(key);
-  return `${QNET_JM_URL}?serviceKey=${k}`;
+  return `${QNET_JM_URL}?serviceKey=${k}&numOfRows=${QNET_PAGE}&pageNo=${page}`;
 }
 
 /** 국가기술 회차 설명 → 일정 묶음 */
@@ -148,7 +148,10 @@ export function seriesOf(description: string): string | null {
 export const norm = (s: string) => s.replace(/[^0-9A-Za-z가-힣]/g, '').toLowerCase();
 
 /** serviceKey: 인코딩된 키(% 포함)는 그대로, 디코딩 키는 인코딩 */
-export function qnetUrl(key: string, year: number, gb: QnetGb): string {
+/** 한 페이지 최대 줄 수 (API 제한 50) */
+export const QNET_PAGE = 50;
+
+export function qnetUrl(key: string, year: number, gb: QnetGb, page = 1): string {
   const k = key.includes('%') ? key : encodeURIComponent(key);
-  return `${QNET_SCHEDULE_URL}?serviceKey=${k}&numOfRows=300&pageNo=1&dataFormat=json&implYy=${year}&qualgbCd=${gb}`;
+  return `${QNET_SCHEDULE_URL}?serviceKey=${k}&numOfRows=${QNET_PAGE}&pageNo=${page}&dataFormat=json&implYy=${year}&qualgbCd=${gb}`;
 }
