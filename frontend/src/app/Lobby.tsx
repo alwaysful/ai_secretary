@@ -20,6 +20,7 @@ const MAIN: Item[] = [
   { id: 'chat', icon: '💬', label: 'AI 채팅하기' },
   { id: 'mail', icon: '✉️', label: '메일 확인', hint: '읽기 전용' },
   { id: 'news', icon: '📰', label: '새 소식', hint: '공지·공모전 모음' },
+  { id: 'certs', icon: '🎓', label: '자격증', hint: '분야별 검색·시험 일정' },
   { id: 'study', icon: '📚', label: '공부 집중', hint: '웹캠·화면 감시' },
   { id: 'vocab', icon: '📇', label: '단어장', hint: 'Anki 복습·회독·퀴즈' },
   { id: 'phone', icon: '📱', label: '폰 감시', hint: 'Android 앱' },

@@ -4,6 +4,8 @@ import { TtsCard } from './TtsCard';
 import { VocabSettingsCard } from '../vocab/VocabSettingsCard';
 import { isAdmin } from '../../shared/adminToken';
 import { CompanionPersona } from '../admin/CompanionPersona';
+import { CertKeyBox } from '../certs/CertKeyBox';
+import '../certs/certs.css';
 
 type PermKey = 'screenRead' | 'pcControl' | 'mic' | 'webcam';
 
@@ -394,6 +396,10 @@ export function SettingsPage(props: { onBack: () => void; onModels: () => void; 
               </section>
             )}
             <ApiKeys settings={settings} onSaved={(s) => setSettings((prev) => (prev ? { ...prev, apiKeys: s.apiKeys } : s))} />
+            <section className="card">
+              <h2>🎓 자격증 시험 일정 (Q-net)</h2>
+              <CertKeyBox />
+            </section>
             <section className="card">
               <h2>시스템 프롬프트</h2>
               <label className="field">

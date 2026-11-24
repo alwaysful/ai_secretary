@@ -268,6 +268,67 @@ model ApiPrice {
   updatedAt DateTime @updatedAt
 }
 
+/// 자격증 목록. 기본 목록은 고정 id(slug), 사용자가 추가한 건 custom=true
+model Certificate {
+  id        String     @id
+  name      String
+  /// 분야 (정보통신/IT 등)
+  field     String
+  /// 국가기술 | 국가전문 | 국가공인민간 | 민간 | 어학
+  kind      String
+  /// 등급 (기사, 1급 등)
+  grade     String?
+  /// 시행기관
+  org       String
+  url       String?
+  summary   String?
+  /// 일정 묶음 (qnet-기사 등). 같은 묶음은 같은 회차 일정 공유
+  series    String?
+  starred   Boolean    @default(false)
+  custom    Boolean    @default(false)
+  position  Int        @default(0)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  exams     CertExam[]
+
+  @@index([field])
+}
+
+/// 시험 회차 1개 (필기·실기 따로). Q-net 자동 수집 또는 직접 입력
+model CertExam {
+  id          String       @id @default(uuid()) @db.Uuid
+  certId      String?
+  cert        Certificate? @relation(fields: [certId], references: [id], onDelete: Cascade)
+  /// certId 없을 때 묶음 전체 적용
+  series      String?
+  /// qnet | manual
+  source      String       @default("manual")
+  /// 자동 수집 중복 방지 키
+  externalKey String?      @unique
+  title       String
+  /// 필기 | 실기 | null
+  phase       String?
+  regStart    DateTime?
+  regEnd      DateTime?
+  examStart   DateTime?
+  examEnd     DateTime?
+  resultAt    DateTime?
+  note        String?
+  createdAt   DateTime     @default(now())
+
+  @@index([certId])
+  @@index([series])
+}
+
+/// 자격증 일정 연동 설정 (공공데이터포털 Q-net API 키)
+model CertConfig {
+  id         Int       @id @default(1)
+  qnetKey    String?
+  lastSyncAt DateTime?
+  lastError  String?
+  lastCount  Int       @default(0)
+}
+
 /// 단어장 (사용자가 JSON 업로드). 간격 반복 복습 + 회독 + 퀴즈
 model VocabDeck {
   id           String        @id @default(uuid()) @db.Uuid

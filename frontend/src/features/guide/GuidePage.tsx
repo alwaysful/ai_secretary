@@ -367,7 +367,19 @@ export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) =
           </div>
         </Step>
 
-        <Step n={8} title="단어장 (Anki·회독)" state="optional">
+        <Step n={8} title="자격증 시험 일정 자동 수집" state="optional">
+          <p>
+            공공데이터포털에서 「한국산업인력공단_국가자격 시험일정 조회」 활용신청 → 인증키를 「🎓 자격증」 ⚙ 일정 연동(또는 설정)에 붙여넣기.
+            기사·기능사·국가전문 회차 접수·시험일이 하루 1번 자동으로 채워져요. 키 없어도 검색·직접 입력은 가능.
+          </p>
+          <div className="chips no-print">
+            <button className="ghost" onClick={go('certs')}>
+              🎓 자격증
+            </button>
+          </div>
+        </Step>
+
+        <Step n={9} title="단어장 (Anki·회독)" state="optional">
           <p>외울 단어장 JSON 파일을 올리면 복습·회독·퀴즈로 공부해요. 파일이 없으면 「예시로 바로 시작」.</p>
           <p className="muted">양식: front(단어)·back(뜻) 필수, reading·example·tags 선택. 단어장 화면 아래 「📄 단어장 파일 양식」에 예시.</p>
           <div className="chips no-print">
