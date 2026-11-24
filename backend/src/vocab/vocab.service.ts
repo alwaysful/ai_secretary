@@ -7,6 +7,8 @@ import { dayStart, Grade, preview, schedule } from './srs';
 const DAY = 86_400_000;
 const QUEUE_MAX = 50;
 const ROUND_BATCH = 100;
+/** 다시 공부 목록: 회독에서 본 적 있고 아직 이해 못 한 카드 */
+const AGAIN = (deckId: string): Prisma.VocabCardWhereInput => ({ deckId, known: false, roundSeen: { gt: 0 } });
 
 export interface DeckPatch {
   name?: string;
@@ -243,14 +245,21 @@ export class VocabService {
   async round(id: string, opts: { shuffle?: boolean } = {}) {
     const d = await this.deck(id);
     const where: Prisma.VocabCardWhereInput = { deckId: id, roundSeen: { lt: d.round } };
-    const [left, total, known] = await Promise.all([
+    const [left, total, known, again] = await Promise.all([
       this.prisma.vocabCard.findMany({ where, orderBy: { position: 'asc' } }),
       this.prisma.vocabCard.count({ where: { deckId: id } }),
       this.prisma.vocabCard.count({ where: { deckId: id, known: true } }),
+      this.prisma.vocabCard.count({ where: AGAIN(id) }),
     ]);
-    // 2회독부터 = 다시 공부 단어만 → 랜덤 순서
-    const list = opts.shuffle || d.round > 1 ? shuffle(left) : left;
-    return { round: d.round, total, left: left.length, known, cards: list.slice(0, ROUND_BATCH) };
+    const list = opts.shuffle ? shuffle(left) : left;
+    return { round: d.round, total, left: left.length, known, again, cards: list.slice(0, ROUND_BATCH) };
+  }
+
+  /** 복습하기: 「다시 공부하기」 누른 단어만, 랜덤 순서 */
+  async again(id: string) {
+    await this.deck(id);
+    const cards = await this.prisma.vocabCard.findMany({ where: AGAIN(id) });
+    return { total: cards.length, cards: shuffle(cards).slice(0, ROUND_BATCH * 5) };
   }
 
   async roundAnswer(cardId: string, known: boolean) {
@@ -267,24 +276,14 @@ export class VocabService {
     return card;
   }
 
-  /**
-   * 다음 회독. unknownOnly: 다시 공부 단어만 (외운 카드는 이번 회독 건너뜀, 순서 랜덤).
-   * 아니면 처음부터 전체 다시: 1회독으로 돌아가고 외움 표시 지움 (틀린 횟수는 유지)
-   */
+  /** 다음 회독. unknownOnly면 외운 카드는 건너뜀 */
   async nextRound(id: string, unknownOnly: boolean) {
     const d = await this.deck(id);
-    if (unknownOnly) {
-      const next = d.round + 1;
-      await this.prisma.$transaction([
-        this.prisma.vocabDeck.update({ where: { id }, data: { round: next } }),
-        this.prisma.vocabCard.updateMany({ where: { deckId: id, known: true }, data: { roundSeen: next } }),
-      ]);
-    } else {
-      await this.prisma.$transaction([
-        this.prisma.vocabDeck.update({ where: { id }, data: { round: 1 } }),
-        this.prisma.vocabCard.updateMany({ where: { deckId: id }, data: { roundSeen: 0, known: false } }),
-      ]);
-    }
+    const next = d.round + 1;
+    await this.prisma.$transaction([
+      this.prisma.vocabDeck.update({ where: { id }, data: { round: next } }),
+      ...(unknownOnly ? [this.prisma.vocabCard.updateMany({ where: { deckId: id, known: true }, data: { roundSeen: next } })] : []),
+    ]);
     return this.round(id);
   }
 

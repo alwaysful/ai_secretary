@@ -178,6 +178,11 @@ export class VocabController {
     return this.vocab.round(id, { shuffle: shuffle === '1' || shuffle === 'true' });
   }
 
+  @Get('decks/:id/again')
+  again(@Param('id', ParseUUIDPipe) id: string) {
+    return this.vocab.again(id);
+  }
+
   @Post('decks/:id/round/next')
   nextRound(@Param('id', ParseUUIDPipe) id: string, @Body() dto: NextRoundDto) {
     return this.vocab.nextRound(id, !!dto.unknownOnly);
