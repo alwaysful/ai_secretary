@@ -31,9 +31,10 @@ const PhonePage = lazy(() => import('../features/phone/PhonePage').then((m) => (
 /** 공부 집중: mediapipe 포함, 필요할 때만 로드 */
 const AdminPage = lazy(() => import('../features/admin/AdminPage').then((m) => ({ default: m.AdminPage })));
 const CompanionPage = lazy(() => import('../features/companion/CompanionPage').then((m) => ({ default: m.CompanionPage })));
+const VocabPage = lazy(() => import('../features/vocab/VocabPage').then((m) => ({ default: m.VocabPage })));
 const StudyPage = lazy(() => import('../features/study/pages/StudyView').then((m) => ({ default: m.StudyPage })));
 
-export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study' | 'phone' | 'info' | 'news' | 'landing' | 'models' | 'pc' | 'tools' | 'stats' | 'guide' | 'admin' | 'tts' | 'companion' | 'certs';
+export type PageId = 'lobby' | 'chat' | 'schedule' | 'mail' | 'settings' | 'briefing' | 'memory' | 'study' | 'phone' | 'info' | 'news' | 'landing' | 'models' | 'pc' | 'tools' | 'stats' | 'guide' | 'admin' | 'tts' | 'companion' | 'certs' | 'vocab';
 
 function Page(props: { page: PageId; go: (p: PageId) => void }) {
   const { page, go } = props;
@@ -44,7 +45,7 @@ function Page(props: { page: PageId; go: (p: PageId) => void }) {
     case 'memory':
       return <MemoryPage onBack={back} />;
     case 'settings':
-      return <SettingsPage onBack={back} onModels={() => go('models')} onAdmin={() => go('admin')} />;
+      return <SettingsPage onBack={back} onModels={() => go('models')} onAdmin={() => go('admin')} onVocab={() => go('vocab')} />;
     case 'models':
       return <ModelsPage onBack={back} onSettings={() => go('settings')} />;
     case 'briefing':
@@ -55,6 +56,12 @@ function Page(props: { page: PageId; go: (p: PageId) => void }) {
       return (
         <Suspense fallback={null}>
           <StudyPage onBack={back} />
+        </Suspense>
+      );
+    case 'vocab':
+      return (
+        <Suspense fallback={null}>
+          <VocabPage onBack={back} />
         </Suspense>
       );
     case 'phone':

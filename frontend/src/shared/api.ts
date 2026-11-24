@@ -455,7 +455,7 @@ export interface AdminOverview {
   server: { uptimeSec: number; node: string; platform: string; pid: number; rssMb: number; heapMb: number; loadAvg: number[]; freeMemMb: number; totalMemMb: number };
   db: 'ok' | 'down';
   model: { name: string; state: string; reachable: boolean; installed?: boolean; loaded?: boolean };
-  counts: Record<'conversations' | 'messages' | 'memories' | 'news' | 'study' | 'phone' | 'apiUsage', number> | null;
+  counts: Record<'conversations' | 'messages' | 'memories' | 'news' | 'study' | 'phone' | 'apiUsage' | 'vocab', number> | null;
   scrape: { id: string; name: string; enabled: boolean; lastRunAt: string | null; lastOkAt: string | null; lastError: string | null }[];
   apiUsage30d: { provider: string; calls: number; inputTokens: number; outputTokens: number }[];
   permissions: { pcControl: boolean; screenRead: boolean; mic: boolean; webcam: boolean };
@@ -539,7 +539,7 @@ export interface AdminDocs {
   guide: { title: string; lines: string[] }[];
   inProgress: { title: string; status: string; note: string }[];
 }
-export type AdminResetKind = 'conversations' | 'memories' | 'news' | 'study' | 'phone' | 'apiUsage';
+export type AdminResetKind = 'conversations' | 'memories' | 'news' | 'study' | 'phone' | 'apiUsage' | 'vocab';
 
 const adminH = (t: string) => ({ Authorization: `Bearer ${t}` });
 /** 관리자 세션 있으면 헤더 첨부 (persona 대화용) */

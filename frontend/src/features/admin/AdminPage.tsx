@@ -14,6 +14,7 @@ const RESET: { kind: AdminResetKind; label: string }[] = [
   { kind: 'study', label: '공부 기록' },
   { kind: 'phone', label: '폰 기록' },
   { kind: 'apiUsage', label: 'API 사용 기록' },
+  { kind: 'vocab', label: '단어장 전체' },
 ];
 
 const PERMS: { key: keyof AdminOverview['permissions']; label: string }[] = [
@@ -241,6 +242,7 @@ export function AdminPage(props: { onBack: () => void; onNavigate: (p: PageId) =
                     ['공부', ov.counts.study],
                     ['폰', ov.counts.phone],
                     ['API 호출', ov.counts.apiUsage],
+                    ['단어 카드', ov.counts.vocab ?? 0],
                   ] as const).map(([k, v]) => <Stat key={k} k={k} v={num(v)} />)}
               </div>
               <div className="adm-row">

@@ -22,6 +22,7 @@ const MAIN: Item[] = [
   { id: 'news', icon: '📰', label: '새 소식', hint: '공지·공모전 모음' },
   { id: 'certs', icon: '🎓', label: '자격증', hint: '분야별 검색·시험 일정' },
   { id: 'study', icon: '📚', label: '공부 집중', hint: '웹캠·화면 감시' },
+  { id: 'vocab', icon: '📇', label: '단어장', hint: 'Anki 복습·회독·퀴즈' },
   { id: 'phone', icon: '📱', label: '폰 감시', hint: 'Android 앱' },
   { id: 'pc', icon: '🖱️', label: 'PC 조작', hint: 'AI가 마우스·키보드' },
   { id: 'memory', icon: '🧠', label: '기억 관리', hint: '장기 기억' },

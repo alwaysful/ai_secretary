@@ -20,6 +20,7 @@
 | 📱 폰 감시 | Android 앱. 딴짓 앱 열면 알림 (UsageStats). QR 연결 + 설정 마법사 |
 | 🖱️ PC 조작 | AI가 화면 보고 마우스·키보드 조작 (PC만). 시작 전 확인 |
 | 🛠️ 도구 | STT(음성→글자), OCR(이미지→글자), 내 사이트 목록 |
+| 📇 단어장 | 단어장 JSON 업로드 → Anki식 간격 반복 복습·회독·4지선다 퀴즈·진도 통계. 양식·예시는 앱 안 「📄 단어장 파일 양식」 |
 | 📊 통계 | 공부 시간·위반, 채팅 사용량, 공지 수, API 사용량·예상 비용 |
 | 🧠 기억 | 취향·사실·프로젝트 저장 → 모든 대화에 반영 |
 | ⚙️ 설정 | 권한(화면 읽기·PC 조작·마이크·웹캠), 기능별 모델(로컬 / Gemini·Anthropic·OpenAI API), API 키, 시스템 프롬프트 |
@@ -276,7 +277,7 @@ DB, Ollama 없이 실행됨.
 ## 구조
 
 ```
-backend/    NestJS API (대화, 메일, 일정, 브리핑, 기억, 설정, 공부, 폰, 스크래핑, PC 조작, 도구, 통계, 모델 허브)
+backend/    NestJS API (대화, 메일, 일정, 브리핑, 기억, 설정, 공부, 폰, 스크래핑, PC 조작, 도구, 통계, 모델 허브, 단어장)
 frontend/   React 웹 + Android(Capacitor) 앱
 pc-agent/   Python: PC 조작(pyautogui), STT(faster-whisper)
 scripts/    dev 실행 래퍼, MediaPipe 모델 다운로드
