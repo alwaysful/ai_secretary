@@ -2,6 +2,7 @@ import { Injectable, Logger, UnauthorizedException, HttpException, HttpStatus } 
 import { ConfigService } from '@nestjs/config';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { EnvVars } from '../config/env';
+import { upsertEnv } from '../common/env-file';
 
 /** 기본 관리자 코드의 scrypt 해시. 평문은 코드에 없음. ADMIN_CODE(.env)가 있으면 그것 우선 */
 const DEFAULT_SALT = '54ebb211440991f108b8a56407d8c9cc';
@@ -14,8 +15,8 @@ const LOCK_MS = 60_000;
 @Injectable()
 export class AdminAuthService {
   private readonly log = new Logger(AdminAuthService.name);
-  private readonly salt: Buffer;
-  private readonly hash: Buffer;
+  private salt: Buffer;
+  private hash: Buffer;
   private readonly tokens = new Map<string, number>();
   private readonly fails = new Map<string, { n: number; until: number }>();
 
@@ -60,6 +61,18 @@ export class AdminAuthService {
       return false;
     }
     return true;
+  }
+
+  /** 관리자 코드 변경: 지금 코드 확인 → 메모리 즉시 반영 + backend/.env ADMIN_CODE 저장 */
+  changeCode(current: string, next: string): { ok: true } {
+    if (!timingSafeEqual(scryptSync(current, this.salt, 32), this.hash)) {
+      throw new UnauthorizedException({ code: 'BAD_CODE', message: '지금 코드 틀림' });
+    }
+    upsertEnv({ ADMIN_CODE: next });
+    this.salt = randomBytes(16);
+    this.hash = scryptSync(next, this.salt, 32);
+    this.log.warn('관리자 코드 변경됨');
+    return { ok: true };
   }
 
   logout(token: string | undefined): void {

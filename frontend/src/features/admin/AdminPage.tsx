@@ -4,6 +4,7 @@ import { currentToken, setAdminToken } from './session';
 import type { PageId } from '../../app/App';
 import { useAdminDocs } from './useAdminDocs';
 import { UpdateCard } from './UpdateCard';
+import { CodeCard } from './CodeCard';
 import './admin.css';
 
 const RESET: { kind: AdminResetKind; label: string }[] = [
@@ -133,7 +134,7 @@ export function AdminPage(props: { onBack: () => void; onNavigate: (p: PageId) =
         <button className="ghost" onClick={props.onBack}>
           ← Admin 로비
         </button>
-        <h1>서버 관리</h1>
+        <h1>고급설정</h1>
         <span style={{ flex: 1 }} />
         <button className="ghost" onClick={load}>
           ↻ 새로고침
@@ -308,6 +309,8 @@ export function AdminPage(props: { onBack: () => void; onNavigate: (p: PageId) =
                 </tbody>
               </table>
             </section>
+
+            <CodeCard guard={guard} />
 
             <section className="card adm-card">
               <h2>🛡️ 권한 강제 변경</h2>

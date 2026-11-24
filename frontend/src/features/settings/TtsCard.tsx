@@ -105,7 +105,7 @@ export function TtsCard(props: { initial: TtsSettings }) {
         <input type="checkbox" checked={t.autoRead} onChange={(e) => setT({ ...t, autoRead: e.target.checked })} />
         <span>
           AI 채팅 답변 자동 읽기
-          <small className="muted">끄면 답변마다 🔊 버튼으로 읽기.{isAdmin() ? ' AI 여자친구 화면은 따로 켜고 끔.' : ''}</small>
+          <small className="muted">끄면 답변마다 🔊 버튼으로 읽기.{isAdmin() ? ' AI 친구 화면은 따로 켜고 끔.' : ''}</small>
         </span>
       </label>
       <div className="field">

@@ -382,11 +382,11 @@ export function SettingsPage(props: { onBack: () => void; onModels: () => void; 
             {admin && (
               <section className="card">
                 <h2>🔐 관리자</h2>
-                <h3>💕 AI 여자친구 성격</h3>
+                <h3>💕 AI 친구 성격</h3>
                 <CompanionPersona />
                 <div className="chips">
                   <button className="ghost" onClick={props.onAdmin}>
-                    🖥️ 서버 관리하기 →
+                    🛠️ 고급설정 →
                   </button>
                 </div>
               </section>

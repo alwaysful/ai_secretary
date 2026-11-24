@@ -682,6 +682,10 @@ export const api = {
   unreadCount: () => req<{ count: number }>('/mail/unread-count'),
   modelHub: () => req<ModelHub>('/model-hub'),
   setupJobs: () => req<SetupJob[]>('/setup/jobs'),
+  setupOutlook: (clientId: string) =>
+    req<{ ok: boolean }>('/setup/outlook', { method: 'POST', headers: { 'X-Aura-Setup': '1' }, body: JSON.stringify({ clientId }) }),
+  adminChangeCode: (t: string, current: string, next: string) =>
+    req<{ ok: boolean }>('/admin/code', { method: 'PUT', headers: adminH(t), body: JSON.stringify({ current, next }) }),
   setupRun: (task: SetupTask) => req<SetupJob>(`/setup/run/${task}`, { method: 'POST', headers: { 'X-Aura-Setup': '1' } }),
   pullJobs: () => req<PullJob[]>('/model-hub/jobs'),
   pullModel: (name: string) => req<PullJob>('/model-hub/pull', { method: 'POST', body: JSON.stringify({ name }) }),

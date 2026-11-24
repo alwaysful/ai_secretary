@@ -81,6 +81,8 @@ export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) =
   const [err, setErr] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState<Record<number, boolean>>({});
   const [login, setLogin] = useState<DeviceLogin | null>(null);
+  const [clientId, setClientId] = useState('');
+  const [restarting, setRestarting] = useState(false);
 
   const load = useCallback(() => {
     void Promise.all([
@@ -267,18 +269,31 @@ export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) =
           run={
             mail?.configured
               ? { label: '로그인 시작', busy: busy[4] || mail.pending, onRun: act(4, () => api.mailStart().then(setLogin)) }
-              : undefined
+              : mail
+                ? {
+                    label: '설정 저장 + 재시작',
+                    busy: busy[4] || restarting,
+                    disabled: !/^[0-9a-f-]{36}$/i.test(clientId.trim()),
+                    onRun: act(4, () => api.setupOutlook(clientId.trim()).then(() => setRestarting(true))),
+                  }
+                : undefined
           }
         >
           {mail?.connected ? (
             <p>연결됨{mail.email ? <code>: ${mail.email}</code> : ''}.</p>
           ) : mail && !mail.configured ? (
             <>
-              <p>먼저 Azure 앱 등록이 필요해요. README 「Outlook 연동」을 따라 <code>backend/.env</code>에 아래 두 줄을 넣고 서버를 다시 켜세요.</p>
-              <Cmd text="MS_CLIENT_ID=앱_클라이언트_ID" />
-              <Cmd text="TOKEN_ENC_KEY=64자리_키" />
-              <p className="muted">키 만들기:</p>
-              <Cmd text={`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`} />
+              <p>
+                먼저 Azure 앱 등록 (README 「Outlook 연동」). 받은 <b>애플리케이션(클라이언트) ID</b>를 넣고 「▶ 설정 저장 + 재시작」. 암호화 키는 자동 생성.
+              </p>
+              <input
+                className="rename guide-input no-print"
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                spellCheck={false}
+              />
+              {restarting && <p className="muted">⏳ 저장됨. AURA 재시작 중 (새 창). 30초쯤 뒤 이 화면 새로고침 → 「▶ 로그인 시작」.</p>}
             </>
           ) : (
             <p>「▶ 로그인 시작」 → 아래 주소 접속 → 코드 입력. 끝나면 자동으로 ✅.</p>
@@ -305,9 +320,9 @@ export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) =
           n={5}
           title="Python 기능 (음성 → 글자, PC 조작)"
           state={state(sttOk || pcOk, false)}
-          run={{ label: '라이브러리 설치', busy: busy[5] || jobBusy('pip'), disabled: !h, onRun: runTask(5, 'pip') }}
+          run={{ label: 'Python·라이브러리 설치', busy: busy[5] || jobBusy('pip'), disabled: !h, onRun: runTask(5, 'pip') }}
         >
-          <p>python.org에서 Python 3.10 이상 설치 (설치 화면에서 「Add to PATH」 체크). 그다음 AURA 폴더 터미널에서:</p>
+          <p>「▶」 한 번이면 끝: Python 없으면 winget으로 Python 3.12 설치 → 음성·PC 조작·TTS 라이브러리 설치. 직접 하려면 AURA 폴더 터미널에서:</p>
           <Cmd text="python -m pip install -r pc-agent\requirements-stt.txt" />
           <Cmd text="python -m pip install -r pc-agent\requirements.txt" />
           <ul className="info-list">
@@ -320,7 +335,7 @@ export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) =
               <span className="muted">(비전 모델 <code>qwen2.5vl:7b</code> 필요)</span>
             </li>
           </ul>
-          <p className="muted">「▶ 라이브러리 설치」: 위 두 명령을 대신 실행해요 (Python은 먼저 설치돼 있어야 함, 수 분 걸림). 설치 후 AURA를 다시 켜세요.</p>
+          <p className="muted">수 분 걸림. winget 없는 PC면 python.org에서 Python 설치(「Add to PATH」 체크) 후 다시 「▶」. 끝나면 AURA 다시 켜기.</p>
           <JobLog job={job('pip')} />
           <Err n={5} />
         </Step>
@@ -371,7 +386,7 @@ export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) =
             ))}
             <div className="chips no-print">
               <button className="ghost" onClick={go('admin')}>
-                🖥️ 서버 관리하기
+                🛠️ 고급설정
               </button>
             </div>
           </>

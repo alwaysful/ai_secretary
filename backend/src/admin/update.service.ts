@@ -107,26 +107,35 @@ export class UpdateService {
    * Windows: scripts/restart-aura.bat (5초 대기 후 새 창). 그 외: npm start 백그라운드.
    */
   restart(stop: () => void): { ok: true; platform: string } {
-    const root = repoRoot();
-    // 기존 start-aura.bat 창이 pause 없이 닫히도록 표시
-    writeFileSync(resolve(root, '.aura-restart'), String(Date.now()));
-    if (WIN) {
-      // start 로 띄워야 taskkill /T 트리에서 빠짐
-      const c = spawn('cmd.exe', ['/c', 'start', '""', '/min', 'cmd', '/c', 'scripts\\restart-aura.bat'], {
-        cwd: root,
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true,
-        windowsVerbatimArguments: true,
-      });
-      c.unref();
-    } else {
-      const out = openSync(resolve(root, 'aura-restart.log'), 'a');
-      const c = spawn('sh', ['-c', 'sleep 5; rm -f .aura-restart; npm start'], { cwd: root, detached: true, stdio: ['ignore', out, out] });
-      c.unref();
-    }
-    this.log.warn('관리자 요청: 재시작');
-    setTimeout(stop, 1200);
-    return { ok: true, platform: process.platform };
+    return restartAura(this.log, stop);
   }
+
+}
+
+/**
+ * 재시작: 새 창에서 start-aura 다시 실행 예약 → 현재 서버 트리 종료.
+ * Windows: scripts/restart-aura.bat (5초 대기 후 새 창). 그 외: npm start 백그라운드.
+ */
+export function restartAura(log: Logger, stop: () => void): { ok: true; platform: string } {
+  const root = repoRoot();
+  // 기존 start-aura.bat 창이 pause 없이 닫히도록 표시
+  writeFileSync(resolve(root, '.aura-restart'), String(Date.now()));
+  if (WIN) {
+    // start 로 띄워야 taskkill /T 트리에서 빠짐
+    const c = spawn('cmd.exe', ['/c', 'start', '""', '/min', 'cmd', '/c', 'scripts\\restart-aura.bat'], {
+      cwd: root,
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+      windowsVerbatimArguments: true,
+    });
+    c.unref();
+  } else {
+    const out = openSync(resolve(root, 'aura-restart.log'), 'a');
+    const c = spawn('sh', ['-c', 'sleep 5; rm -f .aura-restart; npm start'], { cwd: root, detached: true, stdio: ['ignore', out, out] });
+    c.unref();
+  }
+  log.warn('재시작 요청');
+  setTimeout(stop, 1200);
+  return { ok: true, platform: process.platform };
 }
