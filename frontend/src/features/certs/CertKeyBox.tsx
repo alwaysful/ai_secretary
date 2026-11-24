@@ -38,7 +38,7 @@ export function CertKeyBox(props: { onSynced?: () => void }) {
         <a href="https://www.data.go.kr/tcs/dss/selectDataSetList.do?keyword=%EA%B5%AD%EA%B0%80%EC%9E%90%EA%B2%A9%20%EC%8B%9C%ED%97%98%EC%9D%BC%EC%A0%95" target="_blank" rel="noreferrer">
           한국산업인력공단_국가자격 시험일정 조회 ↗
         </a>{' '}
-        활용신청 → 일반 인증키 붙여넣기. Q-net 회차 일정 하루 1번 수집. 자격증 목록은 DB에 저장해 두고, 새 종목만 주 1번 확인(같은 키로 「국가자격 종목 목록 정보」도 활용신청).
+        활용신청 → 일반 인증키 붙여넣기. Q-net 회차 일정 하루 1번 수집. 자격증 목록은 DB에 저장해 두고, 새 종목만 주 1번 확인(같은 키로 「국가자격 종목 목록 정보」·「공인민간자격등록현황」도 활용신청, 국가공인 민간자격 전체 자동 추가).
       </p>
       <div className="cert-key-row">
         <input
@@ -70,7 +70,7 @@ export function CertKeyBox(props: { onSynced?: () => void }) {
       )}
       {cfg?.lastCatalogAt && (
         <small className="muted">
-          새 자격증 확인 {when.format(new Date(cfg.lastCatalogAt))} · {cfg.lastCatalogError ? '실패' : `${cfg.lastCatalogNew}개 추가`} (주 1회 자동)
+          새 자격증 확인 {when.format(new Date(cfg.lastCatalogAt))} · {`${cfg.lastCatalogNew}개 추가${cfg.lastCatalogError ? ' · 일부 실패' : ''}`} (주 1회 자동)
         </small>
       )}
       {cfg && hasKey && (

@@ -508,7 +508,7 @@ export function fieldOfQnet(obligfld: string): string {
   const f = obligfld.replace(/\s/g, '');
   const map: [RegExp, string][] = [
     [/정보통신/, '정보통신/IT'],
-    [/전기|전자/, '전기/전자'],
+    [/전기|전자|반도체/, '전기/전자'],
     [/기계|재료/, '기계/자동차'],
     [/건설/, '건설/건축'],
     [/안전|환경|에너지/, '안전/환경/에너지'],
@@ -529,3 +529,75 @@ export function seriesOfGrade(grade: string): string {
 }
 
 export const defaultsOf = defaults;
+
+/** 국가기술 등급 (이 외 등급값은 Q-net 목록에서 종목명이 잘못 들어온 것) */
+export const TECH_GRADES = ['기술사', '기능장', '기사', '산업기사', '기능사'] as const;
+export const isTechGrade = (g: string | null | undefined): boolean => !!g && (TECH_GRADES as readonly string[]).includes(g.trim());
+
+/** 이름 키워드로 분야 (Q-net 직무분야가 '기타'로 오는 국가전문 보정). 못 찾으면 null */
+export function fieldOfName(name: string): string | null {
+  const n = name.replace(/\s/g, '');
+  const map: [RegExp, string][] = [
+    [/관광|호텔|여행|조리|미용/, '조리/미용/관광'],
+    [/경영지도|기술지도|가맹|품질관리사|물류/, '경영/사무/OA'],
+    [/행정사|경비|노무|변리|법무|감정평가|공인중개/, '법률/행정'],
+    [/청소년|국가유산|문화재|학예|평생교육|상담|한자|국어/, '교육/상담/인문'],
+    [/산업안전|산업보건|정수시설|소방|위험물|원자|방사/, '안전/환경/에너지'],
+    [/손해평가|농산물|수산물|산림|나무|조경|경매사/, '농림/조경'],
+    [/회계|세무/, '회계/세무'],
+    [/보험|금융|투자|자산|신용|부동산|주택/, '금융/부동산'],
+    [/정보|데이터|네트워크|소프트웨어|컴퓨터|보안|클라우드|인공지능|AI/i, '정보통신/IT'],
+    [/의료|간호|보건|복지|요양|재활|위생|약사|의약/, '보건/의료/복지'],
+    [/무역|사무|비서|경영|유통|마케팅/, '경영/사무/OA'],
+    [/디자인|영상|방송|사진|무대|색채/, '디자인/미디어'],
+    [/전기|전자|반도체/, '전기/전자'],
+    [/건축|토목|건설|측량/, '건설/건축'],
+    [/자동차|기계|용접/, '기계/자동차'],
+    [/식품|화학|바이오/, '화학/식품/바이오'],
+  ];
+  return map.find(([re]) => re.test(n))?.[1] ?? null;
+}
+
+/** 국가공인 민간자격 분야: 이름 키워드 → 소관부처 순 */
+export function fieldOfPrivate(name: string, ministry: string): string {
+  const m = ministry.replace(/\s/g, '');
+  const byName = fieldOfName(name);
+  if (byName) return byName;
+  if (/금융위/.test(m)) return '금융/부동산';
+  if (/과학기술정보통신|과기정통/.test(m)) return '정보통신/IT';
+  if (/식품의약품|보건복지/.test(m)) return '보건/의료/복지';
+  if (/교육부/.test(m)) return '교육/상담/인문';
+  if (/국토교통/.test(m)) return '건설/건축';
+  if (/농림|산림|해양수산/.test(m)) return '농림/조경';
+  if (/문화체육/.test(m)) return '디자인/미디어';
+  if (/환경|고용노동|소방|행정안전/.test(m)) return '안전/환경/에너지';
+  return '기타';
+}
+
+/**
+ * 국가전문 변형 이름 → 기본 이름과 변형 표시.
+ * '관광통역안내사(영어)' → ['관광통역안내사', '영어'], '1급 청소년상담사' → ['청소년상담사', '1급']
+ */
+export function baseOfVariant(name: string): { base: string; tag: string | null } {
+  let base = name.trim();
+  const tags: string[] = [];
+  base = base.replace(/\s*[(（]([^)）]*)[)）]\s*/g, (_, t: string) => (tags.push(t.trim()), ''));
+  base = base.replace(/^([0-9])급\s*/, (_, g: string) => (tags.push(`${g}급`), ''));
+  base = base.replace(/\s*([0-9])급$/, (_, g: string) => (tags.push(`${g}급`), ''));
+  base = base.trim();
+  return { base: base || name.trim(), tag: tags.filter(Boolean).join(' ') || null };
+}
+
+/** 변형 표시 묶기: ['1급','2급','3급'] → '1~3급', 그 외 '·'로 */
+export function joinTags(tags: string[]): string | null {
+  const u = [...new Set(tags.filter(Boolean))];
+  if (!u.length) return null;
+  const lv = u.map((t) => /^([0-9])급$/.exec(t)?.[1]).filter(Boolean).map(Number);
+  if (lv.length === u.length && lv.length > 1) {
+    lv.sort((a, b) => a - b);
+    const contiguous = lv.every((v, i) => i === 0 || v === lv[i - 1] + 1);
+    return contiguous ? `${lv[0]}~${lv[lv.length - 1]}급` : lv.map((v) => `${v}급`).join('·');
+  }
+  const s = u.join('·');
+  return s.length > 60 ? `${u.slice(0, 5).join('·')} 외 ${u.length - 5}` : s;
+}
