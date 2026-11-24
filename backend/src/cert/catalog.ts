@@ -641,6 +641,19 @@ export const PUBLIC_ALIASES: { re: RegExp; ids: Record<string, string> }[] = [
   { re: /^전산세무회계/, ids: { 'ac-ca1': '전산회계1급', 'pv-ca2': '전산회계2급', 'pv-ct1': '전산세무1급', 'ac-ct2': '전산세무2급' } },
   { re: /^한자능력급수/, ids: { 'ed-hanja': '*' } },
   { re: /^외환전문역/, ids: { 'pv-fx1': '*', 'pv-fx2': '*' } },
-  { re: /^AT$/i, ids: { 'pv-tat1': 'TAT1급', 'pv-tat2': 'TAT2급', 'pv-fat1': 'FAT1급', 'pv-fat2': 'FAT2급' } },
+  { re: /^AT(\s*[(（]|$)/i, ids: { 'pv-tat1': 'TAT1급', 'pv-tat2': 'TAT2급', 'pv-fat1': 'FAT1급', 'pv-fat2': 'FAT2급' } },
 ];
 export const aliasOf = (apiName: string) => PUBLIC_ALIASES.find((a) => a.re.test(apiName.trim()));
+
+/** 별칭 등급 이름 찾기: 'SQL 개발자'·'개발자' 모두 '개발자'로. '전문가'가 '준전문가'에 걸리지 않게 */
+export function findGrade(grades: string[], label: string): string | null {
+  const sq = (v: string) => v.replace(/[^0-9A-Za-z가-힣]/g, '').toLowerCase();
+  const L = sq(label);
+  const ok = (g: string) => {
+    const n = sq(g);
+    if (n === L) return true;
+    const i = n.indexOf(L);
+    return i >= 0 && !(i > 0 && n[i - 1] === '준' && !L.startsWith('준'));
+  };
+  return grades.find((g) => sq(g) === L) ?? grades.find(ok) ?? null;
+}
