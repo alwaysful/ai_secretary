@@ -1,11 +1,11 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { CertExam, Certificate, Prisma } from '@prisma/client';
 import { EnvVars } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
-import { CATALOG, CERT_FIELDS, CERT_KINDS, defaultsOf, fieldOfQnet, SERIES_LABEL, seriesOfGrade } from './catalog';
-import { norm, parseJmList, parseQnet, QNET_PAGE, QnetGb, qnetJmUrl, QnetPhase, qnetUrl, seriesOf } from './qnet';
+import { baseOfVariant, CATALOG, CERT_FIELDS, CERT_KINDS, defaultsOf, fieldOfName, fieldOfPrivate, fieldOfQnet, isTechGrade, joinTags, SERIES_LABEL, seriesOfGrade } from './catalog';
+import { KPrivate, kprivateUrl, norm, parseJmList, parseKPrivate, parseQnet, QNET_PAGE, QnetGb, QnetJm, qnetJmUrl, QnetPhase, qnetUrl, seriesOf } from './qnet';
 
 const DAY = 86_400_000;
 const CATALOG_IDS = new Set(CATALOG.map((c) => c.id));
@@ -23,6 +23,20 @@ const kstDay = (d = new Date()) => new Date(d.getTime() + 9 * 3_600_000).toISOSt
 const CATALOG_EVERY_MS = 7 * DAY;
 /** 새로 찾은 자격증 '새' 표시 기간 */
 const NEW_FOR_MS = 30 * DAY;
+const QNET_HOME = 'https://www.q-net.or.kr';
+const HRD = '한국산업인력공단';
+/** 민간자격정보서비스 (공인민간 상세 확인처) */
+const PQI = 'https://www.pqi.or.kr';
+
+/** 이름 비교 키: 전체, 괄호 뺀 기본 이름, 괄호 안 이름(3자 이상). 'TESAT' ↔ '경제이해력검증시험(TESAT)' 중복 방지 */
+function nameKeys(name: string): string[] {
+  const { base } = baseOfVariant(name);
+  const keys = [norm(name), norm(base)];
+  const inner = /[(（]([^)）]+)[)）]/.exec(name)?.[1];
+  if (inner && norm(inner).length >= 3) keys.push(norm(inner));
+  return [...new Set(keys.filter(Boolean))];
+}
+const errOf = (e: unknown, what: string) => ((e as Error).name === 'TimeoutError' ? `${what} 응답 시간 초과` : (e as Error).message);
 
 export interface ExamView {
   id: string;
@@ -135,6 +149,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit(): Promise<void> {
     try {
       await this.seed();
+      await this.tidyDiscovered();
     } catch (e) {
       this.log.warn(`자격증 기본 목록 준비 실패: ${(e as Error).message}`);
     }
@@ -461,57 +476,188 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 새 자격증 확인: Q-net 국가자격 종목 목록과 DB 비교 → 없는 종목만 추가.
-   * 목록 전체는 DB에 저장해 두고 이 확인만 주 1회 (또는 버튼).
+   * 새 자격증 확인 (주 1회 또는 버튼). 목록 전체는 DB에 두고 없는 것만 추가.
+   * 1) Q-net 국가자격 종목 목록 (50개씩 페이지) 2) 공인민간자격등록현황 (1회)
    */
   async discover(): Promise<CertConfigView> {
     const last = await this.cfg();
     if (last.lastCatalogAt && !last.lastCatalogError && Date.now() - last.lastCatalogAt.getTime() < MANUAL_COOLDOWN_MS) return this.getConfig();
     const key = await this.key();
     if (!key) throw new BadRequestException('Q-net API 키 없음. 공공데이터포털에서 활용신청 후 입력');
-    await this.cfg();
+    const errors: string[] = [];
+    let list: QnetJm[] = [];
     try {
       const seenJm = new Set<string>();
-      const list = (await this.pages((p) => qnetJmUrl(key, p), parseJmList)).filter((j) => !seenJm.has(j.jmCd) && !!seenJm.add(j.jmCd));
+      list = (await this.pages((p) => qnetJmUrl(key, p), parseJmList)).filter((j) => !seenJm.has(j.jmCd) && !!seenJm.add(j.jmCd));
       if (!list.length) throw new Error('Q-net 종목 목록이 비어 있음 (종목 목록 API 활용신청 확인)');
-      const have = await this.prisma.certificate.findMany({ select: { id: true, name: true } });
-      const ids = new Set(have.map((c) => c.id));
-      const names = new Set(have.map((c) => norm(c.name)));
-      const max = await this.prisma.certificate.aggregate({ _max: { position: true } });
-      let pos = (max._max.position ?? 0) + 1;
-      const now = new Date();
-      const fresh = list
-        .filter((j) => !ids.has(`qnet-${j.jmCd}`) && !names.has(norm(j.name)))
-        .map((j) => {
-          const grade = j.grade || null;
-          const series = grade ? seriesOfGrade(grade) : null;
-          const d = defaultsOf('국가기술', grade, series);
-          names.add(norm(j.name));
-          return {
-            id: `qnet-${j.jmCd}`,
-            name: j.name,
-            field: fieldOfQnet(j.obligfld),
-            kind: /전문/.test(j.qualgb) ? '국가전문' : '국가기술',
-            grade,
-            org: '한국산업인력공단',
-            url: 'https://www.q-net.or.kr',
-            series,
-            prep: d.prep,
-            fee: d.fee,
-            validity: '평생 (만료 없음)',
-            position: pos++,
-            discoveredAt: now,
-          };
-        });
-      if (fresh.length) await this.prisma.certificate.createMany({ data: fresh, skipDuplicates: true });
-      await this.prisma.certConfig.update({ where: { id: 1 }, data: { lastCatalogAt: now, lastCatalogNew: fresh.length, lastCatalogError: null } });
-      this.log.log(`새 자격증 ${fresh.length}개 추가 (Q-net 종목 ${list.length}개 확인)`);
     } catch (e) {
-      const msg = (e as Error).name === 'TimeoutError' ? 'Q-net 종목 목록 응답 시간 초과' : (e as Error).message;
-      await this.prisma.certConfig.update({ where: { id: 1 }, data: { lastCatalogAt: new Date(), lastCatalogError: msg } });
-      throw new BadRequestException(msg);
+      errors.push(errOf(e, 'Q-net 종목 목록'));
     }
+    let priv: KPrivate[] = [];
+    try {
+      priv = parseKPrivate(await this.fetchText(kprivateUrl(key))).items;
+    } catch (e) {
+      errors.push(`공인민간: ${errOf(e, '공인민간자격 목록')} (「공인민간자격등록현황」 활용신청 확인)`);
+    }
+    const now = new Date();
+    const fresh = await this.freshRows(list, priv, now);
+    if (fresh.length) await this.prisma.certificate.createMany({ data: fresh, skipDuplicates: true });
+    const error = errors.join(' / ') || null;
+    await this.prisma.certConfig.update({ where: { id: 1 }, data: { lastCatalogAt: now, lastCatalogNew: fresh.length, lastCatalogError: error } });
+    this.log.log(`새 자격증 ${fresh.length}개 추가 (Q-net 종목 ${list.length}개, 공인민간 ${priv.length}개 확인)`);
+    if (!list.length && !priv.length && error) throw new BadRequestException(error);
     return this.getConfig();
+  }
+
+  /** 받은 목록 중 DB에 없는 것만 행으로 */
+  private async freshRows(list: QnetJm[], priv: KPrivate[], now: Date): Promise<Prisma.CertificateCreateManyInput[]> {
+    const have = await this.prisma.certificate.findMany({ select: { id: true, name: true } });
+    const ids = new Set(have.map((c) => c.id));
+    const names = new Set(have.flatMap((c) => nameKeys(c.name)));
+    const max = await this.prisma.certificate.aggregate({ _max: { position: true } });
+    let pos = (max._max.position ?? 0) + 1;
+    const out: Prisma.CertificateCreateManyInput[] = [];
+    // 국가전문은 과목·급수별로 쪼개져 와서 기본 이름 하나로 묶음
+    const pro = new Map<string, { id: string; base: string; tags: string[]; obligfld: string }>();
+    for (const j of list) {
+      if (ids.has(`qnet-${j.jmCd}`) || names.has(norm(j.name))) continue;
+      if (/기능사보$/.test(j.name.trim())) continue; // 폐지 등급
+      const grade = j.grade.trim();
+      if (!isTechGrade(grade) || /전문/.test(j.qualgb)) {
+        const { base, tag } = baseOfVariant(j.name);
+        const k = norm(base);
+        if (names.has(k)) continue;
+        const g = pro.get(k) ?? { id: `qnet-${j.jmCd}`, base, tags: [], obligfld: j.obligfld };
+        if (tag) g.tags.push(tag);
+        pro.set(k, g);
+        continue;
+      }
+      names.add(norm(j.name));
+      const series = seriesOfGrade(grade);
+      const d = defaultsOf('국가기술', grade, series);
+      const f = fieldOfQnet(j.obligfld);
+      out.push({
+        id: `qnet-${j.jmCd}`,
+        name: j.name,
+        field: f === '기타' ? (fieldOfName(j.name) ?? f) : f,
+        kind: '국가기술',
+        grade,
+        org: HRD,
+        url: QNET_HOME,
+        series,
+        prep: d.prep,
+        fee: d.fee,
+        validity: '평생 (만료 없음)',
+        position: pos++,
+        discoveredAt: now,
+      });
+    }
+    for (const [k, g] of pro) {
+      if (ids.has(g.id)) continue;
+      names.add(k);
+      out.push({
+        id: g.id,
+        name: g.base,
+        field: fieldOfName(g.base) ?? fieldOfQnet(g.obligfld),
+        kind: '국가전문',
+        grade: joinTags(g.tags),
+        org: HRD,
+        url: QNET_HOME,
+        series: null,
+        validity: '평생 (만료 없음)',
+        position: pos++,
+        discoveredAt: now,
+      });
+    }
+    for (const p of priv) {
+      if (nameKeys(p.name).some((k) => names.has(k))) continue;
+      const id = `kp-${createHash('sha1').update(norm(p.name)).digest('hex').slice(0, 10)}`;
+      if (ids.has(id)) continue;
+      nameKeys(p.name).forEach((k) => names.add(k));
+      const d = defaultsOf('국가공인민간', null, null);
+      const until = p.until ? ` · 공인 ~${p.until.slice(0, 10)}` : '';
+      out.push({
+        id,
+        name: p.name,
+        field: fieldOfPrivate(p.name, p.ministry),
+        kind: '국가공인민간',
+        grade: joinTags(p.grades),
+        org: p.org || '한국직업능력연구원',
+        url: PQI,
+        summary: `국가공인 (${p.ministry || '소관부처 미상'})${until}`,
+        series: null,
+        prep: d.prep,
+        fee: d.fee,
+        validity: '기관별 상이 (보수교육·갱신 확인)',
+        position: pos++,
+        discoveredAt: now,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * 예전 새 자격증 확인으로 들어온 Q-net 행 정리 (시작 때 1번, 여러 번 돌아도 같은 결과).
+   * 국가전문: 종목명이 등급 칸에 들어가 기사 일정에 묶이던 것 고침 + 과목·급수 변형은 하나로.
+   * 폐지된 기능사보 삭제. 별표·직접 넣은 일정 있는 건 지우지 않음.
+   */
+  private async tidyDiscovered(): Promise<void> {
+    const rows = await this.prisma.certificate.findMany({
+      where: { id: { startsWith: 'qnet-' }, discoveredAt: { not: null } },
+      include: { exams: { where: { source: 'manual' }, select: { id: true } } },
+      orderBy: { position: 'asc' },
+    });
+    if (!rows.length) return;
+    const rowIds = new Set(rows.map((r) => r.id));
+    const others = await this.prisma.certificate.findMany({ where: { id: { notIn: [...rowIds] } }, select: { name: true } });
+    const otherNames = new Set(others.flatMap((c) => nameKeys(c.name)));
+    const keep = (r: (typeof rows)[number]) => r.starred || r.exams.length > 0;
+    const del: string[] = [];
+    const ops: Prisma.PrismaPromise<unknown>[] = [];
+    const groups = new Map<string, { base: string; tags: string[]; rows: typeof rows }>();
+    for (const r of rows) {
+      if (/기능사보$/.test(r.name.trim())) {
+        if (!keep(r)) del.push(r.id);
+        continue;
+      }
+      if (r.kind === '국가기술' && isTechGrade(r.grade)) {
+        if (r.field === '기타') {
+          const f = fieldOfName(r.name);
+          if (f) ops.push(this.prisma.certificate.update({ where: { id: r.id }, data: { field: f } }));
+        }
+        continue;
+      }
+      const { base, tag } = baseOfVariant(r.name);
+      const k = norm(base);
+      const g = groups.get(k) ?? { base, tags: [], rows: [] };
+      // 이미 묶인 행이면 등급 칸에 변형 표시가 들어 있음
+      const t = tag ?? (r.grade && !isTechGrade(r.grade) && norm(r.grade) !== norm(r.name) ? r.grade : null);
+      if (t) g.tags.push(t);
+      g.rows.push(r);
+      groups.set(k, g);
+    }
+    for (const [k, g] of groups) {
+      const fix = { kind: '국가전문', series: null, field: fieldOfName(g.base) ?? g.rows[0].field };
+      // 같은 이름이 기본 목록 등에 이미 있으면 변형은 지움
+      const main = otherNames.has(k) ? null : (g.rows.find(keep) ?? g.rows[0]);
+      for (const r of g.rows) {
+        if (r === main) {
+          ops.push(
+            this.prisma.certificate.update({
+              where: { id: r.id },
+              data: { ...fix, name: g.base, grade: joinTags(g.tags), prep: null, fee: null },
+            }),
+          );
+        } else if (!keep(r)) {
+          del.push(r.id);
+        } else {
+          ops.push(this.prisma.certificate.update({ where: { id: r.id }, data: { ...fix, grade: baseOfVariant(r.name).tag, prep: null, fee: null } }));
+        }
+      }
+    }
+    if (del.length) ops.push(this.prisma.certificate.deleteMany({ where: { id: { in: del } } }));
+    if (ops.length) await this.prisma.$transaction(ops);
+    if (del.length) this.log.log(`새 자격증 정리: 변형·폐지 ${del.length}개 삭제`);
   }
 
   private async doSync(): Promise<number> {

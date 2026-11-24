@@ -155,3 +155,53 @@ export function qnetUrl(key: string, year: number, gb: QnetGb, page = 1): string
   const k = key.includes('%') ? key : encodeURIComponent(key);
   return `${QNET_SCHEDULE_URL}?serviceKey=${k}&numOfRows=${QNET_PAGE}&pageNo=${page}&dataFormat=json&implYy=${year}&qualgbCd=${gb}`;
 }
+
+/** 공공데이터포털(odcloud): 한국직업능력연구원 공인민간자격등록현황 (약 100줄 → 1회 호출) */
+export const KPRIVATE_URL = 'https://api.odcloud.kr/api/15069557/v1/uddi:dd42dfb1-fe74-4303-a2e2-c3411586bb4d';
+export const KPRIVATE_PAGE = 500;
+
+export function kprivateUrl(key: string, page = 1): string {
+  const k = key.includes('%') ? key : encodeURIComponent(key);
+  return `${KPRIVATE_URL}?page=${page}&perPage=${KPRIVATE_PAGE}&returnType=JSON&serviceKey=${k}`;
+}
+
+/** 공인민간 1종목 (등급별 줄을 묶은 것) */
+export interface KPrivate {
+  name: string;
+  grades: string[];
+  org: string;
+  ministry: string;
+  /** 공인 유효기간 만료 (YYYY-MM-DD 등 원문) */
+  until: string | null;
+}
+
+const blank = (v: unknown) => {
+  const s = String(v ?? '').trim();
+  return !s || /^(미입력|없음|-|null)$/i.test(s) ? '' : s;
+};
+
+/** odcloud 응답 {totalCount, data[]} → 종목별로 묶음. 오류 응답이면 throw */
+export function parseKPrivate(text: string): { items: KPrivate[]; total: number; rows: number } {
+  let j: { data?: unknown; totalCount?: number; code?: number; msg?: string };
+  try {
+    j = JSON.parse(text.trim());
+  } catch {
+    throw new Error(`공인민간자격 API 응답 해석 실패: ${text.trim().slice(0, 120)}`);
+  }
+  if (!Array.isArray(j.data)) throw new Error(`공인민간자격 API 오류: ${j.msg ?? j.code ?? '데이터 없음'}`);
+  const by = new Map<string, KPrivate>();
+  for (const o of j.data as Record<string, unknown>[]) {
+    const name = blank(o['자격종목'] ?? o['자격명']);
+    if (!name) continue;
+    const k = norm(name);
+    const cur = by.get(k) ?? { name, grades: [], org: '', ministry: '', until: null };
+    const g = blank(o['등급'] ?? o['등급명']);
+    if (g && !cur.grades.includes(g)) cur.grades.push(g);
+    cur.org ||= blank(o['자격관리자'] ?? o['자격관리기관']);
+    cur.ministry ||= blank(o['소관 부처'] ?? o['소관부처'] ?? o['주무부처']);
+    const until = blank(o['공인유효기간(만료)']);
+    if (until && (!cur.until || until > cur.until)) cur.until = until;
+    by.set(k, cur);
+  }
+  return { items: [...by.values()], total: Number(j.totalCount ?? 0), rows: (j.data as unknown[]).length };
+}
