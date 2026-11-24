@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, TtsEngine, TtsOptions, TtsSettings } from '../../shared/api';
 import { EmotionPicker } from '../../shared/TtsControls';
 import { browserTtsSupported, ENGINE_LABEL, setTtsSettings, speak, useBrowserVoices, useSpeaking } from '../../shared/tts';
+import { isAdmin } from '../../shared/adminToken';
 
 const ENGINES: TtsEngine[] = ['browser', 'edge', 'openai', 'gemini'];
 const SAMPLE = '안녕하세요. 저는 AURA예요. 오늘 하루도 같이 힘내 봐요.';
@@ -104,7 +105,7 @@ export function TtsCard(props: { initial: TtsSettings }) {
         <input type="checkbox" checked={t.autoRead} onChange={(e) => setT({ ...t, autoRead: e.target.checked })} />
         <span>
           AI 채팅 답변 자동 읽기
-          <small className="muted">끄면 답변마다 🔊 버튼으로 읽기. AI 여자친구 화면은 따로 켜고 끔.</small>
+          <small className="muted">끄면 답변마다 🔊 버튼으로 읽기.{isAdmin() ? ' AI 여자친구 화면은 따로 켜고 끔.' : ''}</small>
         </span>
       </label>
       <div className="field">

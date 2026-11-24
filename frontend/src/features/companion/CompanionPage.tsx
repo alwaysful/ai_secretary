@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Chat } from '../chat/Chat';
-import { api } from '../../shared/api';
 import { EmotionPicker } from '../../shared/TtsControls';
 import { EMOTIONS, useEmotion, useSpeaking } from '../../shared/tts';
+import { CompanionPersona as Persona } from '../admin/CompanionPersona';
 import './companion.css';
 
 const AUTO_KEY = 'aura.companionAutoSpeak';
@@ -13,52 +13,6 @@ const readAuto = () => {
     return true;
   }
 };
-
-/** 성격 프롬프트 편집 */
-function Persona(props: { onClose: () => void }) {
-  const [text, setText] = useState<string | null>(null);
-  const [def, setDef] = useState('');
-  const [msg, setMsg] = useState('');
-  useEffect(() => {
-    api.settings().then(
-      (s) => {
-        setText(s.companionPrompt);
-        setDef(s.defaultCompanionPrompt);
-      },
-      (e: unknown) => setMsg(e instanceof Error ? e.message : String(e)),
-    );
-  }, []);
-  const save = async () => {
-    if (text === null) return;
-    try {
-      const s = await api.saveSettings({ companionPrompt: text === def ? '' : text });
-      setText(s.companionPrompt);
-      setMsg('저장됨. 다음 답변부터 적용.');
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : String(e));
-    }
-  };
-  return (
-    <div className="cmp-persona">
-      <label className="field">
-        <span>성격·말투 (시스템 프롬프트)</span>
-        <textarea value={text ?? ''} disabled={text === null} rows={7} maxLength={4000} onChange={(e) => setText(e.target.value)} />
-      </label>
-      <div className="chips">
-        <button className="ghost" onClick={() => setText(def)}>
-          기본값
-        </button>
-        <button className="primary" disabled={!text?.trim()} onClick={() => void save()}>
-          저장
-        </button>
-        <button className="ghost" onClick={props.onClose}>
-          닫기
-        </button>
-      </div>
-      {msg && <p className="muted">{msg}</p>}
-    </div>
-  );
-}
 
 /** 관리자 전용: 왼쪽 채팅, 오른쪽 Live2D 자리 */
 export function CompanionPage(props: { onBack: () => void; onSettings: () => void; onMemory: () => void }) {

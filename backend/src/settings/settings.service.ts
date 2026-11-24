@@ -67,8 +67,6 @@ export interface SettingsView {
   /** 공급자 목록. features: 지원 기능 */
   providers: { id: ApiProvider; label: string; features: AiFeature[] }[];
   tts: TtsSettings;
-  companionPrompt: string;
-  defaultCompanionPrompt: string;
 }
 
 /** 모델(채팅·OCR·STT)·시스템 프롬프트·권한 설정. DB(AppSettings id=1)에 저장, 없으면 .env 값. */
@@ -207,8 +205,6 @@ export class SettingsService implements OnModuleInit {
         features: (['chat', 'ocr', 'stt'] as AiFeature[]).filter((f) => supports(id, f)),
       })),
       tts: { ...this.ttsCfg },
-      companionPrompt: this.companionPrompt(),
-      defaultCompanionPrompt: DEFAULT_COMPANION_PROMPT,
     };
   }
 

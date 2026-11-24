@@ -3,6 +3,7 @@ import type { PageId } from '../../app/App';
 import { api, ApiError, DeviceLogin, Health, MailStatus, PcCheck, PullJob, SetupJob, SetupTask, Settings, ToolsStatus } from '../../shared/api';
 import { CopyButton } from '../../shared/CopyButton';
 import { markGuideDone } from './seen';
+import { useAdminDocs } from '../admin/useAdminDocs';
 
 type State = 'ok' | 'todo' | 'optional' | 'wait';
 
@@ -75,6 +76,7 @@ function Step(props: { n: number; title: string; state: State; run?: Run; childr
 
 /** 첫 실행 가이드: 다운로드 후 처음 켰을 때 설정 순서. 상태는 5초마다 자동 확인 */
 export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) => void }) {
+  const admin = useAdminDocs();
   const [s, setS] = useState<Snapshot | undefined>(undefined);
   const [err, setErr] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState<Record<number, boolean>>({});
@@ -349,6 +351,31 @@ export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) =
             </button>
           </div>
         </Step>
+
+        {admin && (
+          <>
+            <h2 className="guide-admin-h">관리자 전용</h2>
+            {admin.guide.map((g, i) => (
+              <section key={g.title} className="card guide-step optional">
+                <h2>
+                  <span>
+                    A{i + 1}. {g.title}
+                  </span>
+                </h2>
+                <ul className="info-list">
+                  {g.lines.map((l) => (
+                    <li key={l}>{l}</li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+            <div className="chips no-print">
+              <button className="ghost" onClick={go('admin')}>
+                🖥️ 서버 관리하기
+              </button>
+            </div>
+          </>
+        )}
 
         <section className="card">
           <h2>다 했으면</h2>

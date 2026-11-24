@@ -1,6 +1,8 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { AiFeature, AiRoute, api, ApiError, ApiProvider, Settings } from '../../shared/api';
 import { TtsCard } from './TtsCard';
+import { isAdmin } from '../../shared/adminToken';
+import { CompanionPersona } from '../admin/CompanionPersona';
 
 type PermKey = 'screenRead' | 'pcControl' | 'mic' | 'webcam';
 
@@ -212,7 +214,8 @@ function ApiKeys(props: { settings: Settings; onSaved: (s: Settings) => void }) 
   );
 }
 
-export function SettingsPage(props: { onBack: () => void; onModels: () => void }) {
+export function SettingsPage(props: { onBack: () => void; onModels: () => void; onAdmin?: () => void }) {
+  const admin = isAdmin();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [models, setModels] = useState<string[] | null>(null);
   const [modelsError, setModelsError] = useState('');
@@ -376,6 +379,18 @@ export function SettingsPage(props: { onBack: () => void; onModels: () => void }
               </div>
             </section>
             <TtsCard initial={settings.tts} />
+            {admin && (
+              <section className="card">
+                <h2>🔐 관리자</h2>
+                <h3>💕 AI 여자친구 성격</h3>
+                <CompanionPersona />
+                <div className="chips">
+                  <button className="ghost" onClick={props.onAdmin}>
+                    🖥️ 서버 관리하기 →
+                  </button>
+                </div>
+              </section>
+            )}
             <ApiKeys settings={settings} onSaved={(s) => setSettings((prev) => (prev ? { ...prev, apiKeys: s.apiKeys } : s))} />
             <section className="card">
               <h2>시스템 프롬프트</h2>

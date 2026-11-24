@@ -1,4 +1,5 @@
 import { apiBase } from './backend';
+import { currentToken } from './adminToken';
 
 export interface Conversation {
   id: string;
@@ -199,9 +200,6 @@ export interface Settings {
   apiKeys: Record<ApiProvider, { set: boolean; hint: string | null }>;
   providers: { id: ApiProvider; label: string; features: AiFeature[] }[];
   tts: TtsSettings;
-  /** AI 여자친구 성격 */
-  companionPrompt: string;
-  defaultCompanionPrompt: string;
 }
 
 export type TtsEngine = 'browser' | 'edge' | 'openai' | 'gemini';
@@ -468,9 +466,19 @@ export interface AdminLog {
   context: string;
   message: string;
 }
+export interface AdminDocs {
+  features: { icon: string; title: string; page?: string; hint?: string; lines: string[] }[];
+  guide: { title: string; lines: string[] }[];
+  inProgress: { title: string; status: string; note: string }[];
+}
 export type AdminResetKind = 'conversations' | 'memories' | 'news' | 'study' | 'phone' | 'apiUsage';
 
 const adminH = (t: string) => ({ Authorization: `Bearer ${t}` });
+/** 관리자 세션 있으면 헤더 첨부 (persona 대화용) */
+const maybeAdminH = (): Record<string, string> => {
+  const t = currentToken();
+  return t ? adminH(t) : {};
+};
 
 export const api = {
   health: () => req<Health>('/health'),
@@ -485,19 +493,23 @@ export const api = {
   adminReset: (t: string, kind: AdminResetKind) =>
     req<{ deleted: number }>(`/admin/data/${kind}?confirm=${kind}`, { method: 'DELETE', headers: adminH(t) }),
   adminBackup: (t: string) => req<unknown>('/admin/backup', { headers: adminH(t) }),
+  adminDocs: (t: string) => req<AdminDocs>('/admin/docs', { headers: adminH(t) }),
+  adminCompanion: (t: string) => req<{ prompt: string; default: string }>('/admin/companion', { headers: adminH(t) }),
+  adminSetCompanion: (t: string, prompt: string) =>
+    req<{ prompt: string; default: string }>('/admin/companion', { method: 'PUT', headers: adminH(t), body: JSON.stringify({ prompt }) }),
   warmup: () => req<{ state: string }>('/health/warmup', { method: 'POST' }),
   conversations: (q?: string, persona?: Persona) => {
     const p = new URLSearchParams();
     if (q) p.set('q', q);
     if (persona) p.set('persona', persona);
     const qs = p.toString();
-    return req<Conversation[]>(qs ? `/conversations?${qs}` : '/conversations');
+    return req<Conversation[]>(qs ? `/conversations?${qs}` : '/conversations', persona ? { headers: maybeAdminH() } : undefined);
   },
   renameConversation: (id: string, title: string) =>
     req<Conversation>(`/conversations/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
   deleteConversation: (id: string) => req<void>(`/conversations/${id}`, { method: 'DELETE' }),
   createConversation: (title?: string, persona?: Persona) =>
-    req<Conversation>('/conversations', { method: 'POST', body: JSON.stringify({ title, ...(persona ? { persona } : {}) }) }),
+    req<Conversation>('/conversations', { method: 'POST', headers: persona ? maybeAdminH() : {}, body: JSON.stringify({ title, ...(persona ? { persona } : {}) }) }),
   messages: (id: string) => req<Message[]>(`/conversations/${id}/messages`),
   mailStatus: () => req<MailStatus>('/mail/auth/status'),
   mailStart: () => req<DeviceLogin>('/mail/auth/start', { method: 'POST' }),
@@ -509,7 +521,7 @@ export const api = {
   ttsOptions: (engine: Exclude<TtsEngine, 'browser'>) => req<TtsOptions>(`/settings/tts-options?engine=${engine}`),
   tts: (text: string, o: { engine?: TtsEngine; model?: string; voice?: string; rate?: number; emotion?: Emotion } = {}) =>
     req<TtsAudio>('/tools/tts', { method: 'POST', body: JSON.stringify({ text, ...o }) }),
-  saveSettings: (s: { model?: string; systemPrompt?: string; ocrModel?: string; sttModel?: string; companionPrompt?: string }) =>
+  saveSettings: (s: { model?: string; systemPrompt?: string; ocrModel?: string; sttModel?: string }) =>
     req<Settings>('/settings', { method: 'PUT', body: JSON.stringify(s) }),
   savePermissions: (p: Partial<Pick<Settings, 'pcControl' | 'screenRead' | 'mic' | 'webcam'>>) =>
     req<Settings>('/settings/permissions', { method: 'PUT', body: JSON.stringify(p) }),

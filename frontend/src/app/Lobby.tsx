@@ -33,12 +33,6 @@ const MAIN: Item[] = [
   { id: 'guide', icon: '🚀', label: '시작 가이드', hint: '처음 설정 순서' },
 ];
 
-/** 관리자 모드 추가 카드 */
-const ADMIN: Item[] = [
-  { id: 'admin', icon: '🖥️', label: '서버 관리하기', hint: '상태·로그·백업·권한' },
-  { id: 'companion', icon: '💕', label: 'AI 여자친구', hint: 'Live2D·음성 대화' },
-];
-
 const SOON: Item[] = [
   { id: null, icon: '🎙️', label: '음성', hint: '준비 중' },
 ];
@@ -203,17 +197,22 @@ function OffScreen() {
 export function Lobby(props: { onNavigate: (p: PageId) => void }) {
   const [off, setOff] = useState(false);
   const [admin, setAdmin] = useState(() => !!currentToken());
+  const [adminItems, setAdminItems] = useState<Item[]>([]);
 
   // 서버 세션 만료 시 일반 로비로
   useEffect(() => {
     const t = currentToken();
     if (!admin || !t) return;
-    api.adminSession(t).catch((e: unknown) => {
-      if (e instanceof ApiError && e.status === 401) {
-        setAdminToken(null);
-        setAdmin(false);
-      }
-    });
+    // 관리자 카드는 서버가 세션 확인 후 내려줌
+    api.adminDocs(t).then(
+      (d) => setAdminItems(d.features.filter((f) => f.page).map((f) => ({ id: f.page as PageId, icon: f.icon, label: f.title, hint: f.hint }))),
+      (e: unknown) => {
+        if (e instanceof ApiError && e.status === 401) {
+          setAdminToken(null);
+          setAdmin(false);
+        }
+      },
+    );
   }, [admin]);
   const [pcOn, setPcOn] = useState(false);
   useEffect(() => {
@@ -271,7 +270,7 @@ export function Lobby(props: { onNavigate: (p: PageId) => void }) {
         <WebShortcuts />
         <section className="feats">
           <h2>기능</h2>
-          <Features items={[...(admin ? ADMIN : []), ...(pcOn ? MAIN : MAIN.filter((i) => i.id !== 'pc')), ...SOON]} onNavigate={props.onNavigate} />
+          <Features items={[...(admin ? adminItems : []), ...(pcOn ? MAIN : MAIN.filter((i) => i.id !== 'pc')), ...SOON]} onNavigate={props.onNavigate} />
         </section>
       </div>
     </div>

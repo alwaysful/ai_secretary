@@ -1,15 +1,23 @@
 import { Body, Controller, Get, HttpCode, Param, ParseEnumPipe, Post, Put, Query, Req, UseGuards, BadRequestException, Delete } from '@nestjs/common';
-import { IsBoolean, IsOptional, IsString, Length } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, Length, MaxLength } from 'class-validator';
 import type { LogLevel } from '@nestjs/common';
 import type { Request } from 'express';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminGuard, bearer } from './admin.guard';
 import { AdminService, RESET_KINDS, ResetKind } from './admin.service';
 import { recentLogs } from './log-buffer';
+import { ADMIN_FEATURES, ADMIN_GUIDE, IN_PROGRESS } from './docs';
+import { DEFAULT_COMPANION_PROMPT, SettingsService } from '../settings/settings.service';
 
 class LoginDto {
   @IsString() @Length(1, 64)
   code!: string;
+}
+
+class CompanionDto {
+  /** 빈 문자열 = 기본값 */
+  @IsString() @MaxLength(4000)
+  prompt!: string;
 }
 
 class PermissionsDto {
@@ -26,7 +34,33 @@ export class AdminController {
   constructor(
     private readonly auth: AdminAuthService,
     private readonly admin: AdminService,
+    private readonly settings: SettingsService,
   ) {}
+
+  /** 관리자 전용 기능 설명·가이드·구현 중 목록 */
+  @UseGuards(AdminGuard)
+  @Get('docs')
+  docs() {
+    return { features: ADMIN_FEATURES, guide: ADMIN_GUIDE, inProgress: IN_PROGRESS };
+  }
+
+  /** AI 여자친구 성격 */
+  @UseGuards(AdminGuard)
+  @Get('companion')
+  companion() {
+    return this.companionView();
+  }
+
+  @UseGuards(AdminGuard)
+  @Put('companion')
+  async setCompanion(@Body() dto: CompanionDto) {
+    await this.settings.update({ companionPrompt: dto.prompt });
+    return this.companionView();
+  }
+
+  private companionView() {
+    return { prompt: this.settings.companionPrompt(), default: DEFAULT_COMPANION_PROMPT };
+  }
 
   @Post('login')
   @HttpCode(200)
