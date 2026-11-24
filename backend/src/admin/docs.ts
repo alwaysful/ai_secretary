@@ -99,6 +99,7 @@ export const IN_PROGRESS: InProgressItem[] = [
   { title: 'Live2D 캐릭터', status: '완료', note: '업로드·전환·음량 립싱크·시선 추적·클릭 반응·감정 표정' },
   { title: '음성 대화', status: '완료', note: 'AI 친구 화면: 마이크 → STT → 답변 → TTS 연속 대화. 말 끊기(끼어들기) 예정' },
   { title: 'AI 친구 관계', status: '일부 완료', note: '호감도·단계별 말투·지난 대화 기억 됨. 기념일·먼저 말 걸기 예정' },
+  { title: '단어장 (Anki·회독)', status: '일부 완료', note: 'JSON 업로드·SRS 복습·회독·퀴즈·통계 됨. 이미지 카드·Anki .apkg 가져오기 예정' },
   { title: 'Multi-agent', status: '계획', note: '작업별 에이전트 분담' },
   { title: '클라우드 LLM 라우팅', status: '일부 완료', note: '기능별 로컬/API 선택 됨. 자동 전환 예정' },
   { title: '관리자 로그 보관', status: '계획', note: '현재 메모리 300줄. 파일 저장 예정' },

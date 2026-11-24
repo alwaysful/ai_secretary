@@ -367,6 +367,16 @@ export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) =
           </div>
         </Step>
 
+        <Step n={8} title="단어장 (Anki·회독)" state="optional">
+          <p>외울 단어장 JSON 파일을 올리면 복습·회독·퀴즈로 공부해요. 파일이 없으면 「예시로 바로 시작」.</p>
+          <p className="muted">양식: front(단어)·back(뜻) 필수, reading·example·tags 선택. 단어장 화면 아래 「📄 단어장 파일 양식」에 예시.</p>
+          <div className="chips no-print">
+            <button className="ghost" onClick={go('vocab')}>
+              📇 단어장
+            </button>
+          </div>
+        </Step>
+
         {admin && (
           <>
             <h2 className="guide-admin-h">관리자 전용</h2>

@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ScrapeService } from '../scrape/scrape.service';
 import { Permissions, SettingsService } from '../settings/settings.service';
 
-export const RESET_KINDS = ['conversations', 'memories', 'news', 'study', 'phone', 'apiUsage'] as const;
+export const RESET_KINDS = ['conversations', 'memories', 'news', 'study', 'phone', 'apiUsage', 'vocab'] as const;
 export type ResetKind = (typeof RESET_KINDS)[number];
 
 @Injectable()
@@ -36,6 +36,7 @@ export class AdminService {
         p.studySession.count(),
         p.phoneEvent.count(),
         p.apiUsage.count(),
+        p.vocabCard.count(),
       ]).catch(() => null),
       p.newsSite
         .findMany({ orderBy: { position: 'asc' }, select: { id: true, name: true, enabled: true, lastRunAt: true, lastOkAt: true, lastError: true } })
@@ -68,6 +69,7 @@ export class AdminService {
         study: counts[4],
         phone: counts[5],
         apiUsage: counts[6],
+        vocab: counts[7],
       },
       scrape: sites,
       apiUsage30d: usage.map((u) => ({
@@ -112,6 +114,11 @@ export class AdminService {
       case 'apiUsage':
         r = await p.apiUsage.deleteMany();
         break;
+      case 'vocab':
+        // 단어장 삭제 → 카드·기록도 같이 삭제 (cascade). 개수는 카드 수
+        r = { count: await p.vocabCard.count() };
+        await p.vocabDeck.deleteMany();
+        break;
       default:
         throw new BadRequestException({ code: 'BAD_KIND', message: '알 수 없는 항목' });
     }
@@ -122,7 +129,7 @@ export class AdminService {
   /** 백업 JSON. API 키·메일 토큰(비밀) 제외 */
   async backup() {
     const p = this.prisma;
-    const [conversations, memories, settings, shortcuts, newsCategories, newsSites, studySessions, apiPrices] = await Promise.all([
+    const [conversations, memories, settings, shortcuts, newsCategories, newsSites, studySessions, apiPrices, vocabDecks] = await Promise.all([
       p.conversation.findMany({ include: { messages: { orderBy: { createdAt: 'asc' } } } }),
       p.memory.findMany(),
       p.appSettings.findMany(),
@@ -131,8 +138,9 @@ export class AdminService {
       p.newsSite.findMany(),
       p.studySession.findMany(),
       p.apiPrice.findMany(),
+      p.vocabDeck.findMany({ include: { cards: { orderBy: { position: 'asc' } } } }),
     ]);
     this.log.log('admin backup exported');
-    return { app: 'AURA', version: 1, exportedAt: new Date().toISOString(), conversations, memories, settings, shortcuts, newsCategories, newsSites, studySessions, apiPrices };
+    return { app: 'AURA', version: 1, exportedAt: new Date().toISOString(), conversations, memories, settings, shortcuts, newsCategories, newsSites, studySessions, apiPrices, vocabDecks };
   }
 }

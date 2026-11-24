@@ -20,6 +20,7 @@ import { ConversationModule } from './conversation/conversation.module';
 import { HealthController } from './health/health.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { AdminModule } from './admin/admin.module';
+import { VocabModule } from './vocab/vocab.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { AdminModule } from './admin/admin.module';
     ToolsModule,
     StatsModule,
     AdminModule,
+    VocabModule,
   ],
   controllers: [HealthController],
 })

@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { AiFeature, AiRoute, api, ApiError, ApiProvider, Settings } from '../../shared/api';
 import { TtsCard } from './TtsCard';
+import { VocabSettingsCard } from '../vocab/VocabSettingsCard';
 import { isAdmin } from '../../shared/adminToken';
 import { CompanionPersona } from '../admin/CompanionPersona';
 
@@ -214,7 +215,7 @@ export function ApiKeys(props: { settings: Settings; onSaved: (s: Settings) => v
   );
 }
 
-export function SettingsPage(props: { onBack: () => void; onModels: () => void; onAdmin?: () => void }) {
+export function SettingsPage(props: { onBack: () => void; onModels: () => void; onAdmin?: () => void; onVocab: () => void }) {
   const admin = isAdmin();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [models, setModels] = useState<string[] | null>(null);
@@ -379,6 +380,7 @@ export function SettingsPage(props: { onBack: () => void; onModels: () => void; 
               </div>
             </section>
             <TtsCard initial={settings.tts} />
+            <VocabSettingsCard onOpen={props.onVocab} />
             {admin && (
               <section className="card">
                 <h2>🔐 관리자</h2>
