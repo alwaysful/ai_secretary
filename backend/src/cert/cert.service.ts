@@ -6,6 +6,7 @@ import { EnvVars } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { baseOfVariant, CATALOG, CERT_FIELDS, CERT_KINDS, defaultsOf, fieldOfName, fieldOfPrivate, fieldOfQnet, isTechGrade, joinTags, SERIES_LABEL, seriesOfGrade } from './catalog';
 import { scoreOf } from './score';
+import { CERT_DETAILS, CertDetail } from './details';
 import { KPrivate, kprivateUrl, norm, parseJmList, parseKPrivate, parseQnet, QNET_PAGE, QnetGb, QnetJm, qnetJmUrl, QnetPhase, qnetUrl, seriesOf } from './qnet';
 
 const DAY = 86_400_000;
@@ -83,6 +84,8 @@ export interface CertView {
   isNew: boolean;
   starred: boolean;
   custom: boolean;
+  /** 간단 설명 (없으면 null) */
+  detail: CertDetail | null;
   /** 끝나지 않은 회차 (가까운 순) */
   exams: ExamView[];
 }
@@ -230,6 +233,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
       isNew: !!c.discoveredAt && Date.now() - c.discoveredAt.getTime() < NEW_FOR_MS,
       starred: c.starred,
       custom: c.custom,
+      detail: CERT_DETAILS[c.id] ?? null,
       exams: exams.map((e) => this.examView(e)),
     };
   }

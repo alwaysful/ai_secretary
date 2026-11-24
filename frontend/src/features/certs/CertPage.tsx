@@ -218,6 +218,8 @@ export function CertPage(props: { onBack: () => void }) {
   const [shown, setShown] = useState(100);
   /** 유용도 높은 순 정렬 */
   const [byScore, setByScore] = useState(false);
+  /** 설명 펼친 자격증 */
+  const [about, setAbout] = useState<string | null>(null);
   const rows = useMemo(() => (items && byScore ? [...items].sort((a, b) => b.score - a.score) : items), [items, byScore]);
 
   const filter: CertFilter = { field: field || undefined, kind: kind || undefined, starred, q: q.trim() || undefined };
@@ -383,6 +385,9 @@ export function CertPage(props: { onBack: () => void }) {
                         {c.custom && <span>직접 추가</span>}
                       </span>
                       <span className="news-links">
+                        <button className={`cert-about-btn${about === c.id ? ' on' : ''}`} onClick={() => setAbout(about === c.id ? null : c.id)} aria-expanded={about === c.id}>
+                          ⓘ 설명
+                        </button>
                         {c.url && (
                           <a href={c.url} target="_blank" rel="noreferrer">
                             공식 사이트 ↗
@@ -406,6 +411,22 @@ export function CertPage(props: { onBack: () => void }) {
                           </button>
                         )}
                       </span>
+                      {about === c.id && (
+                        <div className="cert-about">
+                          {c.detail ? (
+                            <dl>
+                              {c.detail.map((d) => (
+                                <div key={d.label}>
+                                  <dt>{d.label}</dt>
+                                  <dd>{d.text}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          ) : (
+                            <p className="muted">아직 설명 없음. 공식 사이트 참고.</p>
+                          )}
+                        </div>
+                      )}
                       {expanded && (
                         <div className="cert-exams">
                           {c.exams.length === 0 && (

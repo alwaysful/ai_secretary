@@ -38,6 +38,8 @@ export interface Cert {
   isNew: boolean;
   starred: boolean;
   custom: boolean;
+  /** 간단 설명 (「설명」 버튼) */
+  detail: { label: string; text: string }[] | null;
   exams: CertExam[];
 }
 
