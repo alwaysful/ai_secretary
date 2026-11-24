@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, NewsItem } from '../../shared/api';
 
-const DAY = 86_400_000;
+export const DAY = 86_400_000;
 const LANES = 4;
-const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+export const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
 
-const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+export const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+export const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const dayIdx = (d: Date, base: Date) => Math.round((startOfDay(d).getTime() - base.getTime()) / DAY);
-const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+export const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
 
 /** 태그(없으면 제목)로 색 고정 */
-function hue(key: string): number {
+export function hue(key: string): number {
   let h = 0;
   for (const c of key) h = (h * 31 + c.charCodeAt(0)) % 360;
   return h;
@@ -25,8 +25,8 @@ interface Bar {
   deadlineOnly: boolean;
 }
 
-interface Seg {
-  bar: Bar;
+interface Seg<B> {
+  bar: B;
   col: number;
   span: number;
   lane: number;
@@ -35,13 +35,13 @@ interface Seg {
 }
 
 /** 주(7일) 단위로 막대를 자르고 줄(lane) 배정. 긴 것 먼저 */
-function layoutWeek(bars: Bar[], weekStart: Date): { segs: Seg[]; hidden: number[] } {
+export function layoutWeek<B extends { start: Date; end: Date }>(bars: B[], weekStart: Date): { segs: Seg<B>[]; hidden: number[] } {
   const weekEnd = addDays(weekStart, 6);
   const inWeek = bars
     .filter((b) => b.end >= weekStart && b.start <= weekEnd)
     .sort((a, b) => a.start.getTime() - b.start.getTime() || b.end.getTime() - a.end.getTime());
   const lanes: number[][] = []; // lane → 점유된 col
-  const segs: Seg[] = [];
+  const segs: Seg<B>[] = [];
   const hidden = Array<number>(7).fill(0);
   for (const b of inWeek) {
     const s = Math.max(0, dayIdx(b.start, weekStart));
@@ -61,7 +61,7 @@ function layoutWeek(bars: Bar[], weekStart: Date): { segs: Seg[]; hidden: number
   return { segs, hidden };
 }
 
-const md = (d: Date) => `${d.getMonth() + 1}.${d.getDate()}`;
+export const md = (d: Date) => `${d.getMonth() + 1}.${d.getDate()}`;
 
 /** 구글 캘린더식 월 달력. 접수기간 = 막대 */
 export function NewsCalendar(props: { categoryId?: string; tag?: string; onOpen: (it: NewsItem, url: string) => void }) {

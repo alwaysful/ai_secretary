@@ -9,6 +9,7 @@ import { MemoryModule } from './memory/memory.module';
 import { StudyModule } from './study/study.module';
 import { ShortcutModule } from './shortcut/shortcut.module';
 import { ScrapeModule } from './scrape/scrape.module';
+import { CertModule } from './cert/cert.module';
 import { SystemModule } from './system/system.module';
 import { SetupModule } from './setup/setup.module';
 import { PcControlModule } from './pc-control/pc-control.module';
@@ -35,6 +36,7 @@ import { AdminModule } from './admin/admin.module';
     StudyModule,
     ShortcutModule,
     ScrapeModule,
+    CertModule,
     SystemModule,
     SetupModule,
     ModelHubModule,

@@ -386,7 +386,7 @@ async function call(path: string, init?: RequestInit): Promise<Response> {
   }
 }
 
-async function req<T>(path: string, init?: RequestInit): Promise<T> {
+export async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await call(path, {
     ...init,
     headers: { ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...(init?.headers as Record<string, string> | undefined) },
