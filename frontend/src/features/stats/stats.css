@@ -73,3 +73,20 @@
   .st-kpis { grid-template-columns: repeat(2, 1fr); }
   .st-kpi strong { font-size: 1.2rem; }
 }
+/* 월 비용 한도 · API 키 */
+.st-lv { font-size: 0.78rem; font-weight: 700; padding: 2px 10px; border-radius: 999px; background: var(--line); }
+.st-lv.ok { background: color-mix(in srgb, #3CC9A0 22%, transparent); color: #3CC9A0; }
+.st-lv.warn { background: color-mix(in srgb, #E8A33D 24%, transparent); color: #E8A33D; }
+.st-lv.over { background: color-mix(in srgb, var(--err) 22%, transparent); color: var(--err); }
+.st-budget-bar { position: relative; height: 12px; border-radius: 999px; background: var(--line); overflow: visible; }
+.st-budget-bar i { display: block; height: 100%; border-radius: 999px; background: #3CC9A0; transition: width 0.3s; }
+.st-budget-bar i.warn { background: #E8A33D; }
+.st-budget-bar i.over { background: var(--err); }
+.st-budget-bar .mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--muted); transform: translateX(-1px); }
+.st-alert { margin: 0; padding: 8px 12px; border-radius: 10px; font-size: 0.86rem; }
+.st-alert.warn { background: color-mix(in srgb, #E8A33D 16%, transparent); }
+.st-alert.over { background: color-mix(in srgb, var(--err) 16%, transparent); }
+.st-budget-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 14px; align-items: end; }
+.st-budget-form input[type='number'] { width: 100%; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.st-keys > .card { height: 100%; }
+.st-keys h2 { font-size: 1.05rem; }

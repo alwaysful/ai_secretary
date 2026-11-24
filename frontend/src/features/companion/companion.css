@@ -25,3 +25,23 @@
   .cmp-controls { padding: 10px; gap: 6px; }
   .cmp-chat { border-right: none; min-height: 0; }
 }
+.cmp-model.has-model { border-style: solid; place-items: stretch; }
+.l2d { position: relative; width: 100%; height: 100%; min-height: 300px; }
+.l2d canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.l2d-msg { position: absolute; inset: auto 12px 12px; margin: 0; text-align: center; font-size: 13px; }
+.cmp-studio { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+.cmp-tabs { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.cmp-tabs [role='tab'] { padding: 5px 12px; font-size: 13px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; }
+.cmp-tabs [role='tab'].on { background: var(--grad, var(--accent)); color: #fff; border-color: transparent; }
+.cmp-sec { display: flex; flex-direction: column; gap: 8px; }
+.cmp-sec h4 { margin: 6px 0 0; font-size: 13px; color: var(--muted); font-weight: 600; }
+.cmp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+.cmp-list li { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 12px; padding: 4px 6px; min-width: 0; }
+.cmp-list li.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.cmp-pick { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; background: none; border: 0; color: inherit; font: inherit; cursor: pointer; padding: 4px 6px; }
+.cmp-pick small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-upload, .cmp-form.row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.cmp-upload input[type='file'] { max-width: 100%; font-size: 13px; }
+.cmp-form { display: flex; flex-direction: column; gap: 6px; }
+.cmp-form select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+.cmp-form .rename, .cmp-upload .rename { flex: 1; min-width: 140px; }

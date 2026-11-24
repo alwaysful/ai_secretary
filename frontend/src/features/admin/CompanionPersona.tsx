@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../shared/api';
+import { api, CompanionView } from '../../shared/api';
 import { currentToken } from '../../shared/adminToken';
 import '../companion/companion.css';
 
 const err = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** AI 여자친구 성격·말투 편집 (관리자 전용 API) */
-export function CompanionPersona(props: { onClose?: () => void }) {
+export function CompanionPersona(props: { onClose?: () => void; onSaved?: (v: CompanionView) => void }) {
   const [text, setText] = useState<string | null>(null);
   const [def, setDef] = useState('');
   const [msg, setMsg] = useState('');
@@ -28,6 +28,7 @@ export function CompanionPersona(props: { onClose?: () => void }) {
       const r = await api.adminSetCompanion(t, text === def ? '' : text);
       setText(r.prompt);
       setMsg('저장됨. 다음 답변부터 적용.');
+      props.onSaved?.(r);
     } catch (e) {
       setMsg(err(e));
     }

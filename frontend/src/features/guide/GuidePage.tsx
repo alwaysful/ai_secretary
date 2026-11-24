@@ -206,7 +206,7 @@ export function GuidePage(props: { onBack: () => void; onNavigate: (p: PageId) =
               {ollamaOk && <span className="ok-text"> · {h?.model.name} 준비됨</span>}
             </li>
             <li>
-              <b>B. API 사용 (유료, PC 느릴 때)</b>: 「⚙️ 설정」 → API 키에 Gemini·Anthropic·OpenAI 키 입력 → 모델에서 AI 채팅을 API로.
+              <b>B. API 사용 (유료, PC 느릴 때)</b>: 「⚙️ 설정」 → API 키에 Gemini·Anthropic·OpenAI 키 입력 → 모델에서 AI 채팅을 API로. 「📊 통계」에서 월 비용 한도 정하기 권장.
               {chatApi && apiKeyCount > 0 && <span className="ok-text"> · API 사용 중</span>}
             </li>
           </ul>

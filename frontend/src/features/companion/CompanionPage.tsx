@@ -1,9 +1,15 @@
-import { useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Chat } from '../chat/Chat';
 import { EmotionPicker } from '../../shared/TtsControls';
-import { EMOTIONS, useEmotion, useSpeaking } from '../../shared/tts';
-import { CompanionPersona as Persona } from '../admin/CompanionPersona';
+import { EMOTIONS, setVoiceOverride, useEmotion, useSpeaking } from '../../shared/tts';
+import { api, CompanionView } from '../../shared/api';
+import { apiBase } from '../../shared/backend';
+import { currentToken } from '../../shared/adminToken';
+import { CompanionStudio } from './CompanionStudio';
 import './companion.css';
+
+// pixi·Live2D는 무거움 → 모델 있을 때만 로드
+const Live2DStage = lazy(() => import('./Live2DStage').then((m) => ({ default: m.Live2DStage })));
 
 const AUTO_KEY = 'aura.companionAutoSpeak';
 const readAuto = () => {
@@ -14,13 +20,26 @@ const readAuto = () => {
   }
 };
 
-/** 관리자 전용: 왼쪽 채팅, 오른쪽 Live2D 자리 */
+/** 관리자 전용: 왼쪽 채팅, 오른쪽 Live2D */
 export function CompanionPage(props: { onBack: () => void; onSettings: () => void; onMemory: () => void }) {
   const [auto, setAuto] = useState(readAuto);
-  const [persona, setPersona] = useState(false);
+  const [studio, setStudio] = useState(false);
+  const [view, setView] = useState<CompanionView | null>(null);
   const speaking = useSpeaking();
   const [emo] = useEmotion();
   const emoInfo = EMOTIONS.find((e) => e.id === emo)!;
+
+  useEffect(() => {
+    const t = currentToken();
+    if (t) api.adminCompanion(t).then(setView, () => undefined);
+  }, []);
+
+  // 이 화면에서만 여자친구 목소리
+  useEffect(() => {
+    const v = view?.voice;
+    setVoiceOverride(v ? { engine: v.engine, model: v.model ?? null, voice: v.voice ?? null, rate: v.rate } : null);
+    return () => setVoiceOverride(null);
+  }, [view?.voice]);
 
   const toggleAuto = (v: boolean) => {
     setAuto(v);
@@ -30,6 +49,9 @@ export function CompanionPage(props: { onBack: () => void; onSettings: () => voi
       /* 무시 */
     }
   };
+
+  const model = view?.models.find((m) => m.id === view.model);
+  const modelUrl = model ? `${apiBase()}/live2d/${model.id}/${model.entry.split('/').map(encodeURIComponent).join('/')}` : null;
 
   return (
     <div className="companion">
@@ -46,14 +68,20 @@ export function CompanionPage(props: { onBack: () => void; onSettings: () => voi
         />
       </div>
       <aside className="cmp-stage" aria-label="Live2D 캐릭터">
-        <div className={`cmp-model${speaking ? ' talking' : ''}`} id="live2d-stage" data-emotion={emo}>
-          <div className="cmp-placeholder">
-            <span className="cmp-face" aria-hidden>
-              {emoInfo.icon}
-            </span>
-            <strong>Live2D 모델 자리</strong>
-            <small className="muted">모델 추가 예정 · 지금 감정: {emoInfo.label}</small>
-          </div>
+        <div className={`cmp-model${speaking ? ' talking' : ''}${modelUrl ? ' has-model' : ''}`} id="live2d-stage" data-emotion={emo}>
+          {modelUrl ? (
+            <Suspense fallback={<p className="muted">불러오는 중…</p>}>
+              <Live2DStage key={modelUrl} url={modelUrl} speaking={!!speaking} emotion={emo} />
+            </Suspense>
+          ) : (
+            <div className="cmp-placeholder">
+              <span className="cmp-face" aria-hidden>
+                {emoInfo.icon}
+              </span>
+              <strong>Live2D 모델 없음</strong>
+              <small className="muted">⚙ 꾸미기 → Live2D에서 zip 업로드 · 지금 감정: {emoInfo.label}</small>
+            </div>
+          )}
           {speaking && <span className="cmp-wave" aria-label="말하는 중" />}
         </div>
         <div className="cmp-controls card">
@@ -66,14 +94,13 @@ export function CompanionPage(props: { onBack: () => void; onSettings: () => voi
             <span>답변 음성으로 듣기</span>
           </label>
           <div className="chips">
-            <button className="ghost" onClick={() => setPersona((v) => !v)}>
-              💕 성격 편집
+            <button className={studio ? 'primary' : 'ghost'} onClick={() => setStudio((v) => !v)}>
+              ⚙ 꾸미기 (모델·목소리·성격)
             </button>
-            <button className="ghost" onClick={props.onSettings}>
-              ⚙ 목소리 설정
-            </button>
+            {view?.voice && <span className="muted small">🎙 {view.voice.name}</span>}
           </div>
-          {persona && <Persona onClose={() => setPersona(false)} />}
+          {studio && view && <CompanionStudio view={view} onChange={setView} onClose={() => setStudio(false)} />}
+          {studio && !view && <p className="muted small">관리자 세션 확인 중… (만료면 로고 눌러 다시 로그인)</p>}
         </div>
       </aside>
     </div>

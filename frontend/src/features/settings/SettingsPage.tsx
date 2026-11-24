@@ -129,7 +129,7 @@ function FeatureModel(props: {
 }
 
 /** API 키 입력·테스트·삭제. 키 원문은 다시 표시 안 함 */
-function ApiKeys(props: { settings: Settings; onSaved: (s: Settings) => void }) {
+export function ApiKeys(props: { settings: Settings; onSaved: (s: Settings) => void }) {
   const [draft, setDraft] = useState<Partial<Record<ApiProvider, string>>>({});
   const [busy, setBusy] = useState<ApiProvider | null>(null);
   const [res, setRes] = useState<Partial<Record<ApiProvider, { ok: boolean; text: string }>>>({});
