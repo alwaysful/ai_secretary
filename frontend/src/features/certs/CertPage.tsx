@@ -382,6 +382,7 @@ export function CertPage(props: { onBack: () => void }) {
                       <span className="news-meta">
                         <span className="news-tag">#{c.field}</span>
                         <span>{c.kind}</span>
+                        {c.publicGrades && c.publicGrades !== '등급 없음' && <span className="cert-public">공인 {c.publicGrades}</span>}
                         <span>주관 {c.org}</span>
                         {c.seriesLabel && <span>{c.seriesLabel}</span>}
                         {c.custom && <span>직접 추가</span>}

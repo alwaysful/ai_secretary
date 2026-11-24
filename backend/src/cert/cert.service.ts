@@ -90,6 +90,9 @@ export interface CertView {
   custom: boolean;
   /** 간단 설명 (없으면 null) */
   detail: CertDetail | null;
+  /** 국가공인 받은 등급 ('등급 없음' = 단일 등급), 공인 만료일 */
+  publicGrades: string | null;
+  publicUntil: string | null;
   /** 끝나지 않은 회차 (가까운 순) */
   exams: ExamView[];
 }
@@ -238,6 +241,8 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
       starred: c.starred,
       custom: c.custom,
       detail: CERT_DETAILS[c.id] ?? null,
+      publicGrades: c.publicGrades,
+      publicUntil: c.publicUntil,
       exams: exams.map((e) => this.examView(e)),
     };
   }
@@ -525,12 +530,41 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
     const now = new Date();
     if (list.length) await this.fillJmCd(list).catch((e: Error) => this.log.warn(`종목코드 채우기 실패: ${e.message}`));
     const fresh = await this.freshRows(list, priv, now, pro);
+    if (priv.length) await this.markPublic(priv).catch((e: Error) => this.log.warn(`공인 등급 표시 실패: ${e.message}`));
     if (fresh.length) await this.prisma.certificate.createMany({ data: fresh, skipDuplicates: true });
     const error = errors.join(' / ') || null;
     await this.prisma.certConfig.update({ where: { id: 1 }, data: { lastCatalogAt: now, lastCatalogNew: fresh.length, lastCatalogError: error } });
     this.log.log(`새 자격증 ${fresh.length}개 추가 (Q-net 종목 ${list.length}개, 공인민간 ${priv.length}개, 국가전문 ${pro.length}개 확인)`);
     if (!list.length && !priv.length && !pro.length && error) throw new BadRequestException(error);
     return this.getConfig();
+  }
+
+  /**
+   * 공인민간자격등록현황에 있는 자격 → 공인 등급·만료일 표시, '민간'으로 잘못 둔 건 '국가공인민간'으로.
+   * 목록에서 빠진(공인 만료) 자격은 공인 표시만 지움.
+   */
+  private async markPublic(priv: KPrivate[]): Promise<void> {
+    const rows = await this.prisma.certificate.findMany({ select: { id: true, name: true, kind: true, publicGrades: true, publicUntil: true } });
+    const byKey = new Map<string, KPrivate>();
+    for (const p of priv) for (const k of nameKeys(p.name)) if (k.length >= 3 && !byKey.has(k)) byKey.set(k, p);
+    const ops: Prisma.PrismaPromise<unknown>[] = [];
+    let matched = 0;
+    for (const r of rows) {
+      const p = nameKeys(r.name).map((k) => byKey.get(k)).find(Boolean);
+      if (!p) {
+        if (r.publicGrades) ops.push(this.prisma.certificate.update({ where: { id: r.id }, data: { publicGrades: null, publicUntil: null } }));
+        continue;
+      }
+      matched++;
+      const grades = joinTags(p.grades) ?? '등급 없음';
+      const until = p.until?.slice(0, 10) ?? null;
+      const kind = r.kind === '민간' ? '국가공인민간' : r.kind;
+      if (grades !== r.publicGrades || until !== r.publicUntil || kind !== r.kind) {
+        ops.push(this.prisma.certificate.update({ where: { id: r.id }, data: { publicGrades: grades, publicUntil: until, kind } }));
+      }
+    }
+    if (ops.length) await this.prisma.$transaction(ops);
+    this.log.log(`공인민간 ${priv.length}종목 중 ${matched}개 자격과 연결`);
   }
 
   /** 이름이 같은 자격증에 Q-net 종목코드 저장 (취득자 통계 조회용) */

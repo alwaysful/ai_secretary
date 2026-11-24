@@ -93,3 +93,4 @@
 }
 .cert-table tr.ca-row td { border-top: 0; padding-top: 0; }
 .cert-table tr.ca-row .ca { margin-top: 0; }
+.cert-public { color: #2e9d5b; font-weight: 600; }
