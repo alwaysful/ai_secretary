@@ -1,4 +1,5 @@
 import { PRIVATE_CERTS } from './catalog-private';
+import { PRO_CERTS } from './catalog-pro';
 import { otherOrg, QGrade, QNET_ALL, QNET_ALWAYS } from './catalog-qnet';
 
 /** 자격증 분야 (공모전 분야 태그처럼 고정 목록) */
@@ -444,7 +445,7 @@ const BASE: CatalogCert[] = Object.entries(DATA).flatMap(([field, rows]) =>
 /** 국가공인 민간·유명 민간 (기본 목록에 없는 이름만) */
 const PRIVATE: CatalogCert[] = (() => {
   const seen = new Set(BASE.map((c) => c.name.replace(/\s/g, '')));
-  return PRIVATE_CERTS.filter((c) => {
+  return [...PRO_CERTS, ...PRIVATE_CERTS].filter((c) => {
     const k = c.name.replace(/\s/g, '');
     if (seen.has(k)) return false;
     seen.add(k);
