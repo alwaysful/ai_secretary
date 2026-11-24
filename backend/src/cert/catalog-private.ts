@@ -46,7 +46,7 @@ const PUBLIC: Record<string, P[]> = {
     ['pv-tradeeng', '무역영어', '1~3급', ...KORCHAM, { prep: '1~2개월' }],
     ['pv-docs', '문서실무사', '1~3급', '한국정보관리협회', null, { kind: '민간', prep: '2~4주' }],
     ['pv-admin', '행정관리사', '1~3급', '한국행정관리협회', null, { prep: '1~2개월' }],
-    ['pv-itq-ad', 'ITQ OA Master', null, ...KPC, { prep: '1~2개월', summary: 'ITQ 3과목 A등급' }],
+    ['pv-itq-ad', 'ITQ OA Master', null, ...KPC, { kind: '민간', prep: '1~2개월', summary: 'ITQ 3과목 A등급' }],
     ['pv-erp1', 'ERP 정보관리사 1급', '1급', ...KPC, { prep: '1~2개월' }],
   ],
   '회계/세무': [
