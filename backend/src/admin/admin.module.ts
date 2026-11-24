@@ -13,6 +13,6 @@ import { AdminService } from './admin.service';
   imports: [ModelsModule, SettingsModule, ScrapeModule],
   controllers: [AdminController, Live2dController],
   providers: [AdminAuthService, AdminService, AdminGuard, CompanionService, UpdateService],
-  exports: [AdminAuthService, AdminGuard],
+  exports: [AdminAuthService, AdminGuard, CompanionService],
 })
 export class AdminModule {}

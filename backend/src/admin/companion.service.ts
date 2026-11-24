@@ -42,6 +42,41 @@ interface Presets {
   voice: VoicePreset[];
 }
 
+/** 호감도 단계. 높을수록 친밀한 말투 */
+export const BOND_LEVELS = [
+  { min: 0, name: '어색함', tone: '아직 서먹함. 살짝 거리 두고 조심스럽게. 그래도 친절하게.' },
+  { min: 20, name: '친구', tone: '편한 친구 사이. 가볍게 장난도 침.' },
+  { min: 45, name: '썸', tone: '설레는 사이. 은근히 챙기고 칭찬에 부끄러워함.' },
+  { min: 70, name: '연인', tone: '연인 사이. 애정 표현 자연스럽게. 보고 싶었다는 말도 함.' },
+  { min: 90, name: '소울메이트', tone: '서로 다 아는 사이. 깊이 공감하고 예전 얘기도 꺼냄.' },
+];
+
+export function bondLevel(v: number) {
+  let i = 0;
+  BOND_LEVELS.forEach((l, k) => v >= l.min && (i = k));
+  const next = BOND_LEVELS[i + 1];
+  return { index: i, name: BOND_LEVELS[i].name, tone: BOND_LEVELS[i].tone, next: next ? { name: next.name, at: next.min } : null };
+}
+
+/** 답변 앞 태그: [emo:happy love:+1] */
+export const REPLY_TAG = /^\s*\[emo:([a-z]+)(?:[\s,]+love:\s*([+-]?\d+))?\s*\]\s*/i;
+export const EMOTION_IDS = ['neutral', 'happy', 'sad', 'angry', 'calm', 'excited', 'tender'];
+
+export function parseReply(text: string): { emotion: string | null; love: number; body: string } {
+  const m = REPLY_TAG.exec(text);
+  if (!m) return { emotion: null, love: 0, body: text };
+  const emo = m[1].toLowerCase();
+  return { emotion: EMOTION_IDS.includes(emo) ? emo : null, love: Math.max(-3, Math.min(3, Number(m[2] ?? 0) || 0)), body: text.slice(m[0].length) };
+}
+
+const TAG_RULE = [
+  '[출력 형식] 답변 맨 앞에 태그 한 개를 꼭 붙인다: [emo:감정 love:변화]',
+  '감정: neutral|happy|sad|angry|calm|excited|tender 중 지금 네 기분.',
+  'love: 이번 사용자 말에 대한 호감 변화 -2~+2. 평소 0, 다정·칭찬·고민 털어놓기 +1~+2, 무례·무시 -1~-2.',
+  '예: [emo:happy love:+1] 오늘 고생 많았어!',
+  '태그는 화면에 안 보임. 태그 얘기는 하지 않는다.',
+].join('\n');
+
 const MAX_UNZIPPED = 120 * 1024 * 1024;
 const MAX_FILES = 800;
 const ID_RE = /^[a-f0-9-]{36}$/;
@@ -104,7 +139,7 @@ export class CompanionService {
   }
 
   private async row() {
-    return this.prisma.appSettings.findUnique({ where: { id: 1 }, select: { companionVoice: true, companionPresets: true, companionModel: true } });
+    return this.prisma.appSettings.findUnique({ where: { id: 1 }, select: { companionVoice: true, companionPresets: true, companionModel: true, companionAffinity: true, companionLastAt: true } });
   }
 
   async view() {
@@ -118,7 +153,60 @@ export class CompanionService {
       personas: [...BUILTIN_PERSONAS, ...custom.persona],
       voices: [...BUILTIN_VOICES, ...custom.voice],
       models: await this.models(),
+      bond: this.bondOf(r),
     };
+  }
+
+  // ───────── 호감도·기억 ─────────
+
+  private bondOf(r: { companionAffinity: number; companionLastAt: Date | null } | null) {
+    const affinity = r?.companionAffinity ?? 30;
+    return { affinity, ...bondLevel(affinity), lastAt: r?.companionLastAt?.toISOString() ?? null };
+  }
+
+  async bond() {
+    return this.bondOf(await this.row());
+  }
+
+  async setAffinity(v: number) {
+    await this.save({ companionAffinity: Math.max(0, Math.min(100, Math.round(v))) });
+    return this.bond();
+  }
+
+  /** 답변 저장 뒤: 호감도 반영, 마지막 대화 시각 */
+  async afterReply(text: string) {
+    const { love } = parseReply(text);
+    const r = await this.row();
+    const cur = r?.companionAffinity ?? 30;
+    await this.save({ companionAffinity: Math.max(0, Math.min(100, cur + love)), companionLastAt: new Date() });
+  }
+
+  /** 시스템 프롬프트 추가분: 관계 단계, 오랜만 여부, 지난 대화, 태그 규칙 */
+  async promptContext(convId: string): Promise<string> {
+    const r = await this.row();
+    const b = this.bondOf(r);
+    const out = [`[관계] 호감도 ${b.affinity}/100, 단계: ${b.name}. 말투: ${b.tone}`];
+    const now = new Date();
+    out.push(`[지금] ${now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short', hour: 'numeric', minute: '2-digit' })}`);
+    if (r?.companionLastAt) {
+      const h = (now.getTime() - r.companionLastAt.getTime()) / 3_600_000;
+      if (h >= 24) out.push(`[오랜만] 마지막 대화 ${Math.floor(h / 24)}일 전. 반갑게, 보고 싶었다고.`);
+      else if (h >= 6) out.push(`[오랜만] 마지막 대화 ${Math.floor(h)}시간 전.`);
+    }
+    // 다른 대화방의 최근 대화 → 이어서 기억
+    const prev = await this.prisma.conversation.findFirst({
+      where: { persona: 'girlfriend', id: { not: convId }, messages: { some: {} } },
+      orderBy: { updatedAt: 'desc' },
+      select: { updatedAt: true, messages: { orderBy: { createdAt: 'desc' }, take: 8, select: { role: true, content: true } } },
+    });
+    if (prev?.messages.length) {
+      const lines = prev.messages
+        .reverse()
+        .map((m) => `${m.role === 'USER' ? '사용자' : '나'}: ${parseReply(m.content).body.replace(/\s+/g, ' ').slice(0, 160)}`);
+      out.push(`[지난 대화 ${prev.updatedAt.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}] 자연스럽게 이어서 기억해. 억지로 꺼내진 말 것.\n${lines.join('\n')}`);
+    }
+    out.push(TAG_RULE);
+    return out.join('\n');
   }
 
   private async save(data: Prisma.AppSettingsUpdateInput) {

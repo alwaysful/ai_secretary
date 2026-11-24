@@ -20,6 +20,7 @@ import { MailPanel } from '../mail/MailPanel';
 import { isTyping } from '../../app/Shortcuts';
 import { ThemeButton } from '../../shared/theme';
 import { Markdown } from '../../shared/Markdown';
+import { stripTag } from '../../shared/companionReply';
 import { diagnoseError, diagnoseHealth, Diagnosis, NoticeBox, PHASE_TEXT } from '../../shared/Notice';
 
 const tmpId = () => `tmp-${crypto.randomUUID()}`;
@@ -54,6 +55,11 @@ export function Chat(props: {
   autoSpeak?: boolean;
   emptyText?: string;
   emptyHint?: string;
+  /** 답변 완료 (자동 읽기 전에 호출) */
+  onReply?: (text: string) => void;
+  onBusy?: (busy: boolean) => void;
+  /** 음성 입력 등 외부에서 보내기. n 바뀔 때마다 전송 */
+  external?: { text: string; n: number } | null;
 }) {
   const { persona } = props;
   const tts = useTtsSettings();
@@ -219,12 +225,22 @@ export function Chat(props: {
       const list = await refresh(id).catch(() => null);
       void loadConvs();
       const last = list?.at(-1);
+      if (ok && replyRef.current.trim()) props.onReply?.(last?.role === 'ASSISTANT' ? last.content : replyRef.current);
       if (ok && autoRef.current && replyRef.current.trim()) {
         const sid = last?.role === 'ASSISTANT' ? `msg-${last.id}` : `auto-${Date.now()}`;
         void speak(sid, last?.role === 'ASSISTANT' ? last.content : replyRef.current).catch(() => undefined);
       }
     }
   };
+
+  const onBusy = props.onBusy;
+  useEffect(() => onBusy?.(busy), [busy, onBusy]);
+
+  const extN = props.external?.n;
+  useEffect(() => {
+    if (extN && props.external?.text.trim()) void send(props.external.text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extN]);
 
   const aiPlaceholder = (aiId: string): Message => ({
     id: aiId,
@@ -493,6 +509,7 @@ export function Chat(props: {
           {messages.map((m, i) => {
             const isUser = m.role === 'USER';
             const streamingThis = busy && i === lastIdx && !isUser;
+            const shown = persona && !isUser ? stripTag(m.content) : m.content;
             if (isUser && editing === m.id) {
               return <EditBox key={m.id} initial={m.content} onSave={saveEdit} onCancel={() => setEditing(null)} />;
             }
@@ -501,8 +518,8 @@ export function Chat(props: {
                 <div className="bubble">
                   {isUser ? (
                     <div className="plain">{m.content}</div>
-                  ) : m.content ? (
-                    <Markdown text={m.content} />
+                  ) : shown ? (
+                    <Markdown text={shown} />
                   ) : streamingThis ? (
                     <div className="phase" role="status">
                       <span className="spinner" aria-hidden />
@@ -510,7 +527,7 @@ export function Chat(props: {
                       {elapsed >= 3 && <span className="muted"> · {elapsed}초</span>}
                     </div>
                   ) : null}
-                  {streamingThis && m.content && phase === 'generating' && <span className="caret" aria-hidden />}
+                  {streamingThis && shown && phase === 'generating' && <span className="caret" aria-hidden />}
                   {m.stopped && !streamingThis && <span className="stopped-tag">중단됨</span>}
                 </div>
                 {streamingThis && (
@@ -522,7 +539,7 @@ export function Chat(props: {
                 )}
                 {!streamingThis && m.content && (
                   <div className="msg-acts">
-                    <CopyButton text={m.content} />
+                    <CopyButton text={shown} />
                     {!isUser && <SpeakButton id={`msg-${m.id}`} text={m.content} />}
                     {isUser && i === lastUserIdx && !busy && !m.id.startsWith('tmp-') && (
                       <button className="tool" onClick={() => setEditing(m.id)}>

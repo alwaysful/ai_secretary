@@ -39,6 +39,7 @@ function setup() {
   const actions: any = { plan: jest.fn().mockResolvedValue(null) };
   const memory: any = { plan: jest.fn().mockResolvedValue(null), context: jest.fn().mockResolvedValue(null) };
   const pc: any = { plan: jest.fn().mockReturnValue(null) };
+  const companion: any = { promptContext: jest.fn().mockResolvedValue('BOND'), afterReply: jest.fn() };
   return {
     prisma,
     model,
@@ -46,7 +47,7 @@ function setup() {
     tools,
     actions,
     memory,
-    service: new ConversationService(prisma, model, config, tools, settings, actions, memory, pc),
+    service: new ConversationService(prisma, model, config, tools, settings, actions, memory, pc, companion),
   };
 }
 

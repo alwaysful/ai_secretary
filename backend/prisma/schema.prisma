@@ -94,6 +94,10 @@ model AppSettings {
   companionPresets Json?
   /// 사용할 Live2D 모델 id (data/live2d/<id>)
   companionModel  String?
+  /// AI 친구 호감도 0~100
+  companionAffinity Int     @default(30)
+  /// AI 친구 마지막 대화 시각
+  companionLastAt   DateTime?
   /// 외부 API 월 비용 한도 (USD). null = 없음
   budgetUsd     Float?
   /// 한도 대비 경고 비율 (%)

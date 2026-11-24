@@ -66,6 +66,11 @@ class PersonaDto {
   prompt!: string;
 }
 
+class BondDto {
+  @IsNumber() @Min(0) @Max(100)
+  affinity!: number;
+}
+
 class ModelPickDto {
   @IsOptional() @IsString() @MaxLength(64)
   id!: string | null;
@@ -120,6 +125,18 @@ export class AdminController {
   async setCompanion(@Body() dto: CompanionDto) {
     await this.settings.update({ companionPrompt: dto.prompt });
     return this.companionSvc.view();
+  }
+
+  @UseGuards(AdminGuard)
+  @Get('companion/bond')
+  bond() {
+    return this.companionSvc.bond();
+  }
+
+  @UseGuards(AdminGuard)
+  @Put('companion/bond')
+  setBond(@Body() dto: BondDto) {
+    return this.companionSvc.setAffinity(dto.affinity);
   }
 
   @UseGuards(AdminGuard)
