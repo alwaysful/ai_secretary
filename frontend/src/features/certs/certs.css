@@ -27,3 +27,4 @@
   .cert-info { max-width: none; }
   .cert-info::before { content: attr(data-label) ' '; color: var(--muted); font-size: 12px; }
 }
+.cert-more { align-self: center; margin: 8px auto; display: block; }

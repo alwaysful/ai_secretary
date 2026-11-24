@@ -1,3 +1,5 @@
+import { otherOrg, QGrade, QNET_ALL, QNET_ALWAYS } from './catalog-qnet';
+
 /** 자격증 분야 (공모전 분야 태그처럼 고정 목록) */
 export const CERT_FIELDS = [
   '정보통신/IT',
@@ -44,6 +46,8 @@ export interface CatalogCert {
   prep: string | null;
   /** 응시료 (참고값) */
   fee: string | null;
+  /** 유효기간 (참고값) */
+  validity: string | null;
 }
 
 const QNET = 'https://www.q-net.or.kr';
@@ -258,6 +262,30 @@ const DATA: Record<string, Row[]> = {
     ['ln-jpt', 'JPT', '어학', null, 'YBM', 'https://www.jpt.co.kr', null],
     ['ln-hsk', 'HSK (중국어)', '어학', '1~6급', '중국 국가한반', 'https://www.hsk.or.kr', null],
     ['ln-topik', 'TOPIK (한국어능력시험)', '어학', null, '국립국제교육원', 'https://www.topik.go.kr', null],
+    ['ln-toeicb', 'TOEIC Bridge', '어학', null, 'YBM 한국TOEIC위원회', 'https://www.toeic.co.kr', null, '입문 영어'],
+    ['ln-gtelp', 'G-TELP', '어학', 'Level 1~5', '한국 G-TELP 위원회', 'https://www.g-telp.co.kr', null, '공무원·군무원 영어 대체'],
+    ['ln-flex', 'FLEX (외국어능력시험)', '어학', null, '한국외국어대학교', 'https://flex.hufs.ac.kr', null, '영어·중국어·일본어·스페인어 등 다언어'],
+    ['ln-pte', 'PTE Academic', '어학', null, 'Pearson', 'https://www.pearsonpte.com', null, '유학·이민. 컴퓨터 시험'],
+    ['ln-det', 'Duolingo English Test', '어학', null, 'Duolingo', 'https://englishtest.duolingo.com', null, '온라인 응시'],
+    ['ln-cae', 'Cambridge C1 Advanced', '어학', 'C1', 'Cambridge English', 'https://www.cambridgeenglish.org', null],
+    ['ln-sjpt', 'SJPT (일본어 말하기)', '어학', null, 'YBM', 'https://www.ybmsisa.com', null],
+    ['ln-jtest', 'J.TEST (실용일본어검정)', '어학', null, 'J.TEST 한국위원회', 'https://www.jtest.or.kr', null],
+    ['ln-hskk', 'HSKK (중국어 말하기)', '어학', '초·중·고급', '중국 국가한반', 'https://www.hsk.or.kr', null],
+    ['ln-tsc', 'TSC (중국어 말하기)', '어학', null, 'YBM', 'https://www.ybmsisa.com', null],
+    ['ln-tocfl', 'TOCFL (대만 중국어)', '어학', null, '대만 화어문능력시험위원회', 'https://tocfl.edu.tw', null, '대만 유학·장학'],
+    ['ln-dele', 'DELE (스페인어)', '어학', 'A1~C2', '세르반테스 문화원', 'https://examenes.cervantes.es', null, '스페인 교육부 공인'],
+    ['ln-siele', 'SIELE (스페인어)', '어학', null, '세르반테스 문화원', 'https://siele.org', null, '컴퓨터 시험'],
+    ['ln-delf', 'DELF (프랑스어)', '어학', 'A1~B2', '프랑스 교육부 (FEI)', 'https://www.france-education-international.fr', null, '프랑스 교육부 공인'],
+    ['ln-dalf', 'DALF (프랑스어)', '어학', 'C1~C2', '프랑스 교육부 (FEI)', 'https://www.france-education-international.fr', null, '고급 프랑스어'],
+    ['ln-tcf', 'TCF (프랑스어)', '어학', null, '프랑스 교육부 (FEI)', 'https://www.france-education-international.fr', null],
+    ['ln-tef', 'TEF (프랑스어)', '어학', null, '파리 상공회의소', 'https://www.lefrancaisdesaffaires.fr', null, '캐나다 이민 등'],
+    ['ln-goethe', 'Goethe-Zertifikat (독일어)', '어학', 'A1~C2', '괴테 인스티투트', 'https://www.goethe.de/korea', null],
+    ['ln-testdaf', 'TestDaF (독일어)', '어학', null, 'TestDaF-Institut', 'https://www.testdaf.de', null, '독일 대학 입학'],
+    ['ln-torfl', 'TORFL (러시아어)', '어학', '1~4단계', '러시아 교육부', 'https://www.google.com/search?q=TORFL', null],
+    ['ln-cils', 'CILS (이탈리아어)', '어학', 'A1~C2', '시에나 외국인대학', 'https://cils.unistrasi.it', null],
+    ['ln-celi', 'CELI (이탈리아어)', '어학', 'A1~C2', '페루자 외국인대학', 'https://www.cvcl.it', null],
+    ['ln-plida', 'PLIDA (이탈리아어)', '어학', 'A1~C2', '단테 알리기에리 협회', 'https://plida.it', null],
+    ['ln-caple', 'CAPLE (포르투갈어)', '어학', 'A1~C2', '리스본 대학교', 'https://caple.letras.ulisboa.pt', null],
   ],
 };
 
@@ -351,13 +379,100 @@ const EXTRA: Record<string, { prep?: string; fee?: string }> = {
   'ln-topik': { fee: '약 4~5.5만원' },
 };
 
-export const CATALOG: CatalogCert[] = Object.entries(DATA).flatMap(([field, rows]) =>
+/** 유효기간 (참고값). 국가자격은 기본 평생 */
+const VALIDITY: Record<string, string> = {
+  'it-sqld': '없음',
+  'it-sqlp': '없음',
+  'it-adsp': '없음',
+  'it-adp': '없음',
+  'it-aws-saa': '3년',
+  'it-cka': '2년',
+  'fn-afpk': '2년 (계속교육으로 갱신)',
+  'fn-cfa': '평생 (회원 자격은 연회비)',
+  'sf-fire1': '없음 (선임 시 2년마다 실무교육)',
+  'ed-history': '없음 (기관별 인정기간 상이)',
+  'ed-hanja': '없음',
+  'ln-toeic': '2년',
+  'ln-toeics': '2년',
+  'ln-toeicb': '2년',
+  'ln-opic': '2년',
+  'ln-teps': '2년',
+  'ln-toefl': '2년',
+  'ln-ielts': '2년 (기관별)',
+  'ln-gtelp': '2년',
+  'ln-flex': '2년',
+  'ln-pte': '2년',
+  'ln-det': '2년',
+  'ln-cae': '평생 (기관별 2년 인정도 있음)',
+  'ln-jlpt': '없음 (기관별 2년 인정 많음)',
+  'ln-jpt': '2년',
+  'ln-sjpt': '2년',
+  'ln-jtest': '2년 (기관별)',
+  'ln-hsk': '2년',
+  'ln-hskk': '2년',
+  'ln-tsc': '2년',
+  'ln-tocfl': '2년',
+  'ln-topik': '2년',
+  'ln-dele': '평생',
+  'ln-siele': '5년',
+  'ln-delf': '평생',
+  'ln-dalf': '평생',
+  'ln-tcf': '2년',
+  'ln-tef': '2년 (이민용 기준)',
+  'ln-goethe': '평생 (기관별 인정기간 상이)',
+  'ln-testdaf': '평생 (대학별 인정기간 상이)',
+  'ln-torfl': '평생 (기관별)',
+  'ln-cils': '평생',
+  'ln-celi': '평생',
+  'ln-plida': '평생',
+  'ln-caple': '평생',
+};
+
+const validityOf = (id: string, kind: string) =>
+  VALIDITY[id] ?? (kind === '국가기술' || kind === '국가전문' ? '평생 (만료 없음)' : null);
+
+const BASE: CatalogCert[] = Object.entries(DATA).flatMap(([field, rows]) =>
   rows.map(([id, name, kind, grade, org, url, series, summary]) => {
     const d = defaults(kind, grade, series);
     const x = EXTRA[id] ?? {};
-    return { id, name, field, kind, grade, org, url, series, summary: summary ?? null, prep: x.prep ?? d.prep, fee: x.fee ?? d.fee };
+    return { id, name, field, kind, grade, org, url, series, summary: summary ?? null, prep: x.prep ?? d.prep, fee: x.fee ?? d.fee, validity: validityOf(id, kind) };
   }),
 );
+
+/** 국가기술 전 종목 (기본 목록에 없는 이름만). id = q-이름 */
+const BULK: CatalogCert[] = (() => {
+  const seen = new Set(BASE.map((c) => c.name.replace(/\s/g, '')));
+  const out: CatalogCert[] = [];
+  for (const [field, grades] of Object.entries(QNET_ALL)) {
+    for (const [grade, names] of Object.entries(grades) as [QGrade, string[]][]) {
+      for (const name of names) {
+        const key = name.replace(/\s/g, '');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const other = otherOrg(name);
+        const series = other ? null : QNET_ALWAYS.has(name) ? 'qnet-상시' : seriesOfGrade(grade);
+        const d = defaults('국가기술', grade, series ?? `qnet-${grade}`);
+        out.push({
+          id: `q-${key}`,
+          name,
+          field,
+          kind: '국가기술',
+          grade,
+          org: other?.org ?? HRD,
+          url: other?.url ?? QNET,
+          series,
+          summary: null,
+          prep: d.prep,
+          fee: d.fee,
+          validity: '평생 (만료 없음)',
+        });
+      }
+    }
+  }
+  return out;
+})();
+
+export const CATALOG: CatalogCert[] = [...BASE, ...BULK];
 
 /** Q-net 직무분야 → 자격증 분야 */
 export function fieldOfQnet(obligfld: string): string {
@@ -380,7 +495,8 @@ export function fieldOfQnet(obligfld: string): string {
 }
 
 /** 등급 → Q-net 정기 묶음 (상시 여부는 알 수 없어 정기로) */
-export const seriesOfGrade = (grade: string) =>
-  /기술사/.test(grade) ? 'qnet-기술사' : /기능장/.test(grade) ? 'qnet-기능장' : /기능사/.test(grade) ? 'qnet-기능사' : 'qnet-기사';
+export function seriesOfGrade(grade: string): string {
+  return /기술사/.test(grade) ? 'qnet-기술사' : /기능장/.test(grade) ? 'qnet-기능장' : /기능사/.test(grade) ? 'qnet-기능사' : 'qnet-기사';
+}
 
 export const defaultsOf = defaults;

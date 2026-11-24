@@ -59,8 +59,9 @@ function nearest(c: Cert): CertExam | undefined {
 function PrepFeeForm(props: { cert: Cert; onDone: (c?: Cert) => void }) {
   const [prep, setPrep] = useState(props.cert.prep ?? '');
   const [fee, setFee] = useState(props.cert.fee ?? '');
+  const [validity, setValidity] = useState(props.cert.validity ?? '');
   const [error, setError] = useState('');
-  const save = (b: { prep: string | null; fee: string | null }) =>
+  const save = (b: { prep: string | null; fee: string | null; validity: string | null }) =>
     certApi.update(props.cert.id, b).then(
       (c) => props.onDone(c),
       (e: unknown) => setError(errMsg(e)),
@@ -76,12 +77,16 @@ function PrepFeeForm(props: { cert: Cert; onDone: (c?: Cert) => void }) {
           응시료
           <input value={fee} onChange={(e) => setFee(e.target.value)} placeholder="예: 필기 19,400원" />
         </label>
+        <label>
+          유효기간
+          <input value={validity} onChange={(e) => setValidity(e.target.value)} placeholder="예: 2년, 평생" />
+        </label>
       </div>
       {error && <p className="error">{error}</p>}
       <div className="cert-form-btns">
-        <button onClick={() => void save({ prep, fee })}>저장</button>
-        {(props.cert.prepEdited || props.cert.feeEdited) && (
-          <button className="ghost" onClick={() => void save({ prep: null, fee: null })}>
+        <button onClick={() => void save({ prep, fee, validity })}>저장</button>
+        {(props.cert.prepEdited || props.cert.feeEdited || props.cert.validityEdited) && (
+          <button className="ghost" onClick={() => void save({ prep: null, fee: null, validity: null })}>
             기본값으로
           </button>
         )}
@@ -123,6 +128,7 @@ function CertForm(props: { meta: CertMeta; field: string; onDone: (c?: Cert) => 
         <input placeholder="등급 (선택)" value={b.grade ?? ''} onChange={set('grade')} />
         <input placeholder="시행기관" value={b.org} onChange={set('org')} />
         <input placeholder="공식 사이트 https://…" value={b.url ?? ''} onChange={set('url')} />
+        <input placeholder="유효기간 (예: 2년)" value={b.validity ?? ''} onChange={set('validity')} />
         <input className="wide" placeholder="메모 (선택)" value={b.summary ?? ''} onChange={set('summary')} />
       </div>
       {error && <p className="error">{error}</p>}
@@ -195,6 +201,8 @@ export function CertPage(props: { onBack: () => void }) {
   const [adding, setAdding] = useState(false);
   const [keyBox, setKeyBox] = useState(false);
   const [error, setError] = useState('');
+  /** 한 번에 보여줄 줄 수 (500개 넘어서 나눠 그림) */
+  const [shown, setShown] = useState(100);
 
   const filter: CertFilter = { field: field || undefined, kind: kind || undefined, starred, q: q.trim() || undefined };
 
@@ -215,6 +223,8 @@ export function CertPage(props: { onBack: () => void }) {
   useEffect(() => {
     certApi.meta().then(setMeta, (e: unknown) => setError(errMsg(e)));
   }, []);
+
+  useEffect(() => setShown(100), [field, kind, starred, q]);
 
   useEffect(() => {
     const t = setTimeout(() => void load(), 200);
@@ -307,7 +317,7 @@ export function CertPage(props: { onBack: () => void }) {
             }}
           />
         )}
-        {view === 'list' && <p className="muted cert-note">준비기간·응시료는 참고값(해마다 바뀜). 정확한 금액은 공식 사이트 확인, ✎로 직접 수정 가능.</p>}
+        {view === 'list' && <p className="muted cert-note">준비기간·응시료·유효기간은 참고값(해마다 바뀜). 정확한 값은 공식 사이트 확인, ✎로 직접 수정 가능.</p>}
         {view === 'calendar' && <CertCalendar filter={filter} />}
         {view === 'list' && items === null && !error && <p className="muted">불러오는 중…</p>}
         {view === 'list' && items?.length === 0 && <p className="muted">없음. ＋ 자격증 추가로 직접 등록.</p>}
@@ -320,11 +330,12 @@ export function CertPage(props: { onBack: () => void }) {
                 <th>시험일</th>
                 <th>준비기간</th>
                 <th>응시료</th>
+                <th>유효기간</th>
                 <th>캘린더</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((c) => {
+              {items.slice(0, shown).map((c) => {
                 const next = nearest(c);
                 const expanded = open === c.id;
                 return (
@@ -366,7 +377,7 @@ export function CertPage(props: { onBack: () => void }) {
                           ＋일정
                         </button>
                         <button className="link-like" onClick={() => { setOpen(c.id); setEditFor(c.id); }}>
-                          ✎ 준비기간·응시료
+                          ✎ 준비기간·응시료·유효기간
                         </button>
                         {c.custom && (
                           <button className="link-like danger" onClick={() => removeCert(c)}>
@@ -443,6 +454,10 @@ export function CertPage(props: { onBack: () => void }) {
                       {c.fee ?? <span className="muted">공식 확인</span>}
                       {c.feeEdited && <small className="muted"> ✎</small>}
                     </td>
+                    <td className="cert-info" data-label="유효기간">
+                      {c.validity ?? <span className="muted">-</span>}
+                      {c.validityEdited && <small className="muted"> ✎</small>}
+                    </td>
                     <td className="nt-cal">
                       {next &&
                         gcal(c, next).map((g) => (
@@ -456,6 +471,11 @@ export function CertPage(props: { onBack: () => void }) {
               })}
             </tbody>
           </table>
+        )}
+        {view === 'list' && items && items.length > shown && (
+          <button className="ghost cert-more" onClick={() => setShown(shown + 200)}>
+            더 보기 ({shown} / {items.length})
+          </button>
         )}
       </div>
     </div>
