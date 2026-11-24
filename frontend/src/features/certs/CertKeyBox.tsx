@@ -38,7 +38,7 @@ export function CertKeyBox(props: { onSynced?: () => void }) {
         <a href="https://www.data.go.kr/tcs/dss/selectDataSetList.do?keyword=%EA%B5%AD%EA%B0%80%EC%9E%90%EA%B2%A9%20%EC%8B%9C%ED%97%98%EC%9D%BC%EC%A0%95" target="_blank" rel="noreferrer">
           한국산업인력공단_국가자격 시험일정 조회 ↗
         </a>{' '}
-        활용신청 → 일반 인증키 붙여넣기. Q-net 국가기술(기사·기능사 등)·국가전문 회차 하루 1번 수집.
+        활용신청 → 일반 인증키 붙여넣기. Q-net 회차 일정 하루 1번 수집. 자격증 목록은 DB에 저장해 두고, 새 종목만 주 1번 확인(같은 키로 「국가자격 종목 목록 정보」도 활용신청).
       </p>
       <div className="cert-key-row">
         <input
@@ -48,7 +48,7 @@ export function CertKeyBox(props: { onSynced?: () => void }) {
           onChange={(e) => setKey(e.target.value)}
           autoComplete="off"
         />
-        <button disabled={busy || !key.trim()} onClick={() => void run(() => certApi.setKey(key.trim()).then(() => certApi.sync()), () => { setKey(''); props.onSynced?.(); })}>
+        <button disabled={busy || !key.trim()} onClick={() => void run(() => certApi.setKey(key.trim()).then(() => certApi.sync()).then((c) => certApi.discover().catch(() => c)), () => { setKey(''); props.onSynced?.(); })}>
           저장·수집
         </button>
         {cfg?.key && (
@@ -57,7 +57,10 @@ export function CertKeyBox(props: { onSynced?: () => void }) {
           </button>
         )}
         <button className="ghost" disabled={busy || !hasKey} onClick={() => void run(() => certApi.sync(), props.onSynced)}>
-          ↻ 지금 수집
+          ↻ 일정 수집
+        </button>
+        <button className="ghost" disabled={busy || !hasKey} onClick={() => void run(() => certApi.discover(), props.onSynced)} title="Q-net 국가자격 종목 목록과 비교해 없는 것만 추가">
+          🔎 새 자격증 확인
         </button>
       </div>
       {cfg?.lastSyncAt && (
@@ -65,7 +68,12 @@ export function CertKeyBox(props: { onSynced?: () => void }) {
           마지막 수집 {when.format(new Date(cfg.lastSyncAt))} · {cfg.lastError ? '실패' : `${cfg.lastCount}건`}
         </small>
       )}
-      {(error || cfg?.lastError) && <p className="error">{error || cfg?.lastError}</p>}
+      {cfg?.lastCatalogAt && (
+        <small className="muted">
+          새 자격증 확인 {when.format(new Date(cfg.lastCatalogAt))} · {cfg.lastCatalogError ? '실패' : `${cfg.lastCatalogNew}개 추가`} (주 1회 자동)
+        </small>
+      )}
+      {(error || cfg?.lastError || cfg?.lastCatalogError) && <p className="error">{error || cfg?.lastError || cfg?.lastCatalogError}</p>}
     </div>
   );
 }

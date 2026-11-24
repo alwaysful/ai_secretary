@@ -26,6 +26,11 @@ export interface Cert {
   summary: string | null;
   series: string | null;
   seriesLabel: string | null;
+  prep: string | null;
+  fee: string | null;
+  prepEdited: boolean;
+  feeEdited: boolean;
+  isNew: boolean;
   starred: boolean;
   custom: boolean;
   exams: CertExam[];
@@ -43,6 +48,9 @@ export interface CertConfig {
   lastSyncAt: string | null;
   lastError: string | null;
   lastCount: number;
+  lastCatalogAt: string | null;
+  lastCatalogNew: number;
+  lastCatalogError: string | null;
 }
 
 export interface CertFilter {
@@ -60,6 +68,8 @@ export interface CertInput {
   org?: string;
   url?: string | null;
   summary?: string | null;
+  prep?: string | null;
+  fee?: string | null;
   starred?: boolean;
 }
 
@@ -99,5 +109,6 @@ export const certApi = {
   removeExam: (id: string) => req<void>(`/certs/exams/${id}`, json('DELETE')),
   config: () => req<CertConfig>('/certs/config'),
   setKey: (key: string | null) => req<CertConfig>('/certs/config/key', json('PUT', { key })),
+  discover: () => req<CertConfig>('/certs/discover', json('POST')),
   sync: () => req<CertConfig>('/certs/sync', json('POST')),
 };

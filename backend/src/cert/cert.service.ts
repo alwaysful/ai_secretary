@@ -4,13 +4,17 @@ import { randomUUID } from 'node:crypto';
 import type { CertExam, Certificate, Prisma } from '@prisma/client';
 import { EnvVars } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
-import { CATALOG, CERT_FIELDS, CERT_KINDS, SERIES_LABEL } from './catalog';
-import { norm, parseQnet, QnetGb, QnetPhase, qnetUrl, seriesOf } from './qnet';
+import { CATALOG, CERT_FIELDS, CERT_KINDS, defaultsOf, fieldOfQnet, SERIES_LABEL, seriesOfGrade } from './catalog';
+import { norm, parseJmList, parseQnet, QnetGb, qnetJmUrl, QnetPhase, qnetUrl, seriesOf } from './qnet';
 
 const DAY = 86_400_000;
 /** 자동 수집 주기 */
 const SYNC_EVERY_MS = 24 * 3_600_000;
 const FETCH_TIMEOUT_MS = 20_000;
+/** 새 자격증 확인 주기 (목록은 DB에 두고 가끔만) */
+const CATALOG_EVERY_MS = 7 * DAY;
+/** 새로 찾은 자격증 '새' 표시 기간 */
+const NEW_FOR_MS = 30 * DAY;
 
 export interface ExamView {
   id: string;
@@ -39,6 +43,15 @@ export interface CertView {
   summary: string | null;
   series: string | null;
   seriesLabel: string | null;
+  /** 평균 준비기간 (사용자 값 우선) */
+  prep: string | null;
+  /** 응시료 (사용자 값 우선) */
+  fee: string | null;
+  /** 사용자가 고친 값인지 */
+  prepEdited: boolean;
+  feeEdited: boolean;
+  /** 최근 Q-net 종목 목록에서 새로 추가됨 */
+  isNew: boolean;
   starred: boolean;
   custom: boolean;
   /** 끝나지 않은 회차 (가까운 순) */
@@ -53,6 +66,9 @@ export interface CertConfigView {
   lastSyncAt: Date | null;
   lastError: string | null;
   lastCount: number;
+  lastCatalogAt: Date | null;
+  lastCatalogNew: number;
+  lastCatalogError: string | null;
 }
 
 export interface CertInput {
@@ -63,6 +79,9 @@ export interface CertInput {
   org?: string;
   url?: string | null;
   summary?: string | null;
+  /** 빈 문자열/null = 기본값으로 */
+  prep?: string | null;
+  fee?: string | null;
   starred?: boolean;
 }
 
@@ -159,6 +178,11 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
       summary: c.summary,
       series: c.series,
       seriesLabel: c.series ? (SERIES_LABEL[c.series] ?? c.series) : null,
+      prep: c.userPrep ?? c.prep,
+      fee: c.userFee ?? c.fee,
+      prepEdited: c.userPrep !== null,
+      feeEdited: c.userFee !== null,
+      isNew: !!c.discoveredAt && Date.now() - c.discoveredAt.getTime() < NEW_FOR_MS,
       starred: c.starred,
       custom: c.custom,
       exams: exams.map((e) => this.examView(e)),
@@ -254,6 +278,8 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
         org: b.org?.trim() || '-',
         url: b.url?.trim() || null,
         summary: b.summary?.trim() || null,
+        userPrep: b.prep?.trim() || null,
+        userFee: b.fee?.trim() || null,
         starred: b.starred ?? true,
         custom: true,
         position: (max._max.position ?? 0) + 1,
@@ -268,6 +294,9 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
     this.checkField(b);
     const data: Prisma.CertificateUpdateInput = {};
     if (b.starred !== undefined) data.starred = b.starred;
+    // 준비기간·응시료는 모든 자격증에서 고칠 수 있음 (기본값은 그대로 보관)
+    if (b.prep !== undefined) data.userPrep = b.prep?.trim() || null;
+    if (b.fee !== undefined) data.userFee = b.fee?.trim() || null;
     if (c.custom) {
       if (b.name !== undefined) data.name = b.name.trim();
       if (b.field !== undefined) data.field = b.field;
@@ -332,6 +361,9 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
       lastSyncAt: c.lastSyncAt,
       lastError: c.lastError,
       lastCount: c.lastCount,
+      lastCatalogAt: c.lastCatalogAt,
+      lastCatalogNew: c.lastCatalogNew,
+      lastCatalogError: c.lastCatalogError,
     };
   }
 
@@ -346,6 +378,8 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
     try {
       const c = await this.cfg();
       if (!(await this.key())) return;
+      // 새 자격증은 주 1회만 확인, 나머지는 DB 목록 사용
+      if (!c.lastCatalogAt || Date.now() - c.lastCatalogAt.getTime() >= CATALOG_EVERY_MS) await this.discover().catch(() => undefined);
       if (c.lastSyncAt && Date.now() - c.lastSyncAt.getTime() < SYNC_EVERY_MS) return;
       await this.sync();
     } catch (e) {
@@ -369,6 +403,56 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
     const text = await res.text();
     if (!res.ok) throw new Error(`Q-net API HTTP ${res.status}: ${text.slice(0, 120)}`);
     return text;
+  }
+
+  /**
+   * 새 자격증 확인: Q-net 국가자격 종목 목록과 DB 비교 → 없는 종목만 추가.
+   * 목록 전체는 DB에 저장해 두고 이 확인만 주 1회 (또는 버튼).
+   */
+  async discover(): Promise<CertConfigView> {
+    const key = await this.key();
+    if (!key) throw new BadRequestException('Q-net API 키 없음. 공공데이터포털에서 활용신청 후 입력');
+    await this.cfg();
+    try {
+      const list = parseJmList(await this.fetchText(qnetJmUrl(key)));
+      if (!list.length) throw new Error('Q-net 종목 목록이 비어 있음 (종목 목록 API 활용신청 확인)');
+      const have = await this.prisma.certificate.findMany({ select: { id: true, name: true } });
+      const ids = new Set(have.map((c) => c.id));
+      const names = new Set(have.map((c) => norm(c.name)));
+      const max = await this.prisma.certificate.aggregate({ _max: { position: true } });
+      let pos = (max._max.position ?? 0) + 1;
+      const now = new Date();
+      const fresh = list
+        .filter((j) => !ids.has(`qnet-${j.jmCd}`) && !names.has(norm(j.name)))
+        .map((j) => {
+          const grade = j.grade || null;
+          const series = grade ? seriesOfGrade(grade) : null;
+          const d = defaultsOf('국가기술', grade, series);
+          names.add(norm(j.name));
+          return {
+            id: `qnet-${j.jmCd}`,
+            name: j.name,
+            field: fieldOfQnet(j.obligfld),
+            kind: /전문/.test(j.qualgb) ? '국가전문' : '국가기술',
+            grade,
+            org: '한국산업인력공단',
+            url: 'https://www.q-net.or.kr',
+            series,
+            prep: d.prep,
+            fee: d.fee,
+            position: pos++,
+            discoveredAt: now,
+          };
+        });
+      if (fresh.length) await this.prisma.certificate.createMany({ data: fresh, skipDuplicates: true });
+      await this.prisma.certConfig.update({ where: { id: 1 }, data: { lastCatalogAt: now, lastCatalogNew: fresh.length, lastCatalogError: null } });
+      this.log.log(`새 자격증 ${fresh.length}개 추가 (Q-net 종목 ${list.length}개 확인)`);
+    } catch (e) {
+      const msg = (e as Error).name === 'TimeoutError' ? 'Q-net 종목 목록 응답 시간 초과' : (e as Error).message;
+      await this.prisma.certConfig.update({ where: { id: 1 }, data: { lastCatalogAt: new Date(), lastCatalogError: msg } });
+      throw new BadRequestException(msg);
+    }
+    return this.getConfig();
   }
 
   private async doSync(): Promise<number> {

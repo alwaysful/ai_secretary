@@ -45,6 +45,54 @@ function gcal(c: Cert, e: CertExam) {
   return out;
 }
 
+/** 가장 가까운 접수: 접수 마감 안 지난 첫 회차, 없으면 첫 회차 */
+function nearest(c: Cert): CertExam | undefined {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return c.exams.find((e) => {
+    const end = e.regEnd ?? e.regStart;
+    return end && new Date(end) >= today;
+  }) ?? c.exams[0];
+}
+
+/** 준비기간·응시료 고치기 (빈칸 저장 = 기본값) */
+function PrepFeeForm(props: { cert: Cert; onDone: (c?: Cert) => void }) {
+  const [prep, setPrep] = useState(props.cert.prep ?? '');
+  const [fee, setFee] = useState(props.cert.fee ?? '');
+  const [error, setError] = useState('');
+  const save = (b: { prep: string | null; fee: string | null }) =>
+    certApi.update(props.cert.id, b).then(
+      (c) => props.onDone(c),
+      (e: unknown) => setError(errMsg(e)),
+    );
+  return (
+    <div className="cert-exam-form">
+      <div className="cert-form-grid">
+        <label>
+          평균 준비기간
+          <input value={prep} onChange={(e) => setPrep(e.target.value)} placeholder="예: 2~3개월" />
+        </label>
+        <label>
+          응시료
+          <input value={fee} onChange={(e) => setFee(e.target.value)} placeholder="예: 필기 19,400원" />
+        </label>
+      </div>
+      {error && <p className="error">{error}</p>}
+      <div className="cert-form-btns">
+        <button onClick={() => void save({ prep, fee })}>저장</button>
+        {(props.cert.prepEdited || props.cert.feeEdited) && (
+          <button className="ghost" onClick={() => void save({ prep: null, fee: null })}>
+            기본값으로
+          </button>
+        )}
+        <button className="ghost" onClick={() => props.onDone()}>
+          취소
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const searchUrl = (name: string) => `https://search.naver.com/search.naver?query=${encodeURIComponent(`${name} 시험일정`)}`;
 
 /** 자격증 추가 (직접) */
@@ -143,6 +191,7 @@ export function CertPage(props: { onBack: () => void }) {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [open, setOpen] = useState<string | null>(null);
   const [examFor, setExamFor] = useState<string | null>(null);
+  const [editFor, setEditFor] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [keyBox, setKeyBox] = useState(false);
   const [error, setError] = useState('');
@@ -258,6 +307,7 @@ export function CertPage(props: { onBack: () => void }) {
             }}
           />
         )}
+        {view === 'list' && <p className="muted cert-note">준비기간·응시료는 참고값(해마다 바뀜). 정확한 금액은 공식 사이트 확인, ✎로 직접 수정 가능.</p>}
         {view === 'calendar' && <CertCalendar filter={filter} />}
         {view === 'list' && items === null && !error && <p className="muted">불러오는 중…</p>}
         {view === 'list' && items?.length === 0 && <p className="muted">없음. ＋ 자격증 추가로 직접 등록.</p>}
@@ -266,14 +316,16 @@ export function CertPage(props: { onBack: () => void }) {
             <thead>
               <tr>
                 <th>자격증 · 내용</th>
-                <th>다음 접수</th>
+                <th>가장 가까운 접수</th>
                 <th>시험일</th>
+                <th>준비기간</th>
+                <th>응시료</th>
                 <th>캘린더</th>
               </tr>
             </thead>
             <tbody>
               {items.map((c) => {
-                const next = c.exams[0];
+                const next = nearest(c);
                 const expanded = open === c.id;
                 return (
                   <tr key={c.id} className={c.starred ? 'starred' : ''}>
@@ -286,6 +338,7 @@ export function CertPage(props: { onBack: () => void }) {
                           <span className="news-title">
                             {c.name}
                             {c.grade && !c.name.includes(c.grade) && <small className="muted"> {c.grade}</small>}
+                            {c.isNew && <b className="news-dot">N</b>}
                           </span>
                         </button>
                       </div>
@@ -293,7 +346,7 @@ export function CertPage(props: { onBack: () => void }) {
                       <span className="news-meta">
                         <span className="news-tag">#{c.field}</span>
                         <span>{c.kind}</span>
-                        <span>{c.org}</span>
+                        <span>주관 {c.org}</span>
                         {c.seriesLabel && <span>{c.seriesLabel}</span>}
                         {c.custom && <span>직접 추가</span>}
                       </span>
@@ -311,6 +364,9 @@ export function CertPage(props: { onBack: () => void }) {
                         </button>
                         <button className="link-like" onClick={() => { setOpen(c.id); setExamFor(c.id); }}>
                           ＋일정
+                        </button>
+                        <button className="link-like" onClick={() => { setOpen(c.id); setEditFor(c.id); }}>
+                          ✎ 준비기간·응시료
                         </button>
                         {c.custom && (
                           <button className="link-like danger" onClick={() => removeCert(c)}>
@@ -344,6 +400,15 @@ export function CertPage(props: { onBack: () => void }) {
                               )}
                             </div>
                           ))}
+                          {editFor === c.id && (
+                            <PrepFeeForm
+                              cert={c}
+                              onDone={(n) => {
+                                setEditFor(null);
+                                if (n) replace(n);
+                              }}
+                            />
+                          )}
                           {examFor === c.id && (
                             <ExamForm
                               cert={c}
@@ -369,6 +434,14 @@ export function CertPage(props: { onBack: () => void }) {
                     </td>
                     <td className="nt-period" data-label="시험">
                       {next ? range(next.examStart, next.examEnd) : <span className="muted">-</span>}
+                    </td>
+                    <td className="cert-info" data-label="준비">
+                      {c.prep ?? <span className="muted">-</span>}
+                      {c.prepEdited && <small className="muted"> ✎</small>}
+                    </td>
+                    <td className="cert-info" data-label="응시료">
+                      {c.fee ?? <span className="muted">공식 확인</span>}
+                      {c.feeEdited && <small className="muted"> ✎</small>}
                     </td>
                     <td className="nt-cal">
                       {next &&

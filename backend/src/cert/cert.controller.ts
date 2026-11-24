@@ -50,6 +50,12 @@ export class CertUpdateDto {
   @IsOptional() @Transform(emptyNull) @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(300)
   summary?: string | null;
 
+  @IsOptional() @Transform(emptyNull) @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(60)
+  prep?: string | null;
+
+  @IsOptional() @Transform(emptyNull) @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(80)
+  fee?: string | null;
+
   @IsOptional() @IsBoolean()
   starred?: boolean;
 }
@@ -115,6 +121,11 @@ export class CertController {
   @Put('config/key')
   setKey(@Body() b: CertKeyDto) {
     return this.certs.setKey(b.key ?? null);
+  }
+
+  @Post('discover')
+  discover() {
+    return this.certs.discover();
   }
 
   @Post('sync')
