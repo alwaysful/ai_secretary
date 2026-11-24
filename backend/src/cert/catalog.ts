@@ -1,3 +1,4 @@
+import { PRIVATE_CERTS } from './catalog-private';
 import { otherOrg, QGrade, QNET_ALL, QNET_ALWAYS } from './catalog-qnet';
 
 /** 자격증 분야 (공모전 분야 태그처럼 고정 목록) */
@@ -39,7 +40,7 @@ export interface CatalogCert {
   kind: string;
   grade: string | null;
   org: string;
-  url: string;
+  url: string | null;
   series: string | null;
   summary: string | null;
   /** 평균 준비기간 (참고값) */
@@ -440,8 +441,35 @@ const BASE: CatalogCert[] = Object.entries(DATA).flatMap(([field, rows]) =>
 );
 
 /** 국가기술 전 종목 (기본 목록에 없는 이름만). id = q-이름 */
-const BULK: CatalogCert[] = (() => {
+/** 국가공인 민간·유명 민간 (기본 목록에 없는 이름만) */
+const PRIVATE: CatalogCert[] = (() => {
   const seen = new Set(BASE.map((c) => c.name.replace(/\s/g, '')));
+  return PRIVATE_CERTS.filter((c) => {
+    const k = c.name.replace(/\s/g, '');
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  }).map((c) => {
+    const d = defaults(c.kind, c.grade, null);
+    return {
+      id: c.id,
+      name: c.name,
+      field: c.field,
+      kind: c.kind,
+      grade: c.grade,
+      org: c.org,
+      url: c.url,
+      series: null,
+      summary: c.summary ?? null,
+      prep: c.prep ?? d.prep,
+      fee: c.fee ?? null,
+      validity: c.validity ?? (c.kind === '국가전문' ? '평생 (만료 없음)' : null),
+    };
+  });
+})();
+
+const BULK: CatalogCert[] = (() => {
+  const seen = new Set([...BASE, ...PRIVATE].map((c) => c.name.replace(/\s/g, '')));
   const out: CatalogCert[] = [];
   for (const [field, grades] of Object.entries(QNET_ALL)) {
     for (const [grade, names] of Object.entries(grades) as [QGrade, string[]][]) {
@@ -472,7 +500,7 @@ const BULK: CatalogCert[] = (() => {
   return out;
 })();
 
-export const CATALOG: CatalogCert[] = [...BASE, ...BULK];
+export const CATALOG: CatalogCert[] = [...BASE, ...PRIVATE, ...BULK];
 
 /** Q-net 직무분야 → 자격증 분야 */
 export function fieldOfQnet(obligfld: string): string {
