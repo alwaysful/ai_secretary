@@ -248,7 +248,8 @@ export class VocabService {
       this.prisma.vocabCard.count({ where: { deckId: id } }),
       this.prisma.vocabCard.count({ where: { deckId: id, known: true } }),
     ]);
-    const list = opts.shuffle ? shuffle(left) : left;
+    // 2회독부터 = 다시 공부 단어만 → 랜덤 순서
+    const list = opts.shuffle || d.round > 1 ? shuffle(left) : left;
     return { round: d.round, total, left: left.length, known, cards: list.slice(0, ROUND_BATCH) };
   }
 
@@ -266,14 +267,24 @@ export class VocabService {
     return card;
   }
 
-  /** 다음 회독 시작. unknownOnly면 외운 카드는 이번 회독에서 건너뜀 */
+  /**
+   * 다음 회독. unknownOnly: 다시 공부 단어만 (외운 카드는 이번 회독 건너뜀, 순서 랜덤).
+   * 아니면 처음부터 전체 다시: 1회독으로 돌아가고 외움 표시 지움 (틀린 횟수는 유지)
+   */
   async nextRound(id: string, unknownOnly: boolean) {
     const d = await this.deck(id);
-    const next = d.round + 1;
-    await this.prisma.$transaction([
-      this.prisma.vocabDeck.update({ where: { id }, data: { round: next } }),
-      ...(unknownOnly ? [this.prisma.vocabCard.updateMany({ where: { deckId: id, known: true }, data: { roundSeen: next } })] : []),
-    ]);
+    if (unknownOnly) {
+      const next = d.round + 1;
+      await this.prisma.$transaction([
+        this.prisma.vocabDeck.update({ where: { id }, data: { round: next } }),
+        this.prisma.vocabCard.updateMany({ where: { deckId: id, known: true }, data: { roundSeen: next } }),
+      ]);
+    } else {
+      await this.prisma.$transaction([
+        this.prisma.vocabDeck.update({ where: { id }, data: { round: 1 } }),
+        this.prisma.vocabCard.updateMany({ where: { deckId: id }, data: { roundSeen: 0, known: false } }),
+      ]);
+    }
     return this.round(id);
   }
 
