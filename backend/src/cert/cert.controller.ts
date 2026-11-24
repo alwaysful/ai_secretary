@@ -162,6 +162,12 @@ export class CertController {
     return this.certs.remove(id);
   }
 
+  /** 취득자 통계 (「설명」 열 때, 30일 캐시) */
+  @Get(':id/stats')
+  stats(@Param('id') id: string) {
+    return this.certs.stats(id);
+  }
+
   @Post(':id/exams')
   addExam(@Param('id') id: string, @Body() b: ExamDto) {
     return this.certs.addExam(id, b);

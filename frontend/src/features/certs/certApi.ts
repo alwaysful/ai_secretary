@@ -39,8 +39,15 @@ export interface Cert {
   starred: boolean;
   custom: boolean;
   /** 간단 설명 (「설명」 버튼) */
-  detail: { label: string; text: string }[] | null;
+  detail: { label: string; text: string; links?: { label: string; url: string }[] }[] | null;
   exams: CertExam[];
+}
+
+export interface CertStats {
+  stats: { years: { year: number; count: number }[]; total: number } | null;
+  at: string | null;
+  /** 통계 없는 이유 등 */
+  note: string | null;
 }
 
 export interface CertMeta {
@@ -124,4 +131,5 @@ export const certApi = {
   setKey: (key: string | null) => req<CertConfig>('/certs/config/key', json('PUT', { key })),
   discover: () => req<CertConfig>('/certs/discover', json('POST')),
   sync: () => req<CertConfig>('/certs/sync', json('POST')),
+  stats: (id: string) => req<CertStats>(`/certs/${encodeURIComponent(id)}/stats`),
 };

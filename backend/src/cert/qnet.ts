@@ -205,3 +205,32 @@ export function parseKPrivate(text: string): { items: KPrivate[]; total: number;
   }
   return { items: [...by.values()], total: Number(j.totalCount ?? 0), rows: (j.data as unknown[]).length };
 }
+
+/** Q-net 산업인력 국가기술자격 통계: 종목별 취득자 (jmCd 필수, 종목마다 1회 호출) */
+export const QNET_STAT_URL = 'http://openapi.q-net.or.kr/api/service/rest/InquiryStatSVC/getEventCertYearList';
+
+export function qnetStatUrl(key: string, year: number, jmCd: string): string {
+  const k = key.includes('%') ? key : encodeURIComponent(key);
+  return `${QNET_STAT_URL}?serviceKey=${k}&baseYY=${year}&jmCd=${encodeURIComponent(jmCd)}`;
+}
+
+export interface CertStats {
+  /** 연도별 취득자 (오래된 해 → 최근 해) */
+  years: { year: number; count: number }[];
+  /** 전체 누적 (baseYY까지) */
+  total: number;
+}
+
+/**
+ * 성별 행(남·여)을 합침. 실측: ilpcnt1 = 5년 구간 이전까지 누적, ilpcnt2~6 = baseYY-4 ~ baseYY.
+ * (baseYY 하나 바꿔 호출하면 한 칸씩 밀리는 것으로 확인)
+ */
+export function parseCertStats(text: string, baseYY: number): CertStats | null {
+  const rows = parseItems(text);
+  if (!rows.length) return null;
+  const num = (v: unknown) => Number(String(v ?? '0').replace(/[^0-9-]/g, '')) || 0;
+  const sum = (k: string) => rows.reduce((a, r) => a + num(pick(r, k)), 0);
+  const years = [2, 3, 4, 5, 6].map((i) => ({ year: baseYY - 6 + i, count: sum(`ilpcnt${i}`) }));
+  const total = sum('ilpcnt1') + years.reduce((a, y) => a + y.count, 0);
+  return { years, total };
+}

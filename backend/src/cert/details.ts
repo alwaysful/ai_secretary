@@ -2,7 +2,7 @@
  * 자격증별 간단 설명 (「설명」 버튼). 항목 이름: 내용. 값은 참고용, 해마다 바뀔 수 있음.
  * 우선 테스트로 의사 국가시험·정보처리기사만. 나머지는 차차 추가.
  */
-export type CertDetail = { label: string; text: string }[];
+export type CertDetail = { label: string; text: string; links?: { label: string; url: string }[] }[];
 
 export const CERT_DETAILS: Record<string, CertDetail> = {
   'it-ipe': [
@@ -14,6 +14,19 @@ export const CERT_DETAILS: Record<string, CertDetail> = {
     { label: '합격 기준', text: '필기: 과목마다 40점 이상 + 평균 60점 이상. 실기: 60점 이상. 필기 붙으면 2년 동안 필기 면제.' },
     { label: '합격률', text: '대략 필기 50~60%대, 실기 20~40%대. 실기가 회차마다 들쭉날쭉.' },
     { label: '쓰임', text: 'IT 기업·공기업 서류 가점, 공무원 전산직 가산점, 정보처리산업기사보다 상위. 실무 능력 증명보다는 기본기 확인용.' },
+    { label: '준비 도서', text: '많이 쓰는 수험서 시리즈: 시나공(길벗), 수제비(건기원), 이기적(영진닷컴). 필기·실기 따로 나옴. 한 시리즈만 골라 끝까지.' },
+    {
+      label: '공부법',
+      text: '필기: 기출 5~7회분 반복 (2~4주). 문제은행 성격이라 기출 위주가 효율적. 실기: 코드 결과 맞히기(C·Java·Python)와 SQL 손으로 직접 풀기, 용어는 약어 위주 암기 (4~6주). 실기 비중이 크니 필기 붙자마자 바로 시작.',
+    },
+    {
+      label: '링크',
+      text: '접수·일정·기출 일부는 Q-net. 연습은 CBT 기출 사이트.',
+      links: [
+        { label: 'Q-net', url: 'https://www.q-net.or.kr' },
+        { label: '전자문제집 CBT (기출 연습)', url: 'https://www.comcbt.com' },
+      ],
+    },
   ],
   'np-doctor': [
     { label: '무엇', text: '의사 면허를 받기 위한 국가시험. 붙어야 의사로 진료할 수 있음 (의료법).' },
@@ -24,5 +37,15 @@ export const CERT_DETAILS: Record<string, CertDetail> = {
     { label: '합격 기준', text: '필기: 총점 60% 이상 + 과목마다 40% 이상. 실기: 국시원이 정한 기준 점수 이상.' },
     { label: '합격률', text: '대략 90%대. 대부분 졸업반이 학교 커리큘럼대로 준비.' },
     { label: '합격 후', text: '의사 면허 → 일반의로 바로 근무하거나, 인턴 1년 + 레지던트 3~4년 수련 후 전문의 시험.' },
+    { label: '준비 도서', text: '따로 정해진 수험서 없음. 학교 강의 자료·의학 교과서 + 국시 대비 요약집·기출 문제집(학교·학생회 자료 많이 씀). 실기는 국시원 공개 문항 위주.' },
+    {
+      label: '공부법',
+      text: '본과 4학년 1학기부터 과목별 요약집 1회독 → 기출 반복 → 모의고사로 약한 과목 보강. 실기는 국시원 공개 증례로 조 짜서 환자 면담·진찰 순서 소리 내 연습.',
+    },
+    {
+      label: '링크',
+      text: '시험 공고·응시 원서·실기 공개 문항은 국시원.',
+      links: [{ label: '한국보건의료인국가시험원', url: 'https://www.kuksiwon.or.kr' }],
+    },
   ],
 };
