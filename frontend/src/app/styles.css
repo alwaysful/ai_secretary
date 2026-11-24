@@ -598,6 +598,7 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; border: 1
 .guide-step.todo .guide-mark { color: var(--err); }
 .guide-cmd { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; overflow-x: auto; }
 .guide-cmd code { flex: 1; white-space: nowrap; font-size: 13px; }
+.guide-input { width: 100%; max-width: 420px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 
 @media print {
   .guide-cmd { background: #f5f5f5 !important; border-color: #ccc !important; break-inside: avoid; }

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Logger, Param, ParseEnumPipe, Post, Put, Query, Req, Res, UseGuards, BadRequestException, Delete, NotFoundException } from '@nestjs/common';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, Length, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, Length, Matches, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import type { LogLevel } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AdminAuthService } from './admin-auth.service';
@@ -16,6 +16,15 @@ import { stopAll } from '../system/system.controller';
 class LoginDto {
   @IsString() @Length(1, 64)
   code!: string;
+}
+
+class CodeDto {
+  @IsString() @Length(1, 64)
+  current!: string;
+
+  /** 공백·줄바꿈 없는 4~64자 */
+  @IsString() @Matches(/^\S{4,64}$/, { message: '새 코드: 공백 없이 4~64자' })
+  next!: string;
 }
 
 class CompanionDto {
@@ -153,6 +162,13 @@ export class AdminController {
   @Delete('live2d/:id')
   deleteLive2d(@Param('id') id: string) {
     return this.companionSvc.removeModel(id);
+  }
+
+  /** 관리자 코드 변경 */
+  @UseGuards(AdminGuard)
+  @Put('code')
+  changeCode(@Body() dto: CodeDto) {
+    return this.auth.changeCode(dto.current, dto.next);
   }
 
   /** 업데이트 확인 (git fetch) */
