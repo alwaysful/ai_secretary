@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { gcalUrl } from '../news/gcal';
 import { CertCalendar } from './CertCalendar';
 import { CertKeyBox } from './CertKeyBox';
@@ -60,8 +60,9 @@ function PrepFeeForm(props: { cert: Cert; onDone: (c?: Cert) => void }) {
   const [prep, setPrep] = useState(props.cert.prep ?? '');
   const [fee, setFee] = useState(props.cert.fee ?? '');
   const [validity, setValidity] = useState(props.cert.validity ?? '');
+  const [score, setScore] = useState(String(props.cert.score));
   const [error, setError] = useState('');
-  const save = (b: { prep: string | null; fee: string | null; validity: string | null }) =>
+  const save = (b: { prep: string | null; fee: string | null; validity: string | null; score: number | null }) =>
     certApi.update(props.cert.id, b).then(
       (c) => props.onDone(c),
       (e: unknown) => setError(errMsg(e)),
@@ -81,12 +82,24 @@ function PrepFeeForm(props: { cert: Cert; onDone: (c?: Cert) => void }) {
           유효기간
           <input value={validity} onChange={(e) => setValidity(e.target.value)} placeholder="예: 2년, 평생" />
         </label>
+        <label>
+          유용도 (0~10)
+          <input type="number" min={0} max={10} step={0.1} value={score} onChange={(e) => setScore(e.target.value)} />
+        </label>
       </div>
       {error && <p className="error">{error}</p>}
       <div className="cert-form-btns">
-        <button onClick={() => void save({ prep, fee, validity })}>저장</button>
-        {(props.cert.prepEdited || props.cert.feeEdited || props.cert.validityEdited) && (
-          <button className="ghost" onClick={() => void save({ prep: null, fee: null, validity: null })}>
+        <button
+          onClick={() => {
+            const n = Math.round(Number(score) * 10) / 10;
+            if (score.trim() === '' || !Number.isFinite(n) || n < 0 || n > 10) return setError('유용도는 0~10 사이 숫자');
+            void save({ prep, fee, validity, score: n === props.cert.score && !props.cert.scoreEdited ? null : n });
+          }}
+        >
+          저장
+        </button>
+        {(props.cert.prepEdited || props.cert.feeEdited || props.cert.validityEdited || props.cert.scoreEdited) && (
+          <button className="ghost" onClick={() => void save({ prep: null, fee: null, validity: null, score: null })}>
             기본값으로
           </button>
         )}
@@ -203,6 +216,9 @@ export function CertPage(props: { onBack: () => void }) {
   const [error, setError] = useState('');
   /** 한 번에 보여줄 줄 수 (500개 넘어서 나눠 그림) */
   const [shown, setShown] = useState(100);
+  /** 유용도 높은 순 정렬 */
+  const [byScore, setByScore] = useState(false);
+  const rows = useMemo(() => (items && byScore ? [...items].sort((a, b) => b.score - a.score) : items), [items, byScore]);
 
   const filter: CertFilter = { field: field || undefined, kind: kind || undefined, starred, q: q.trim() || undefined };
 
@@ -263,7 +279,7 @@ export function CertPage(props: { onBack: () => void }) {
           ⚙ 일정 연동
         </button>
       </header>
-      <div className="subbody">
+      <div className="subbody cert-body">
         {keyBox && (
           <div className="card">
             <CertKeyBox onSynced={() => void load()} />
@@ -317,7 +333,7 @@ export function CertPage(props: { onBack: () => void }) {
             }}
           />
         )}
-        {view === 'list' && <p className="muted cert-note">준비기간·응시료·유효기간은 참고값(해마다 바뀜). 정확한 값은 공식 사이트 확인, ✎로 직접 수정 가능.</p>}
+        {view === 'list' && <p className="muted cert-note">준비기간·응시료·유효기간·유용도(0~10)는 참고값(해마다 바뀜). 정확한 값은 공식 사이트 확인, ✎로 직접 수정 가능.</p>}
         {view === 'calendar' && <CertCalendar filter={filter} />}
         {view === 'list' && items === null && !error && <p className="muted">불러오는 중…</p>}
         {view === 'list' && items?.length === 0 && <p className="muted">없음. ＋ 자격증 추가로 직접 등록.</p>}
@@ -326,6 +342,11 @@ export function CertPage(props: { onBack: () => void }) {
             <thead>
               <tr>
                 <th>자격증 · 내용</th>
+                <th>
+                  <button className={`cert-sort${byScore ? ' on' : ''}`} onClick={() => setByScore(!byScore)} title="유용도 높은 순 정렬 (다시 누르면 기본 순서)">
+                    유용도 {byScore ? '▼' : '↕'}
+                  </button>
+                </th>
                 <th>가장 가까운 접수</th>
                 <th>시험일</th>
                 <th>준비기간</th>
@@ -335,7 +356,7 @@ export function CertPage(props: { onBack: () => void }) {
               </tr>
             </thead>
             <tbody>
-              {items.slice(0, shown).map((c) => {
+              {(rows ?? []).slice(0, shown).map((c) => {
                 const next = nearest(c);
                 const expanded = open === c.id;
                 return (
@@ -377,7 +398,7 @@ export function CertPage(props: { onBack: () => void }) {
                           ＋일정
                         </button>
                         <button className="link-like" onClick={() => { setOpen(c.id); setEditFor(c.id); }}>
-                          ✎ 준비기간·응시료·유효기간
+                          ✎ 준비기간·응시료·유효기간·유용도
                         </button>
                         {c.custom && (
                           <button className="link-like danger" onClick={() => removeCert(c)}>
@@ -431,6 +452,10 @@ export function CertPage(props: { onBack: () => void }) {
                           )}
                         </div>
                       )}
+                    </td>
+                    <td className="cert-score" data-label="유용도" title={c.scoreEdited ? '직접 매긴 값' : '참고값 (✎로 수정)'}>
+                      <b style={{ ['--s' as string]: c.score }}>{c.score.toFixed(1)}</b>
+                      {c.scoreEdited && <small className="muted"> ✎</small>}
                     </td>
                     <td className="nt-period" data-label="접수">
                       {next ? (

@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsDate, IsNotEmpty, IsOptional, IsString, IsUrl, MaxLength, ValidateIf } from 'class-validator';
+import { IsBoolean, IsDate, IsNotEmpty, IsNumber, IsOptional, IsString, IsUrl, Max, MaxLength, Min, ValidateIf } from 'class-validator';
 import { CertService } from './cert.service';
 
 const bool = ({ value }: { value: unknown }) => value === 'true' || value === '1' || value === true;
@@ -58,6 +58,9 @@ export class CertUpdateDto {
 
   @IsOptional() @Transform(emptyNull) @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(60)
   validity?: string | null;
+
+  @IsOptional() @ValidateIf((_, v) => v !== null) @IsNumber({ maxDecimalPlaces: 1 }) @Min(0) @Max(10)
+  score?: number | null;
 
   @IsOptional() @IsBoolean()
   starred?: boolean;

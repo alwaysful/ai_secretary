@@ -32,6 +32,9 @@ export interface Cert {
   prepEdited: boolean;
   feeEdited: boolean;
   validityEdited: boolean;
+  /** 유용도 0~10 (참고값, 직접 수정 가능) */
+  score: number;
+  scoreEdited: boolean;
   isNew: boolean;
   starred: boolean;
   custom: boolean;
@@ -78,6 +81,7 @@ export interface CertInput {
   fee?: string | null;
   validity?: string | null;
   starred?: boolean;
+  score?: number | null;
 }
 
 export interface ExamInput {

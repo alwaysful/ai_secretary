@@ -28,3 +28,19 @@
   .cert-info::before { content: attr(data-label) ' '; color: var(--muted); font-size: 12px; }
 }
 .cert-more { align-self: center; margin: 8px auto; display: block; }
+/* 내용 열 넓게: 나머지 열은 좁게 */
+.subbody.cert-body { width: min(1400px, 100%); }
+@media (min-width: 721px) {
+  .cert-table td.nt-main { display: table-cell; width: 40%; min-width: 360px; }
+  .cert-table td.nt-main > * + * { margin-top: 5px; }
+  .cert-table .nt-summary { -webkit-line-clamp: 4; }
+  .cert-table .cert-info { max-width: 130px; }
+}
+.cert-sort { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.cert-sort.on { color: var(--accent); }
+.cert-score { white-space: nowrap; font-size: 14px; }
+/* 점수 높을수록 진한 초록 */
+.cert-score b { display: inline-block; min-width: 2.6em; text-align: center; padding: 1px 6px; border-radius: 6px; font-variant-numeric: tabular-nums; background: color-mix(in srgb, #2e9d5b calc(var(--s) * 7%), transparent); }
+@media (max-width: 720px) {
+  .cert-score::before { content: attr(data-label) ' '; color: var(--muted); font-size: 12px; }
+}
