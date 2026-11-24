@@ -44,3 +44,12 @@
 @media (max-width: 720px) {
   .cert-score::before { content: attr(data-label) ' '; color: var(--muted); font-size: 12px; }
 }
+/* 「설명」 버튼·펼침 */
+.cert-about-btn { font-size: 12px; border: 1px solid var(--accent); color: var(--accent); background: none; border-radius: 999px; padding: 1px 10px; cursor: pointer; }
+.cert-about-btn.on { background: var(--accent); color: var(--bg); }
+.cert-about { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.cert-about dl { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.cert-about dl > div { display: grid; grid-template-columns: 72px 1fr; gap: 8px; font-size: 13px; line-height: 1.5; }
+.cert-about dt { color: var(--muted); font-weight: 600; }
+.cert-about dd { margin: 0; }
+@media (max-width: 720px) { .cert-about dl > div { grid-template-columns: 1fr; gap: 0; } }
