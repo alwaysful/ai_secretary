@@ -39,8 +39,8 @@ export function Speak(props: { text: string; lang: string | null }) {
   );
 }
 
-/** 플래시카드 한 장. direction=back 이면 뜻 → 단어 */
-export function CardFace(props: { card: VCard; direction: 'front' | 'back'; flipped: boolean; lang: string | null; onFlip?: () => void }) {
+/** 플래시카드 한 장. direction=back 이면 뜻 → 단어. reading: 정답 전에 발음만 보기 */
+export function CardFace(props: { card: VCard; direction: 'front' | 'back'; flipped: boolean; reading?: boolean; lang: string | null; onFlip?: () => void; hint?: string }) {
   const { card: c, flipped } = props;
   const rev = props.direction === 'back';
   useKeys({ s: () => speak(c.front, props.lang), S: () => speak(c.front, props.lang) });
@@ -57,6 +57,7 @@ export function CardFace(props: { card: VCard; direction: 'front' | 'back'; flip
         {!rev && <Speak text={c.front} lang={props.lang} />}
         {c.starred && <span className="vc-star">★</span>}
       </div>
+      {props.reading && !flipped && <div className="vc-reading">{c.reading || '(발음 정보 없음)'}</div>}
       {flipped ? (
         <div className="vc-a">
           {rev ? (
@@ -83,7 +84,7 @@ export function CardFace(props: { card: VCard; direction: 'front' | 'back'; flip
           )}
         </div>
       ) : (
-        <div className="vc-a vc-hidden muted">탭하거나 Space 로 정답 보기</div>
+        <div className="vc-a vc-hidden muted">{props.hint ?? '탭하거나 Space 로 정답 보기'}</div>
       )}
     </div>
   );

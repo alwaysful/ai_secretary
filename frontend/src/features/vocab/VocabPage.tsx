@@ -142,7 +142,7 @@ export function VocabPage(props: { onBack: () => void }) {
             </>
           )}
           <p className="muted vc-keys">
-            단축키: Space 뒤집기 · 1~4 평가 · ←/→ 모름/앎 · S 발음
+            단축키: Space 뒤집기 · 복습 1~4 평가 · 회독 1 발음 · 2 정답 · ← 다시 공부 · → 알고 있음 · S 발음
           </p>
         </div>
       </div>

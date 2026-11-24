@@ -120,3 +120,7 @@
 .vc-set-table input { width: 90px; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
 .vc-body .primary kbd { background: rgba(0, 0, 0, 0.18); border-color: transparent; color: inherit; }
 .vc-tabs button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.vc-round4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.vc-g.pron { border-color: #a78bfa; color: #a78bfa; }
+.vc-g.show { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 560px) { .vc-round4 { grid-template-columns: repeat(2, 1fr); } }

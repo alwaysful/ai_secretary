@@ -1,31 +1,50 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Deck, Round, vocab } from './api';
 import { CardFace, useKeys } from './CardFace';
-import { errMsg } from './lib';
+import { errMsg, speak } from './lib';
 
-/** 회독: 단어장 전체를 한 바퀴씩. 안다/모른다 표시 → 다음 회독은 전체 또는 모르는 것만 */
+/**
+ * 회독: 단어마다 버튼 4개 (발음 보기 · 정답 보기 · 다시 공부하기 · 알고 있음).
+ * 전체를 한 번씩 보면 「다시 공부하기」 단어만 랜덤 순서로 다시 나옴. 다 외우면 끝.
+ */
 export function RoundView(props: { deck: Deck; onChange: () => void }) {
   const [r, setR] = useState<Round | null>(null);
   const [i, setI] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  const [reading, setReading] = useState(false);
   const [shuffle, setShuffle] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [tally, setTally] = useState({ ok: 0, ng: 0 });
+  const [notice, setNotice] = useState('');
 
+  const show = (x: Round) => {
+    setR(x);
+    setI(0);
+    setFlipped(false);
+    setReading(false);
+  };
+
+  /** 2회독부터는 서버가 항상 랜덤 순서 */
   const load = useCallback(
-    (sh = shuffle) =>
-      vocab.round(props.deck.id, sh).then(
-        (x) => {
-          setR(x);
-          setI(0);
-          setFlipped(false);
-        },
-        (e: unknown) => setErr(errMsg(e)),
-      ),
+    () => vocab.round(props.deck.id, shuffle).then(show, (e: unknown) => setErr(errMsg(e))),
     [props.deck.id, shuffle],
   );
   useEffect(() => void load(), [load]);
+
+  /** 한 바퀴 끝: 다시 공부할 단어 있으면 그것만 랜덤으로 이어서 */
+  const finishPass = async (cur: Round) => {
+    const left = cur.total - cur.known;
+    if (left <= 0) {
+      setR({ ...cur, left: 0, cards: [] });
+      return;
+    }
+    await vocab.nextRound(props.deck.id, true);
+    const x = await vocab.round(props.deck.id, shuffle);
+    setNotice(`${cur.round}회독 끝 · 다시 공부할 ${left}개를 랜덤 순서로 이어서`);
+    setTally({ ok: 0, ng: 0 });
+    show(x);
+  };
 
   const card = r?.cards[i];
   const mark = async (known: boolean) => {
@@ -34,10 +53,16 @@ export function RoundView(props: { deck: Deck; onChange: () => void }) {
     try {
       await vocab.roundAnswer(card.id, known);
       setTally((t) => (known ? { ...t, ok: t.ok + 1 } : { ...t, ng: t.ng + 1 }));
-      setR({ ...r, left: r.left - 1, known: r.known + (known && !card.known ? 1 : !known && card.known ? -1 : 0) });
+      const next: Round = { ...r, left: r.left - 1, known: r.known + (known && !card.known ? 1 : !known && card.known ? -1 : 0) };
       setFlipped(false);
-      if (i + 1 >= r.cards.length) await load();
-      else setI(i + 1);
+      setReading(false);
+      if (i + 1 < r.cards.length) {
+        setR(next);
+        setI(i + 1);
+      } else if (next.left > 0) {
+        // 남은 카드 다음 묶음
+        show(await vocab.round(props.deck.id, shuffle));
+      } else await finishPass(next);
       props.onChange();
     } catch (e) {
       setErr(errMsg(e));
@@ -46,94 +71,109 @@ export function RoundView(props: { deck: Deck; onChange: () => void }) {
     }
   };
 
-  const next = async (unknownOnly: boolean) => {
+  /** 처음부터 전체 다시 */
+  const restart = async () => {
     setBusy(true);
     try {
-      const x = await vocab.nextRound(props.deck.id, unknownOnly);
+      await vocab.nextRound(props.deck.id, false);
       setTally({ ok: 0, ng: 0 });
-      if (shuffle) await load();
-      else {
-        setR(x);
-        setI(0);
-      }
+      setNotice('');
+      show(await vocab.round(props.deck.id, shuffle));
       props.onChange();
     } catch (e) {
       setErr(errMsg(e));
     } finally {
       setBusy(false);
     }
+  };
+
+  const pron = () => {
+    if (!card) return;
+    setReading(true);
+    speak(card.front, props.deck.language);
   };
 
   useKeys(
-    flipped
-      ? { ArrowLeft: () => void mark(false), ArrowRight: () => void mark(true), '1': () => void mark(false), '2': () => void mark(true), Space: () => setFlipped(false) }
-      : { Space: () => setFlipped(true), Enter: () => setFlipped(true), ArrowLeft: () => void mark(false), ArrowRight: () => void mark(true) },
+    {
+      '1': pron,
+      '2': () => setFlipped(true),
+      Space: () => setFlipped((f) => !f),
+      Enter: () => setFlipped(true),
+      ArrowLeft: () => void mark(false),
+      '3': () => void mark(false),
+      ArrowRight: () => void mark(true),
+      '4': () => void mark(true),
+    },
     !!card,
   );
 
   if (err) return <p className="error">{err}</p>;
   if (!r) return <p className="muted">불러오는 중…</p>;
-  const seen = r.total - r.left;
-  const pct = r.total ? Math.round((seen / r.total) * 100) : 0;
+  const seen = r.round > 1 ? tally.ok + tally.ng : r.total - r.left;
+  const passTotal = r.round > 1 ? seen + r.left : r.total;
+  const pct = passTotal ? Math.round((seen / passTotal) * 100) : 0;
 
   return (
     <div className="vc-study">
       <div className="vc-round-head">
-        <b>{r.round}회독</b>
+        <b>{r.round === 1 ? '1회독' : `${r.round}회독 · 다시 공부`}</b>
         <div className="bar-track">
           <div className="bar-fill" style={{ width: `${pct}%` }} />
         </div>
         <span className="muted">
-          {seen}/{r.total}
+          {seen}/{passTotal}
         </span>
-        <label className="vc-check">
-          <input
-            type="checkbox"
-            checked={shuffle}
-            onChange={(e) => {
-              setShuffle(e.target.checked);
-            }}
-          />
-          섞기
-        </label>
+        {r.round === 1 && (
+          <label className="vc-check">
+            <input type="checkbox" checked={shuffle} onChange={(e) => setShuffle(e.target.checked)} />
+            섞기
+          </label>
+        )}
       </div>
       <div className="vc-counts">
-        <span className="c-good">외움 {r.known}</span>
-        <span className="c-again">모름 {r.total - r.known}</span>
+        <span className="c-good">알고 있음 {r.known}</span>
+        <span className="c-again">다시 공부 {r.total - r.known}</span>
         <span className="muted">
-          이번 회독 ⭕{tally.ok} ❌{tally.ng}
+          이번 바퀴 ✅{tally.ok} 🔁{tally.ng}
         </span>
       </div>
+      {notice && card && <p className="ok-text vc-center">{notice}</p>}
       {card ? (
         <>
-          <CardFace card={card} direction={props.deck.direction} flipped={flipped} lang={props.deck.language} onFlip={() => setFlipped((f) => !f)} />
-          <div className="vc-round-btns">
-            <button className="vc-g again" disabled={busy} onClick={() => void mark(false)}>
-              ❌ 모름 <kbd>←</kbd>
+          <CardFace
+            card={card}
+            direction={props.deck.direction}
+            flipped={flipped}
+            reading={reading}
+            lang={props.deck.language}
+            onFlip={() => setFlipped((f) => !f)}
+            hint="발음 보기 · 정답 보기로 확인"
+          />
+          <div className="vc-round4">
+            <button className="vc-g pron" disabled={busy} onClick={pron}>
+              🔊 발음 보기 <kbd>1</kbd>
             </button>
-            {!flipped && (
-              <button className="ghost" onClick={() => setFlipped(true)}>
-                뒤집기 <kbd>Space</kbd>
-              </button>
-            )}
+            <button className="vc-g show" disabled={busy || flipped} onClick={() => setFlipped(true)}>
+              👁 정답 보기 <kbd>2</kbd>
+            </button>
+            <button className="vc-g again" disabled={busy} onClick={() => void mark(false)}>
+              🔁 다시 공부하기 <kbd>←</kbd>
+            </button>
             <button className="vc-g good" disabled={busy} onClick={() => void mark(true)}>
-              ⭕ 앎 <kbd>→</kbd>
+              ✅ 알고 있음 <kbd>→</kbd>
             </button>
           </div>
-          {card.wrongCount > 0 && <p className="muted vc-center">지금까지 {card.wrongCount}번 틀림</p>}
+          {card.wrongCount > 0 && <p className="muted vc-center">지금까지 {card.wrongCount}번 다시 공부</p>}
         </>
       ) : (
         <div className="card vc-empty">
-          <h2>🎉 {r.round}회독 완료</h2>
+          <h2>🎉 전부 외움</h2>
           <p>
-            외움 {r.known} / {r.total}. 다음 회독을 시작하세요.
+            {r.total}개 모두 「알고 있음」. {r.round}회독까지 했어요.
           </p>
           <div className="chips">
-            <button className="primary" disabled={busy} onClick={() => void next(true)}>
-              모르는 것만 {r.round + 1}회독 ({r.total - r.known})
-            </button>
-            <button className="ghost" disabled={busy} onClick={() => void next(false)}>
-              전체 {r.round + 1}회독
+            <button className="primary" disabled={busy} onClick={() => void restart()}>
+              처음부터 전체 다시
             </button>
           </div>
         </div>
