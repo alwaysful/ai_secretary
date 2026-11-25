@@ -22,7 +22,7 @@
 | 🛠️ 도구 | STT(음성→글자), OCR(이미지→글자), 내 사이트 목록 |
 | 📇 단어장 | 단어장 JSON 업로드 → Anki식 간격 반복 복습·회독·4지선다 퀴즈·진도 통계. 양식·예시는 앱 안 「📄 단어장 파일 양식」 |
 | 📊 통계 | 공부 시간·위반, 채팅 사용량, 공지 수, API 사용량·예상 비용 |
-| 🎓 자격증 | 별도 앱 `services/cert` (자체 DB·`start-cert.bat`). 공공데이터 주기 수집 → 목록·일정·합격률·공개문제·시험장소. AURA엔 별표·직접 수정값만. [services/cert/README.md](services/cert/README.md) |
+| 🎓 자격증 | 별도 앱 [alwaysful/cert-search](https://github.com/alwaysful/cert-search) (자체 DB·화면·`start-cert.bat`). AURA는 `CERT_API_URL`(기본 http://127.0.0.1:3100)로 호출, 별표·직접 수정값만 AURA DB. `ai_secretary` 옆 폴더 `cert-search` 에 받아 두면 start-aura.bat 가 같이 켬 |
 | 🧠 기억 | 취향·사실·프로젝트 저장 → 모든 대화에 반영 |
 | ⚙️ 설정 | 권한(화면 읽기·PC 조작·마이크·웹캠), 기능별 모델(로컬 / Gemini·Anthropic·OpenAI API), API 키, 시스템 프롬프트 |
 | ⬇️ 모델 받기 | 🦙 Ollama · 🤗 Hugging Face · 🎙 Whisper · 🧩 다른 로컬 앱. 크기·RAM 비교 후 다운로드 |

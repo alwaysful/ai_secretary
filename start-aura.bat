@@ -51,10 +51,11 @@ if errorlevel 1 (
   start "" /min ollama serve
 )
 
-rem 자격증 서비스는 별도 앱 (services\cert, 자체 DB·실행파일). 안 떠 있으면 따로 창으로 실행. 끄려면 set AURA_NO_CERT=1
-if not defined AURA_NO_CERT if exist services\cert\start-cert.bat (
+rem 자격증 서비스는 별도 앱 (레포 alwaysful/cert-search). 기본 위치 ..\cert-search, 바꾸려면 set CERT_HOME=경로. 안 떠 있으면 따로 창으로 실행. 끄려면 set AURA_NO_CERT=1
+if not defined CERT_HOME set "CERT_HOME=%~dp0..\cert-search"
+if not defined AURA_NO_CERT if exist "%CERT_HOME%\start-cert.bat" (
   curl -s -o nul http://127.0.0.1:3100/health
-  if errorlevel 1 start "AURA 자격증 서비스" /min cmd /c "set CERT_NO_BROWSER=1 & services\cert\start-cert.bat"
+  if errorlevel 1 start "자격증 서비스" /min cmd /c "set CERT_NO_BROWSER=1 & "%CERT_HOME%\start-cert.bat""
 )
 
 start "" /min cmd /c "timeout /t 10 /nobreak >nul & start http://127.0.0.1:5173"
