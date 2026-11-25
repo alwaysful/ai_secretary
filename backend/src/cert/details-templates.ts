@@ -168,4 +168,11 @@ const 국가전문: Template = {
   },
 };
 
-export const TEMPLATES: Record<string, Template> = { 기술사, 기사, 산업기사, 기능장, 기능사, 서비스, 상공회의소, 국가전문 };
+/** 국가공인 민간자격. 국가전문 틀, 응시자격 기본 '제한 없음' */
+const 공인민간: Template = {
+  required: ['what', 'exam', 'use', 'orgName'],
+  optional: [...국가전문.optional, 'eligible'],
+  build: (p) => 국가전문.build({ eligible: '제한 없음. 누구나 응시.', ...p }),
+};
+
+export const TEMPLATES: Record<string, Template> = { 기술사, 기사, 산업기사, 기능장, 기능사, 서비스, 상공회의소, 국가전문, 공인민간 };
