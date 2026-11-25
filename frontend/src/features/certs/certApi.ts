@@ -51,6 +51,10 @@ export interface CertStats {
   at: string | null;
   /** 통계 없는 이유 등 */
   note: string | null;
+  /** 큰 숫자 두 번째 칸 이름 (기본 '누적') */
+  totalLabel?: string;
+  /** 응시 대비 취득 비율 (민간자격취득현황) */
+  rate?: string | null;
 }
 
 export interface CertMeta {

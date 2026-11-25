@@ -1,4 +1,7 @@
+import { acqFieldHint, acqGrade, acqId, acqSummary, acqYears, ACQ_ROWS, AcqRow, sameOrg, shortOrg } from './catalog-acq';
 import { PRIVATE_CERTS } from './catalog-private';
+
+const acqNorm = (s: string) => s.replace(/[^0-9A-Za-z가-힣]/g, '').toLowerCase();
 import { PRO_CERTS } from './catalog-pro';
 import { otherOrg, QGrade, QNET_ALL, QNET_ALWAYS } from './catalog-qnet';
 
@@ -50,6 +53,9 @@ export interface CatalogCert {
   fee: string | null;
   /** 유효기간 (참고값) */
   validity: string | null;
+  /** 민간자격취득현황 연도별 취득자 (있으면 설명 탭 막대) */
+  statsYears?: { year: number; count: number }[];
+  statsTotal?: number;
 }
 
 const QNET = 'https://www.q-net.or.kr';
@@ -501,7 +507,72 @@ const BULK: CatalogCert[] = (() => {
   return out;
 })();
 
-export const CATALOG: CatalogCert[] = [...BASE, ...PRIVATE, ...BULK];
+/** 같은 기관 + 이름이 서로 포함되거나 앞 3글자 이상 같음 (가장 많이 겹치는 것) */
+function acqSame(list: CatalogCert[], r: AcqRow): CatalogCert | undefined {
+  const k = acqNorm(r.name);
+  let best: CatalogCert | undefined;
+  let bestLen = 0;
+  for (const c of list) {
+    if (!sameOrg(c.org, r.org)) continue;
+    const n = acqNorm(c.name);
+    let len = n === k || n.includes(k) || k.includes(n) ? 100 : 0;
+    if (!len) {
+      while (len < n.length && len < k.length && n[len] === k[len]) len++;
+      if (len < 3) continue;
+    }
+    if (len > bestLen) [best, bestLen] = [c, len];
+  }
+  return best;
+}
+
+/** 응시 1천명+ 민간자격 (민간자격취득현황). 같은 이름·기관이 이미 있으면 통계만 붙임 */
+export const ACQ_BY_ID = new Map<string, AcqRow>();
+const ACQ: CatalogCert[] = (() => {
+  const existing = [...BASE, ...PRIVATE, ...BULK];
+  const byName = new Map<string, CatalogCert[]>();
+  for (const c of existing) {
+    const k = acqNorm(c.name);
+    byName.set(k, [...(byName.get(k) ?? []), c]);
+  }
+  const used = new Set(byName.keys());
+  const out: CatalogCert[] = [];
+  for (const r of [...ACQ_ROWS].sort((a, b) => b.applicants - a.applicants)) {
+    const stats = { statsYears: acqYears(r), statsTotal: r.acquired };
+    // 같은 기관의 같은(또는 비슷한) 이름이 이미 있으면 그 행에 통계만
+    const same = acqSame(existing, r);
+    if (same && !same.statsYears) {
+      Object.assign(same, stats);
+      ACQ_BY_ID.set(same.id, r);
+      continue;
+    }
+    if (same && acqNorm(same.name) === acqNorm(r.name)) continue;
+    // 같은 이름을 여러 기관이 발급 → 기관 이름 붙여 구분
+    let name = r.name.trim();
+    if (used.has(acqNorm(name))) name = `${name} (${shortOrg(r.org)})`;
+    if (used.has(acqNorm(name))) continue;
+    used.add(acqNorm(name));
+    const id = acqId(r);
+    ACQ_BY_ID.set(id, r);
+    out.push({
+      id,
+      name,
+      field: acqFieldHint(r.name) ?? fieldOfPrivate(r.name, r.ministry),
+      kind: '민간',
+      grade: acqGrade(r.grades),
+      org: shortOrg(r.org),
+      url: null,
+      series: null,
+      summary: acqSummary(r),
+      prep: defaults('민간', null, null).prep,
+      fee: null,
+      validity: null,
+      ...stats,
+    });
+  }
+  return out;
+})();
+
+export const CATALOG: CatalogCert[] = [...BASE, ...PRIVATE, ...BULK, ...ACQ];
 
 /** Q-net 직무분야 → 자격증 분야 */
 export function fieldOfQnet(obligfld: string): string {

@@ -49,7 +49,7 @@ const FIELD: Record<string, number> = {
 
 const round1 = (v: number) => Math.round(Math.min(10, Math.max(0, v)) * 10) / 10;
 
-export function scoreOf(c: { name: string; kind: string; grade: string | null; field: string }): number {
+export function scoreOf(c: { name: string; kind: string; grade: string | null; field: string; statsTotal?: number | null }): number {
   const named = NAMED_N.get(norm(c.name));
   if (named !== undefined) return named;
   const g = c.grade?.trim() ?? '';
@@ -58,5 +58,7 @@ export function scoreOf(c: { name: string; kind: string; grade: string | null; f
   if (/^1급$/.test(g)) v += 0.4;
   else if (/^3급$/.test(g)) v -= 0.4;
   v += FIELD[c.field] ?? 0;
+  // 민간: 5년 취득자 많을수록 조금 가산 (1천명 0, 1만 +0.5, 10만 +1.0)
+  if (c.kind === '민간' && c.statsTotal) v += Math.max(-0.5, Math.min(1.2, Math.log10(c.statsTotal / 1000) * 0.5));
   return round1(v);
 }
