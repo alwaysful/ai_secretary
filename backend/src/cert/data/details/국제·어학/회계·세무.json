@@ -2,6 +2,7 @@
   "mp-aicpa": {
     "tpl": "국제",
     "what": "미국 공인회계사 시험.",
+    "korea": "불가. 국내 시험장 없음. 미국·일본 등 해외 응시.",
     "eligible": "주별 학점 요건 (회계·경영 학점).",
     "exam": "FAR·AUD·REG + 선택 1과목 (각 4시간).",
     "score": "과목마다 75점 이상.",
@@ -15,6 +16,7 @@
   "mp-cma": {
     "tpl": "국제",
     "what": "미국 관리회계사 자격.",
+    "korea": "가능. 서울 Prometric 시험장.",
     "eligible": "학사 + 실무 2년 (인증 시).",
     "exam": "Part 1·Part 2 (각 4시간, 객관식+에세이).",
     "score": "500점 만점 중 360점 이상.",
@@ -28,6 +30,7 @@
   "ac-acca": {
     "tpl": "국제",
     "what": "영국 공인회계사 자격.",
+    "korea": "가능. 국내 시험 (British Council 등).",
     "eligible": "학력별 면제 상이.",
     "exam": "최대 13과목 (Applied Knowledge·Skills·Strategic).",
     "score": "과목마다 50점 이상.",
@@ -41,6 +44,7 @@
   "ac-cia": {
     "tpl": "국제",
     "what": "국제 내부감사 자격.",
+    "korea": "가능. 국내 Pearson VUE 시험장 또는 온라인.",
     "eligible": "학사 + 감사 실무 (인증 시).",
     "exam": "Part 1~3 (객관식).",
     "score": "600점 이상 (250~750 척도).",

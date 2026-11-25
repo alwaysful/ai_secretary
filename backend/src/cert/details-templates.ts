@@ -177,7 +177,7 @@ const 공인민간: Template = {
 
 /** 국제 자격·어학 시험. 점수제·등급제 공통 */
 const 국제: Template = {
-  required: ['what', 'exam', 'score', 'use', 'orgName'],
+  required: ['what', 'exam', 'score', 'use', 'orgName', 'korea'],
   optional: ['sched', 'valid', 'eligible', 'study', 'orgUrl', 'books'],
   build: (p) => {
     const org = s(p, 'orgName');
@@ -185,6 +185,7 @@ const 국제: Template = {
     return [
       { label: '무엇', text: s(p, 'what') },
       { label: '시행', text: `${org}. ${p.sched ? s(p, 'sched') : '일정은 공식 사이트 확인.'}` },
+      { label: '국내 응시', text: s(p, 'korea') },
       { label: '응시자격', text: p.eligible ? s(p, 'eligible') : '제한 없음. 누구나 응시.' },
       { label: '시험', text: s(p, 'exam') },
       { label: '점수·합격', text: s(p, 'score') },
