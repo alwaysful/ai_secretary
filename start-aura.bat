@@ -54,7 +54,7 @@ if errorlevel 1 (
 rem 자격증 서비스는 별도 앱 (services\cert, 자체 DB·실행파일). 안 떠 있으면 따로 창으로 실행. 끄려면 set AURA_NO_CERT=1
 if not defined AURA_NO_CERT if exist services\cert\start-cert.bat (
   curl -s -o nul http://127.0.0.1:3100/health
-  if errorlevel 1 start "AURA 자격증 서비스" /min cmd /c "services\cert\start-cert.bat"
+  if errorlevel 1 start "AURA 자격증 서비스" /min cmd /c "set CERT_NO_BROWSER=1 & services\cert\start-cert.bat"
 )
 
 start "" /min cmd /c "timeout /t 10 /nobreak >nul & start http://127.0.0.1:5173"

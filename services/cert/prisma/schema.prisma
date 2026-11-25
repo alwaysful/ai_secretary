@@ -150,3 +150,48 @@ model CertRegistry {
 
   @@index([normName])
 }
+
+// ── 단독 실행용 사용자 자료 (AURA 없이 쓸 때). AURA는 자기 DB에 따로 둠 ──
+
+/// 사용자 값 (별표·고친 준비기간/응시료/유효기간/유용도)
+model CertPref {
+  certId       String   @id
+  starred      Boolean  @default(false)
+  userPrep     String?
+  userFee      String?
+  userValidity String?
+  userScore    Float?
+  updatedAt    DateTime @updatedAt
+}
+
+/// 사용자가 직접 추가한 자격증
+model CertCustom {
+  id        String   @id
+  no        Int?
+  name      String
+  field     String
+  kind      String
+  grade     String?
+  org       String
+  url       String?
+  summary   String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+/// 사용자가 직접 넣은 시험 일정
+model CertUserExam {
+  id        String    @id @default(uuid()) @db.Uuid
+  certId    String
+  title     String
+  phase     String?
+  regStart  DateTime?
+  regEnd    DateTime?
+  examStart DateTime?
+  examEnd   DateTime?
+  resultAt  DateTime?
+  note      String?
+  createdAt DateTime  @default(now())
+
+  @@index([certId])
+}
