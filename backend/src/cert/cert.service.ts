@@ -12,9 +12,15 @@ import { CERT_DETAILS, CertDetail } from './details';
 import { CertStats, KPrivate, KPro, kproUrl, parseKPro, kprivateUrl, norm, parseCertStats, parseJmList, parseKPrivate, parseQnet, QNET_PAGE, QnetGb, QnetJm, qnetJmUrl, QnetPhase, qnetStatUrl, qnetUrl, seriesOf } from './qnet';
 
 const DAY = 86_400_000;
-/** 자격증 번호 대역: 종류 × 100000 + 순번 (국가기술 100001~) */
-const NO_SPAN = 100_000;
-const KIND_BASE: Record<string, number> = { 국가기술: 1, 국가전문: 2, 국가공인민간: 3, 등록민간: 4, '국제·어학': 5 };
+/** 자격증 번호 대역 [시작, 끝): 국가기술 100001~, 등록민간은 두 칸 400001~599999, 국제·어학 600001~ */
+const NO_RANGE: Record<string, [number, number]> = {
+  국가기술: [100_000, 200_000],
+  국가전문: [200_000, 300_000],
+  국가공인민간: [300_000, 400_000],
+  등록민간: [400_000, 600_000],
+  '국제·어학': [600_000, 700_000],
+};
+const NO_OTHER: [number, number] = [900_000, 1_000_000];
 /** 목록 조회에서 뺄 큰 열 */
 const LIST_OMIT = { detail: true, statsYears: true } as const;
 type CertRow = Omit<Certificate, keyof typeof LIST_OMIT>;
@@ -214,7 +220,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 번호 없는 자격증에 번호 주기. 종류별 대역(KIND_BASE) 안에서 지금 최대값 다음부터, 목록 순서대로.
+   * 번호 없는 자격증에 번호 주기. 종류별 대역(NO_RANGE) 안에서 지금 최대값 다음부터, 목록 순서대로.
    * 준 번호는 종류가 바뀌어도 그대로. 중간 번호 지워도 빈자리 안 채움 (대역 맨 끝 번호 지운 경우만 다음에 다시 쓰일 수 있음).
    */
   private async number(): Promise<void> {
@@ -222,19 +228,23 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
       select: { id: true, no: true, kind: true },
       orderBy: [{ position: 'asc' }, { name: 'asc' }],
     });
-    const next = new Map<number, number>();
-    for (const r of rows) {
-      if (r.no === null) continue;
-      const base = Math.floor(r.no / NO_SPAN) * NO_SPAN;
-      next.set(base, Math.max(next.get(base) ?? base, r.no));
+    const used = rows.map((r) => r.no).filter((n): n is number => n !== null);
+    // 대역별 지금 최대값 (종류가 바뀐 행도 번호 기준)
+    const next = new Map<[number, number], number>();
+    for (const range of [...Object.values(NO_RANGE), NO_OTHER]) {
+      next.set(range, Math.max(range[0], ...used.filter((n) => n > range[0] && n < range[1])));
     }
     const ids: string[] = [];
     const nos: number[] = [];
     for (const r of rows) {
       if (r.no !== null) continue;
-      const base = (KIND_BASE[r.kind] ?? 9) * NO_SPAN;
-      const n = (next.get(base) ?? base) + 1;
-      next.set(base, n);
+      const range = NO_RANGE[r.kind] ?? NO_OTHER;
+      const n = next.get(range)! + 1;
+      if (n >= range[1]) {
+        this.log.warn(`자격증 번호 대역 꽉 참: ${r.kind}`);
+        continue;
+      }
+      next.set(range, n);
       ids.push(r.id);
       nos.push(n);
     }

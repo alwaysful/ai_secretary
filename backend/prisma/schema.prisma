@@ -271,7 +271,7 @@ model ApiPrice {
 /// 자격증 목록. 기본 목록은 고정 id(slug), 사용자가 추가한 건 custom=true
 model Certificate {
   id           String     @id
-  /// 자격증 번호 (종류별 대역, 한 번 주면 안 바뀜·재사용 X). 국가기술 1xxxxx, 국가전문 2xxxxx, 국가공인민간 3xxxxx, 등록민간 4xxxxx, 국제·어학 5xxxxx
+  /// 자격증 번호 (종류별 대역, 한 번 주면 안 바뀜·재사용 X). 국가기술 1xxxxx, 국가전문 2xxxxx, 국가공인민간 3xxxxx, 등록민간 4xxxxx~5xxxxx, 국제·어학 6xxxxx
   no           Int?       @unique
   name         String
   /// 분야 (정보통신/IT 등)
