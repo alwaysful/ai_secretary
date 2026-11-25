@@ -1,7 +1,7 @@
 import { BadGatewayException, HttpException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-/** 자격증 서비스(services/cert) 호출 */
+/** 자격증 서비스(별도 앱 cert-search) 호출 */
 @Injectable()
 export class CertClient {
   private readonly base: string;
@@ -20,7 +20,7 @@ export class CertClient {
         signal: AbortSignal.timeout(init?.timeoutMs ?? 15_000),
       });
     } catch {
-      throw new BadGatewayException('자격증 서비스 연결 안 됨 (services/cert 실행 확인)');
+      throw new BadGatewayException('자격증 서비스 연결 안 됨 (cert-search 의 start-cert.bat 실행 확인)');
     }
     const text = await res.text();
     const data = text ? (JSON.parse(text) as unknown) : undefined;

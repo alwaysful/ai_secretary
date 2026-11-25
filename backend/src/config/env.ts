@@ -63,11 +63,11 @@ export class EnvVars {
   @IsString()
   TIMEZONE: string = 'Asia/Seoul';
 
-  /** 자격증 탭: 공공데이터포털 키. 자격증 서비스(services/cert)가 이 값도 읽음. 화면에서 넣은 키가 우선 */
+  /** (옛 설정, 안 씀) 자격증 키는 별도 앱 cert-search 의 .env */
   @Transform(emptyToUndefined) @IsOptional() @IsString()
   QNET_API_KEY?: string;
 
-  /** 자격증 서비스 주소 (services/cert). 기본 http://127.0.0.1:3100 */
+  /** 자격증 서비스 주소 (별도 앱 cert-search). 기본 http://127.0.0.1:3100 */
   @Transform(emptyToUndefined) @IsOptional() @IsString()
   CERT_API_URL?: string;
 
