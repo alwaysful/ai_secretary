@@ -141,4 +141,31 @@ const 상공회의소 = grade({
   org: KORCHAM,
 });
 
-export const TEMPLATES: Record<string, Template> = { 기술사, 기사, 산업기사, 기능장, 기능사, 서비스, 상공회의소 };
+/** 국가전문자격 공통 양식. 시행처는 orgName·orgUrl (url 없으면 링크 생략) */
+const 국가전문: Template = {
+  required: ['what', 'eligible', 'exam', 'use', 'orgName'],
+  optional: ['exam2', 'sched', 'pass', 'rate', 'study', 'orgUrl', 'books'],
+  build: (p) => {
+    const org = s(p, 'orgName');
+    const books = Array.isArray(p.books) ? (p.books as string[]) : null;
+    return [
+      { label: '무엇', text: s(p, 'what') },
+      { label: '시행', text: `${org}. ${p.sched ? s(p, 'sched') : '해마다 정기 시행. 일정은 공고 확인.'}` },
+      { label: '응시자격', text: s(p, 'eligible') },
+      { label: p.exam2 ? '1차·필기' : '시험', text: s(p, 'exam') },
+      ...(p.exam2 ? [{ label: '2차·실기', text: s(p, 'exam2') }] : []),
+      { label: '합격 기준', text: p.pass ? s(p, 'pass') : '과목마다 40점 이상 + 평균 60점 이상 (종목별 상이, 공고 확인).' },
+      { label: '합격률', text: p.rate ? s(p, 'rate') : '종목·회차별 편차 큼. 시행처 공고 통계 확인.' },
+      { label: '쓰임', text: s(p, 'use') },
+      ...(books ? [{ label: '준비 도서', text: '출판사별 한 시리즈만 골라 끝까지.', items: books }] : []),
+      { label: '공부법', text: p.study ? s(p, 'study') : '기출 반복. 최신 법령·출제 기준 확인.' },
+      {
+        label: '링크',
+        text: `접수·일정은 ${org}.`,
+        ...(p.orgUrl ? { links: [{ label: org, url: s(p, 'orgUrl') }] } : {}),
+      },
+    ];
+  },
+};
+
+export const TEMPLATES: Record<string, Template> = { 기술사, 기사, 산업기사, 기능장, 기능사, 서비스, 상공회의소, 국가전문 };
