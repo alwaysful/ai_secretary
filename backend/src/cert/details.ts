@@ -1,67 +1,102 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
+import { CertDetail, TEMPLATES } from './details-templates';
+
+export type { CertDetail } from './details-templates';
+
 /**
- * 자격증별 간단 설명 (「설명」 버튼). 항목 이름: 내용. 값은 참고용, 해마다 바뀔 수 있음.
- * 우선 테스트로 의사 국가시험·정보처리기사만. 나머지는 차차 추가.
+ * 자격증별 설명 (「설명」 버튼). 원본: data/details/**\/*.json (id → 항목).
+ * 항목 = 설명 배열 그대로, 또는 {"tpl": 양식이름, ...값} (details-templates.ts 로 펼침).
+ * 시작 때 DB certificate.detail 로 복사. 형식은 data/details/README.md.
  */
-import { ENG_DETAILS } from './details-eng';
-import { PE_DETAILS } from './details-pe';
-import { PE_MORE } from './details-pe-more';
+export const DETAILS_DIR = join(__dirname, 'data', 'details');
 
-/** text: 본문, items: 목록(도서 등), links: 버튼 링크 */
-export type CertDetail = { label: string; text: string; items?: string[]; links?: { label: string; url: string }[] }[];
+export interface DetailIssue {
+  file: string;
+  id: string;
+  msg: string;
+}
 
-export const CERT_DETAILS: Record<string, CertDetail> = {
-  'it-ipe': [
-    { label: '무엇', text: 'SW 개발 전반(설계·개발·DB·네트워크·보안)을 다루는 국가기술자격. 개발자 취업 기본 자격.' },
-    { label: '시행', text: '한국산업인력공단 (Q-net). 해마다 정기 3회.' },
-    { label: '응시자격', text: '관련 학과 4년제 졸업(예정), 3년제+경력 1년, 2년제+경력 2년, 같은 분야 산업기사+경력 1년, 기능사+경력 3년, 실무 경력 4년 등. Q-net 자가진단으로 확인.' },
-    { label: '필기', text: '5과목 각 20문항 객관식 CBT: 소프트웨어 설계, 소프트웨어 개발, 데이터베이스 구축, 프로그래밍 언어 활용, 정보시스템 구축 관리.' },
-    { label: '실기', text: '필답형(주관식) 약 20문항. 코드 결과 맞히기(C·Java·Python), SQL, 용어 문제 비중 큼.' },
-    { label: '합격 기준', text: '필기: 과목마다 40점 이상 + 평균 60점 이상. 실기: 60점 이상. 필기 붙으면 2년 동안 필기 면제.' },
-    { label: '합격률', text: '대략 필기 50~60%대, 실기 20~40%대. 실기가 회차마다 들쭉날쭉.' },
-    { label: '쓰임', text: 'IT 기업·공기업 서류 가점, 공무원 전산직 가산점, 정보처리산업기사보다 상위. 실무 능력 증명보다는 기본기 확인용.' },
-    {
-      label: '준비 도서',
-      text: '필기·실기 따로 나옴. 한 시리즈만 골라 끝까지.',
-      items: ['시나공 정보처리기사 (길벗)', '수제비 정보처리기사 (건기원)', '이기적 정보처리기사 (영진닷컴)'],
-    },
-    {
-      label: '공부법',
-      text: '필기: 기출 5~7회분 반복 (2~4주). 문제은행 성격이라 기출 위주가 효율적. 실기: 코드 결과 맞히기(C·Java·Python)와 SQL 손으로 직접 풀기, 용어는 약어 위주 암기 (4~6주). 실기 비중이 크니 필기 붙자마자 바로 시작.',
-    },
-    {
-      label: '링크',
-      text: '접수·일정·기출 일부는 Q-net. 연습은 CBT 기출 사이트.',
-      links: [
-        { label: 'Q-net', url: 'https://www.q-net.or.kr' },
-        { label: '전자문제집 CBT (기출 연습)', url: 'https://www.comcbt.com' },
-      ],
-    },
-  ],
-  'np-doctor': [
-    { label: '무엇', text: '의사 면허를 받기 위한 국가시험. 붙어야 의사로 진료할 수 있음 (의료법).' },
-    { label: '시행', text: '한국보건의료인국가시험원(국시원). 보건복지부 장관 명의 면허 발급.' },
-    { label: '응시자격', text: '의대(6년제)·의학전문대학원 졸업자 또는 졸업 예정자. 외국 의대 졸업자는 인정 학교 확인 + 예비시험 합격 필요.' },
-    { label: '시험 구성', text: '실기(임상 진료 상황 재현: 환자 면담·진찰·술기)와 필기(의학 전반 객관식) 두 시험. 둘 다 붙어야 최종 합격.' },
-    { label: '일정', text: '보통 실기 9~10월 → 필기 다음 해 1월 초, 최종 발표 1월 하순. 정확한 날짜는 국시원 공고 확인.' },
-    { label: '합격 기준', text: '필기: 총점 60% 이상 + 과목마다 40% 이상. 실기: 국시원이 정한 기준 점수 이상.' },
-    { label: '합격률', text: '대략 90%대. 대부분 졸업반이 학교 커리큘럼대로 준비.' },
-    { label: '합격 후', text: '의사 면허 → 일반의로 바로 근무하거나, 인턴 1년 + 레지던트 3~4년 수련 후 전문의 시험.' },
-    {
-      label: '준비 도서',
-      text: '따로 정해진 수험서 없음.',
-      items: ['학교 강의 자료·의학 교과서', '국시 대비 과목별 요약집·기출 문제집 (학교·학생회 자료)', '실기: 국시원 공개 문항'],
-    },
-    {
-      label: '공부법',
-      text: '본과 4학년 1학기부터 과목별 요약집 1회독 → 기출 반복 → 모의고사로 약한 과목 보강. 실기는 국시원 공개 증례로 조 짜서 환자 면담·진찰 순서 소리 내 연습.',
-    },
-    {
-      label: '링크',
-      text: '시험 공고·응시 원서·실기 공개 문항은 국시원.',
-      links: [{ label: '한국보건의료인국가시험원', url: 'https://www.kuksiwon.or.kr' }],
-    },
-  ],
-  ...ENG_DETAILS,
-  ...PE_DETAILS,
-  ...PE_MORE,
-};
+const isStr = (v: unknown): v is string => typeof v === 'string' && v.trim() !== '';
+
+function checkItems(d: unknown): string | null {
+  if (!Array.isArray(d) || !d.length) return '빈 배열 또는 배열 아님';
+  for (const [i, it] of d.entries()) {
+    const x = it as Record<string, unknown>;
+    if (!x || typeof x !== 'object') return `${i}번 항목 객체 아님`;
+    if (!isStr(x.label) || typeof x.text !== 'string') return `${i}번 항목 label/text 없음`;
+    if (x.items !== undefined && !(Array.isArray(x.items) && x.items.every(isStr))) return `${i}번 items 형식 오류`;
+    if (x.links !== undefined && !(Array.isArray(x.links) && x.links.every((l: { label?: unknown; url?: unknown }) => isStr(l?.label) && isStr(l?.url) && /^https?:\/\//.test(l.url as string))))
+      return `${i}번 links 형식 오류`;
+  }
+  return null;
+}
+
+/** 항목 하나 펼치기. 오류면 문자열 */
+export function expandDetail(entry: unknown): CertDetail | string {
+  if (Array.isArray(entry)) return checkItems(entry) ?? (entry as CertDetail);
+  if (!entry || typeof entry !== 'object') return '배열 또는 {tpl} 객체여야 함';
+  const { tpl, ...p } = entry as Record<string, unknown>;
+  const t = TEMPLATES[String(tpl)];
+  if (!t) return `모르는 양식: ${String(tpl)}`;
+  const miss = t.required.filter((k) => !isStr(p[k]));
+  if (miss.length) return `필수 값 없음: ${miss.join(', ')}`;
+  const extra = Object.keys(p).filter((k) => !t.required.includes(k) && !t.optional.includes(k));
+  if (extra.length) return `모르는 값: ${extra.join(', ')}`;
+  const d = t.build(p);
+  return checkItems(d) ?? d;
+}
+
+function walk(dir: string): string[] {
+  let out: string[] = [];
+  let ents: import('node:fs').Dirent[];
+  try {
+    ents = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of ents.sort((a, b) => a.name.localeCompare(b.name))) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) out = out.concat(walk(p));
+    else if (e.name.endsWith('.json')) out.push(p);
+  }
+  return out;
+}
+
+/** 폴더 전체 읽기. 잘못된 항목은 issues 로, 나머지는 details 로 */
+export function loadDetails(dir = DETAILS_DIR): { details: Record<string, CertDetail>; issues: DetailIssue[] } {
+  const details: Record<string, CertDetail> = {};
+  const where: Record<string, string> = {};
+  const issues: DetailIssue[] = [];
+  for (const path of walk(dir)) {
+    const file = relative(dir, path);
+    let obj: unknown;
+    try {
+      obj = JSON.parse(readFileSync(path, 'utf8'));
+    } catch (e) {
+      issues.push({ file, id: '-', msg: `JSON 오류: ${(e as Error).message}` });
+      continue;
+    }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+      issues.push({ file, id: '-', msg: '최상위는 {id: 항목} 객체여야 함' });
+      continue;
+    }
+    for (const [id, entry] of Object.entries(obj)) {
+      if (where[id]) {
+        issues.push({ file, id, msg: `중복 id (${where[id]} 에도 있음)` });
+        continue;
+      }
+      const d = expandDetail(entry);
+      if (typeof d === 'string') issues.push({ file, id, msg: d });
+      else {
+        details[id] = d;
+        where[id] = file;
+      }
+    }
+  }
+  return { details, issues };
+}
+
+const loaded = loadDetails();
+for (const i of loaded.issues) console.warn(`[cert-details] ${i.file} ${i.id}: ${i.msg}`);
+export const CERT_DETAILS: Record<string, CertDetail> = loaded.details;
