@@ -13,7 +13,7 @@ interface PE {
   study: string;
 }
 
-const pe = (p: PE): CertDetail => [
+export const pe = (p: PE): CertDetail => [
   { label: '무엇', text: p.what },
   { label: '시행', text: '한국산업인력공단 (Q-net). 해마다 정기 3~4회.' },
   { label: '응시자격', text: ELIGIBLE },

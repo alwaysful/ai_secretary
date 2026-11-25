@@ -4,6 +4,7 @@
  */
 import { ENG_DETAILS } from './details-eng';
 import { PE_DETAILS } from './details-pe';
+import { PE_MORE } from './details-pe-more';
 
 /** text: 본문, items: 목록(도서 등), links: 버튼 링크 */
 export type CertDetail = { label: string; text: string; items?: string[]; links?: { label: string; url: string }[] }[];
@@ -62,4 +63,5 @@ export const CERT_DETAILS: Record<string, CertDetail> = {
   ],
   ...ENG_DETAILS,
   ...PE_DETAILS,
+  ...PE_MORE,
 };
