@@ -41,26 +41,36 @@ const 기술사: Template = {
   ],
 };
 
-const 기사: Template = {
-  required: ['what', 'subjects', 'practical', 'rate', 'use', 'study'],
-  optional: ['books', 'orgName', 'orgUrl'],
+interface Grade {
+  /** 시행 (산업인력공단) */
+  sched: string;
+  eligible: string;
+  written: string;
+  pass: string;
+  rate: string;
+  study: string;
+  /** 기본 시행처 (없으면 Q-net) */
+  org?: { label: string; url: string };
+}
+
+/** 국가기술 등급별 공통 양식. 값: what·subjects·practical·use 필수, 나머지 선택 */
+const grade = (g: Grade): Template => ({
+  required: ['what', 'subjects', 'practical', 'use'],
+  optional: ['rate', 'study', 'books', 'orgName', 'orgUrl', 'eligible'],
   build: (p) => {
-    const org = p.orgName ? { label: s(p, 'orgName'), url: s(p, 'orgUrl') } : null;
+    const org = p.orgName ? { label: s(p, 'orgName'), url: s(p, 'orgUrl') } : (g.org ?? null);
     const books = Array.isArray(p.books) ? (p.books as string[]) : null;
     return [
       { label: '무엇', text: s(p, 'what') },
-      { label: '시행', text: org ? `${org.label}. 해마다 정기 시행.` : '한국산업인력공단 (Q-net). 해마다 정기 3회.' },
-      {
-        label: '응시자격',
-        text: '산업기사+실무 1년, 기능사+실무 3년, 관련 학과 4년제 졸업(예정), 3년제+실무 1년, 2년제+실무 2년, 실무 4년 등. Q-net 자가진단으로 확인.',
-      },
-      { label: '필기', text: `객관식 CBT. ${s(p, 'subjects')}` },
+      { label: '시행', text: org && !g.org ? `${org.label}. 해마다 정기 시행.` : g.sched },
+      { label: '응시자격', text: p.eligible ? s(p, 'eligible') : g.eligible },
+      { label: '필기', text: `${g.written} ${s(p, 'subjects')}` },
       { label: '실기', text: s(p, 'practical') },
-      { label: '합격 기준', text: '필기: 과목마다 40점 이상 + 평균 60점 이상. 실기: 60점 이상. 필기 합격 후 2년간 필기 면제.' },
-      { label: '합격률', text: s(p, 'rate') },
+      { label: '합격 기준', text: g.pass },
+      { label: '합격률', text: p.rate ? s(p, 'rate') : g.rate },
       { label: '쓰임', text: s(p, 'use') },
       ...(books ? [{ label: '준비 도서', text: '출판사별 한 시리즈만 골라 끝까지.', items: books }] : []),
-      { label: '공부법', text: s(p, 'study') },
+      { label: '공부법', text: p.study ? s(p, 'study') : g.study },
       {
         label: '링크',
         text: `접수·일정은 ${org ? org.label : 'Q-net'}. 연습은 CBT 기출 사이트.`,
@@ -68,6 +78,67 @@ const 기사: Template = {
       },
     ];
   },
-};
+});
 
-export const TEMPLATES: Record<string, Template> = { 기술사, 기사 };
+const PASS = '필기: 과목마다 40점 이상 + 평균 60점 이상. 실기: 60점 이상. 필기 합격 후 2년간 필기 면제.';
+const PASS60 = '필기·실기 각 100점 만점에 60점 이상. 필기 합격 후 2년간 필기 면제.';
+
+const 기사 = grade({
+  sched: '한국산업인력공단 (Q-net). 해마다 정기 3회.',
+  eligible: '산업기사+실무 1년, 기능사+실무 3년, 관련 학과 4년제 졸업(예정), 3년제+실무 1년, 2년제+실무 2년, 실무 4년 등. Q-net 자가진단으로 확인.',
+  written: '객관식 CBT.',
+  pass: PASS,
+  rate: '대략 필기 30~50%대, 실기 30~50%대. 종목·회차 편차 큼.',
+  study: '필기: 기출 5년치 반복 (6~8주). 실기: 유형별 풀이·실습 반복.',
+});
+
+const 산업기사 = grade({
+  sched: '한국산업인력공단 (Q-net). 해마다 정기 3회.',
+  eligible: '기능사+실무 1년, 관련 학과 2년제 졸업(예정), 동일 직무 실무 2년 등. Q-net 자가진단으로 확인.',
+  written: '객관식 CBT (과목당 20문항).',
+  pass: PASS,
+  rate: '대략 필기 30~50%대, 실기 30~50%대. 종목·회차 편차 큼.',
+  study: '필기: 기출 3~5년치 반복 (4~6주). 실기: 유형별 풀이·실습 반복.',
+});
+
+const 기능장 = grade({
+  sched: '한국산업인력공단 (Q-net). 해마다 정기 2회.',
+  eligible: '산업기사+실무 5년, 기능사+실무 7년, 실무 9년, 기능대학 기능장 과정 이수 등. Q-net 자가진단으로 확인.',
+  written: '객관식 60문항 CBT.',
+  pass: PASS60,
+  rate: '대략 필기 30~50%대, 실기 20~40%대.',
+  study: '필기: 기출 반복. 실기: 현장 숙련 바탕으로 과제 시간 안에 완성 연습.',
+});
+
+const 기능사 = grade({
+  sched: '한국산업인력공단 (Q-net). 해마다 정기 4회 (일부 종목 상시).',
+  eligible: '제한 없음. 누구나 응시.',
+  written: '객관식 60문항 CBT.',
+  pass: PASS60,
+  rate: '대략 필기 40~60%대, 실기 30~60%대.',
+  study: '필기: 기출 반복 (2~4주). 실기: 공개 과제 반복 실습.',
+});
+
+/** 서비스 분야 2급 (사회조사분석사·직업상담사 등) */
+const 서비스 = grade({
+  sched: '한국산업인력공단 (Q-net). 해마다 정기 3회.',
+  eligible: '제한 없음 (종목별 예외는 Q-net 확인).',
+  written: '객관식 CBT.',
+  pass: PASS,
+  rate: '대략 필기 40~60%대, 실기 30~60%대.',
+  study: '필기: 기출 반복 (3~4주). 실기: 유형별 답안 작성 연습.',
+});
+
+const KORCHAM = { label: '대한상공회의소', url: 'https://license.korcham.net' };
+/** 대한상공회의소 시행 (컴활·워드 등) */
+const 상공회의소 = grade({
+  sched: '대한상공회의소. 상시 시험 (지역 상공회의소 시험장).',
+  eligible: '제한 없음. 누구나 응시.',
+  written: '객관식 CBT.',
+  pass: '필기: 과목마다 40점 이상 + 평균 60점 이상. 실기: 70점 이상 (종목별 상이). 필기 합격 후 2년간 필기 면제.',
+  rate: '대략 필기 40~60%대, 실기 20~50%대.',
+  study: '필기: 기출 반복 (1~2주). 실기: 기출 작업 시간 재며 반복.',
+  org: KORCHAM,
+});
+
+export const TEMPLATES: Record<string, Template> = { 기술사, 기사, 산업기사, 기능장, 기능사, 서비스, 상공회의소 };

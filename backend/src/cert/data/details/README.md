@@ -10,7 +10,9 @@
 ## 항목 형식
 1. **양식(tpl)** — 공통 문구는 `src/cert/details-templates.ts` 가 채움. 값만 적음.
    - `"기술사"`: `what`, `subjects`, `use`, `study`
-   - `"기사"`: `what`, `subjects`, `practical`, `rate`, `use`, `study` + 선택 `books`(배열), `orgName`·`orgUrl`(Q-net 아닌 시행처)
+   - 국가기술 등급별 `"기사"`, `"산업기사"`, `"기능장"`, `"기능사"`, `"서비스"`(사회조사분석사 등 2급), `"상공회의소"`(컴활·워드 등)
+     - 필수: `what`, `subjects`, `practical`, `use`
+     - 선택: `rate`, `study`, `eligible` (없으면 등급 기본 문구), `books`(배열), `orgName`·`orgUrl`(Q-net 아닌 시행처)
    ```json
    "q-기계기술사": { "tpl": "기술사", "what": "...", "subjects": "...", "use": "...", "study": "..." }
    ```
