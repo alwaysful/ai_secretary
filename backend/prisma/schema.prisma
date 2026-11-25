@@ -441,3 +441,13 @@ model VocabReview {
   @@index([deckId, at])
   @@index([at])
 }
+
+/// 공공데이터 API 응답 캐시 (주소 해시 → 응답). 호출 한도 절약
+model CertApiCache {
+  /// 요청 주소 sha256
+  key  String   @id
+  body String
+  at   DateTime @default(now())
+
+  @@index([at])
+}

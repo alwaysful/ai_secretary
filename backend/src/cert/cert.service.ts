@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import { createHash, randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { CertExam, Certificate } from '@prisma/client';
-import { EnvVars } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { ACQ_SOURCE, acqRate } from './catalog-acq';
 import { ACQ_BY_ID, aliasOf, baseOfVariant, findGrade, CATALOG, CERT_FIELDS, CERT_KINDS, defaultsOf, fieldOfName, fieldOfPrivate, fieldOfQnet, isTechGrade, joinTags, singleGradeIsPublic, SERIES_LABEL, seriesOfGrade } from './catalog';
@@ -28,6 +27,10 @@ const CATALOG_IDS = new Set(CATALOG.map((c) => c.id));
 /** 자동 수집 주기 */
 const SYNC_EVERY_MS = 24 * 3_600_000;
 const FETCH_TIMEOUT_MS = 20_000;
+/** 공공데이터 API 응답 캐시 기간. 같은 주소 다시 부르면 저장된 응답 사용 (호출 한도 절약) */
+const API_CACHE_MS = 12 * 3_600_000;
+/** 오래된 캐시 지우는 기준 */
+const API_CACHE_KEEP_MS = 7 * DAY;
 /** 공공데이터 API 호출 한도 (개발계정 기준 보수적으로). 넘기 전에 멈춤 */
 export const API_DAY_LIMIT = 500;
 export const API_MONTH_LIMIT = 10_000;
@@ -174,7 +177,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService<EnvVars, true>,
+    private readonly config: ConfigService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -469,14 +472,14 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async key(): Promise<string | null> {
-    return (await this.cfg()).qnetKey ?? this.config.get('QNET_API_KEY', { infer: true }) ?? null;
+    return (await this.cfg()).qnetKey ?? this.config.get<string>('QNET_API_KEY') ?? null;
   }
 
   async getConfig(): Promise<CertConfigView> {
     const c = await this.cfg();
     return {
       key: c.qnetKey ? mask(c.qnetKey) : null,
-      envKey: !c.qnetKey && !!this.config.get('QNET_API_KEY', { infer: true }),
+      envKey: !c.qnetKey && !!this.config.get<string>('QNET_API_KEY'),
       lastSyncAt: c.lastSyncAt,
       lastError: c.lastError,
       lastCount: c.lastCount,
@@ -547,11 +550,18 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
     await this.prisma.certConfig.update({ where: { id: 1 }, data: { apiDay: day, apiDayCount: dayCount + 1, apiMonth: month, apiMonthCount: monthCount + 1 } });
   }
 
-  private async fetchText(url: string): Promise<string> {
+  /** 공공데이터 API 호출. 12시간 안 같은 주소는 DB 캐시 사용 (키는 주소 해시라 API 키 안 남음) */
+  private async fetchText(url: string, ttlMs = API_CACHE_MS): Promise<string> {
+    const key = createHash('sha256').update(url).digest('hex');
+    const hit = await this.prisma.certApiCache.findUnique({ where: { key } });
+    if (hit && Date.now() - hit.at.getTime() < ttlMs) return hit.body;
     await this.countCall();
     const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), headers: { Accept: 'application/json, application/xml' } });
     const text = await res.text();
     if (!res.ok) throw new Error(`Q-net API HTTP ${res.status}: ${text.slice(0, 120)}`);
+    const at = new Date();
+    await this.prisma.certApiCache.upsert({ where: { key }, create: { key, body: text, at }, update: { body: text, at } });
+    if (Math.random() < 0.05) await this.prisma.certApiCache.deleteMany({ where: { at: { lt: new Date(at.getTime() - API_CACHE_KEEP_MS) } } });
     return text;
   }
 
