@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { gcalUrl } from '../news/gcal';
+import { gcalUrl } from '../../shared/gcal';
 import { CertAbout } from './CertAbout';
 import { CertCalendar } from './CertCalendar';
 import { CertKeyBox } from './CertKeyBox';

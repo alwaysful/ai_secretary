@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { addDays, DAY, hue, layoutWeek, md, sameDay, startOfDay, WEEK } from '../news/NewsCalendar';
+import { addDays, DAY, hue, layoutWeek, md, sameDay, startOfDay, WEEK } from '../../shared/calendar';
 import { CertExam, CertFilter, certApi } from './certApi';
 
 type Ev = CertExam & { certs: string[] };
