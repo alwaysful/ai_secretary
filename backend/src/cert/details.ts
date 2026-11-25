@@ -2,6 +2,8 @@
  * 자격증별 간단 설명 (「설명」 버튼). 항목 이름: 내용. 값은 참고용, 해마다 바뀔 수 있음.
  * 우선 테스트로 의사 국가시험·정보처리기사만. 나머지는 차차 추가.
  */
+import { PE_DETAILS } from './details-pe';
+
 /** text: 본문, items: 목록(도서 등), links: 버튼 링크 */
 export type CertDetail = { label: string; text: string; items?: string[]; links?: { label: string; url: string }[] }[];
 
@@ -57,4 +59,5 @@ export const CERT_DETAILS: Record<string, CertDetail> = {
       links: [{ label: '한국보건의료인국가시험원', url: 'https://www.kuksiwon.or.kr' }],
     },
   ],
+  ...PE_DETAILS,
 };
