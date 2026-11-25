@@ -13,6 +13,7 @@
    - 국가기술 등급별 `"기사"`, `"산업기사"`, `"기능장"`, `"기능사"`, `"서비스"`(사회조사분석사 등 2급), `"상공회의소"`(컴활·워드 등)
      - 필수: `what`, `subjects`, `practical`, `use`
      - 선택: `rate`, `study`, `eligible` (없으면 등급 기본 문구), `books`(배열), `orgName`·`orgUrl`(Q-net 아닌 시행처)
+   - `"국가전문"`: 필수 `what`, `eligible`, `exam`, `use`, `orgName` / 선택 `exam2`(2차·실기), `sched`, `pass`, `rate`, `study`, `orgUrl`, `books`
    ```json
    "q-기계기술사": { "tpl": "기술사", "what": "...", "subjects": "...", "use": "...", "study": "..." }
    ```
