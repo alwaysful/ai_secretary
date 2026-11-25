@@ -308,6 +308,8 @@ model Certificate {
   statsYears   Json?
   statsTotal   Int?
   statsAt      DateTime?
+  /// 합격률: {written, practical: [{year, applied, passed}]} (산업인력 국가기술자격 통계, statsAt 주기로 갱신)
+  passYears    Json?
   /// 상세 설명 [{label, text, items?, links?}]. 원본은 src/cert/data/details 폴더 JSON, 시작 때 덮어씀. 목록 조회에선 빼고 읽음
   detail       Json?
   /// Q-net 종목 목록에서 새로 찾아 추가한 시각

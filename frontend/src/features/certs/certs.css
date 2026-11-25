@@ -94,3 +94,10 @@
 .cert-table tr.ca-row td { border-top: 0; padding-top: 0; }
 .cert-table tr.ca-row .ca { margin-top: 0; }
 .cert-public { color: #2e9d5b; font-weight: 600; }
+.ca-pass { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+.ca-pass th, .ca-pass td { padding: 4px 6px; text-align: center; border-top: 1px solid var(--line); }
+.ca-pass td small { display: block; font-size: 11px; opacity: 0.6; }
+.ca-list { margin: 6px 0; padding-left: 18px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow: auto; }
+.ca-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.ca-row select, .ca-row input { min-width: 0; flex: 1; }
+button.ca-link { background: none; cursor: pointer; }

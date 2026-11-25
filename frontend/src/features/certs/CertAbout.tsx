@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Cert, CertStats, certApi } from './certApi';
+import { ExamPlaces, OpenQuestions, PassTable, PrivateRegistry } from './CertExtra';
 
 const fmt = new Intl.NumberFormat('ko-KR');
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -76,7 +77,10 @@ export function CertAbout({ cert }: { cert: Cert }) {
   const s = st?.stats;
   const last = s?.years[s.years.length - 1];
   const detail = st?.detail ?? [];
-  const passRate = detail.find((d) => d.label === '합격률')?.text ?? st?.rate ?? undefined;
+  // 실제 통계(짧은 문구) 우선, 없으면 설명 문구
+  const passRate = st?.rate ?? detail.find((d) => d.label === '합격률')?.text ?? undefined;
+  const qnet = cert.org === '한국산업인력공단' || cert.kind === '국가기술';
+  const priv = cert.kind === '등록민간' || cert.kind === '국가공인민간';
   const links = detail.filter((d) => d.label === '링크').flatMap((d) => d.links ?? []);
   const chips: [string, string | null | undefined][] = [
     ['유용도', `${cert.score.toFixed(1)} / 10`],
@@ -127,6 +131,7 @@ export function CertAbout({ cert }: { cert: Cert }) {
             <Bars years={s.years} />
           </div>
         )}
+        {st?.pass && <PassTable pass={st.pass} />}
         {st?.note && s && <small className="muted">{st.note}</small>}
       </section>
 
@@ -153,6 +158,14 @@ export function CertAbout({ cert }: { cert: Cert }) {
           </section>
         ))}
       </div>
+
+      {(qnet || priv) && (
+        <div className="ca-grid">
+          {priv && <PrivateRegistry cert={cert} />}
+          {qnet && <OpenQuestions cert={cert} />}
+          {qnet && <ExamPlaces />}
+        </div>
+      )}
 
       {links.length > 0 && (
         <div className="ca-links">

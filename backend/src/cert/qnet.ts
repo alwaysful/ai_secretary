@@ -292,3 +292,194 @@ export function parseKPro(text: string): KPro[] {
   }
   return out;
 }
+
+const enc = (key: string) => (key.includes('%') ? key : encodeURIComponent(key));
+const num = (v: unknown) => Number(String(v ?? '0').replace(/[^0-9.-]/g, '')) || 0;
+
+/** 산업인력 국가기술자격 통계: 종목별 연도별 필기(Pi)·실기(Si) 응시·합격 */
+export const QNET_PASS_URL = 'http://openapi.q-net.or.kr/api/service/rest/InquiryStatSVC';
+
+export function qnetPassUrl(key: string, year: number, jmCd: string, kind: 'Pi' | 'Si'): string {
+  return `${QNET_PASS_URL}/getEventYear${kind}List?serviceKey=${enc(key)}&baseYY=${year}&jmCd=${encodeURIComponent(jmCd)}`;
+}
+
+export interface PassYear {
+  year: number;
+  /** 응시자 */
+  applied: number;
+  /** 합격자 */
+  passed: number;
+}
+
+export interface PassStats {
+  written: PassYear[];
+  practical: PassYear[];
+}
+
+/** 취득자 통계와 같은 칸 순서 (ilXcnt2~6 = 4년 전~기준년도). ilecnt = 응시, ilpcnt = 합격. 응시 0인 해는 뺌 */
+export function parsePassYears(text: string, baseYY: number): PassYear[] {
+  const rows = parseItems(text);
+  const sum = (k: string) => rows.reduce((a, r) => a + num(pick(r, k)), 0);
+  return [2, 3, 4, 5, 6]
+    .map((i) => ({ year: baseYY - 6 + i, applied: sum(`ilecnt${i}`), passed: sum(`ilpcnt${i}`) }))
+    .filter((y) => y.applied > 0 && y.passed <= y.applied);
+}
+
+const pct = (p: number, a: number) => `${Math.round((p / a) * 1000) / 10}%`;
+const sumOf = (ys: PassYear[]) => ys.reduce((a, y) => ({ applied: a.applied + y.applied, passed: a.passed + y.passed }), { applied: 0, passed: 0 });
+
+/** 칩용 짧은 문구: '필기 45.2% · 실기 30.1% (2025)' */
+export function passShort(p: PassStats | null): string | null {
+  if (!p) return null;
+  const w = p.written.at(-1);
+  const s = p.practical.at(-1);
+  const parts = [w && `필기 ${pct(w.passed, w.applied)}`, s && `실기 ${pct(s.passed, s.applied)}`].filter(Boolean);
+  if (!parts.length) return null;
+  return `${parts.join(' · ')} (${Math.max(w?.year ?? 0, s?.year ?? 0)})`;
+}
+
+/** 설명 「합격률」 항목 본문 (실제 숫자) */
+export function passText(p: PassStats | null): string | null {
+  if (!p || (!p.written.length && !p.practical.length)) return null;
+  const fmt = (n: number) => n.toLocaleString('ko-KR');
+  const line = (label: string, ys: PassYear[]) => {
+    if (!ys.length) return null;
+    const last = ys[ys.length - 1];
+    const t = sumOf(ys);
+    return `${label} ${last.year}년 ${pct(last.passed, last.applied)} (응시 ${fmt(last.applied)}명·합격 ${fmt(last.passed)}명), ${ys.length}년 평균 ${pct(t.passed, t.applied)}`;
+  };
+  return [line('필기', p.written), line('실기', p.practical)].filter(Boolean).join('. ') + '. 출처: 한국산업인력공단 국가기술자격 통계.';
+}
+
+/** 국가자격 공개문제 목록 (qualgbCd T = 국가기술) */
+export const OPEN_QST_URL = 'https://apis.data.go.kr/B490007/openQst/getOpenQstList';
+
+export function openQstUrl(key: string, jmCd: string, rows = 20): string {
+  return `${OPEN_QST_URL}?serviceKey=${enc(key)}&numOfRows=${rows}&pageNo=1&dataFormat=json&qualgbCd=T&jmCd=${encodeURIComponent(jmCd)}`;
+}
+
+export interface OpenQst {
+  id: string;
+  title: string;
+  /** YYYY-MM-DD */
+  date: string | null;
+  series: string;
+  jmNm: string;
+}
+
+const dt = (v: unknown) => {
+  const s = String(v ?? '').replace(/\D/g, '');
+  return s.length >= 8 ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : null;
+};
+
+/** 공개문제 목록 → 최신순 */
+export function parseOpenQst(text: string): OpenQst[] {
+  return parseItems(text)
+    .map((o) => ({
+      id: String(pick(o, 'artlSeq') ?? '').trim(),
+      title: String(pick(o, 'title') ?? '').trim(),
+      date: dt(pick(o, 'modDttm')) ?? dt(pick(o, 'regDttm')),
+      series: String(pick(o, 'seriesNm') ?? '').trim(),
+      jmNm: String(pick(o, 'jmNm') ?? '').trim(),
+    }))
+    .filter((q) => q.title)
+    .sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+}
+
+/** 국가자격시험 시험장소 (지사별). 이 API만 파라미터 이름이 ServiceKey */
+export const EXAM_AREA_URL = 'http://openapi.q-net.or.kr/api/service/rest/InquiryExamAreaSVC/getList';
+export const EXAM_AREA_PAGE = 100;
+
+/** 지사 코드 → 이름 */
+export const BRANCHES: Record<string, string> = {
+  '01': '서울', '02': '서울서부', '03': '부산', '04': '대구', '05': '인천', '06': '광주', '07': '서울남부', '08': '충남(천안)',
+  '09': '울산', '10': '경기', '11': '강원', '12': '충북', '13': '대전', '14': '전북', '15': '전남', '16': '경북', '17': '경남',
+  '18': '제주', '19': '강원동부', '20': '전남서부', '21': '부산남부', '22': '경북동부', '23': '경기북부', '24': '경기동부',
+};
+
+export function examAreaUrl(key: string, brchCd: string, page = 1): string {
+  return `${EXAM_AREA_URL}?ServiceKey=${enc(key)}&brchCd=${brchCd}&numOfRows=${EXAM_AREA_PAGE}&pageNo=${page}`;
+}
+
+export interface ExamArea {
+  name: string;
+  /** 훈련기관 등 */
+  type: string;
+  address: string;
+  tel: string;
+  guide: string;
+  branch: string;
+}
+
+export function parseExamArea(text: string): ExamArea[] {
+  return parseItems(text)
+    .map((o) => ({
+      name: String(pick(o, 'examAreaNm') ?? '').trim(),
+      type: String(pick(o, 'examAreaGbNm') ?? '').trim(),
+      address: String(pick(o, 'address') ?? '').trim(),
+      tel: String(pick(o, 'telNo') ?? '').trim(),
+      guide: String(pick(o, 'plceLoctGid') ?? '').trim(),
+      branch: String(pick(o, 'brchNm') ?? '').trim(),
+    }))
+    .filter((a) => a.name);
+}
+
+/** 공공데이터포털(odcloud): 한국직업능력연구원 민간자격등록정보 (20260630본, 반기 갱신). 자격명으로 검색 */
+export const KREG_URL = 'https://api.odcloud.kr/api/15075600/v1/uddi:6f36844c-a64b-4543-8e8c-82e0fc5f24c8';
+
+export function kregUrl(key: string, name: string): string {
+  return `${KREG_URL}?page=1&perPage=20&returnType=JSON&serviceKey=${enc(key)}&${encodeURIComponent('cond[자격명::LIKE]')}=${encodeURIComponent(name)}`;
+}
+
+/** 민간자격 등록 1건 (등급별 줄 묶음) */
+export interface KReg {
+  name: string;
+  regNo: string;
+  regDate: string | null;
+  status: string;
+  ministry: string;
+  org: string;
+  url: string | null;
+  summary: string;
+  grades: { name: string; duty: string; isPublic: boolean }[];
+  isPublic: boolean;
+}
+
+/** odcloud 응답 → 등록 건. 폐지·취소 건은 뒤로. 오류면 throw */
+export function parseKReg(text: string): KReg[] {
+  let j: { data?: unknown; code?: number; msg?: string };
+  try {
+    j = JSON.parse(text.trim());
+  } catch {
+    throw new Error(`민간자격등록정보 API 응답 해석 실패: ${text.trim().slice(0, 120)}`);
+  }
+  if (!Array.isArray(j.data)) throw new Error(`민간자격등록정보 API 오류: ${j.msg ?? j.code ?? '데이터 없음'}`);
+  const by = new Map<string, KReg>();
+  const yes = (v: unknown) => /^(y|yes|공인|예|o)$/i.test(blank(v));
+  for (const o of j.data as Record<string, unknown>[]) {
+    const name = blank(o['자격명']);
+    if (!name) continue;
+    const regNo = blank(o['등록번호'] ?? o['등록번호(등록정보연도-등록정보순번)']);
+    const k = regNo || norm(name);
+    const home = blank(o['기관홈페이지']);
+    const cur =
+      by.get(k) ??
+      ({
+        name,
+        regNo,
+        regDate: blank(o['등록일자']).slice(0, 10) || null,
+        status: blank(o['현재상태']),
+        ministry: blank(o['주무부처'] ?? o['최종주무부처(주무부처이름(상세)']),
+        org: blank(o['자격관리기관'] ?? o['신청기관']),
+        url: home ? (/^https?:\/\//i.test(home) ? home : `https://${home}`) : null,
+        summary: blank(o['자격개요(직무내용)'] ?? o['자격개요']),
+        grades: [],
+        isPublic: yes(o['공인여부']),
+      } satisfies KReg);
+    const g = blank(o['등급명']);
+    if (g && !cur.grades.some((x) => x.name === g)) cur.grades.push({ name: g, duty: blank(o['등급별직무내용']), isPublic: yes(o['등급공인여부']) });
+    by.set(k, cur);
+  }
+  const dead = (r: KReg) => (/폐지|취소|말소/.test(r.status) ? 1 : 0);
+  return [...by.values()].sort((a, b) => dead(a) - dead(b));
+}

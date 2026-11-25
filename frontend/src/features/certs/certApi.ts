@@ -55,8 +55,46 @@ export interface CertStats {
   totalLabel?: string;
   /** 응시 대비 취득 비율 (민간자격취득현황) */
   rate?: string | null;
+  /** 합격률 원자료 (Q-net 종목) */
+  pass?: { written: PassYear[]; practical: PassYear[] } | null;
   /** 상세 설명 (「설명」 열 때만 받음) */
   detail: { label: string; text: string; items?: string[]; links?: { label: string; url: string }[] }[] | null;
+}
+
+export interface PassYear {
+  year: number;
+  applied: number;
+  passed: number;
+}
+
+export interface OpenQst {
+  id: string;
+  title: string;
+  date: string | null;
+  series: string;
+  jmNm: string;
+}
+
+export interface ExamArea {
+  name: string;
+  type: string;
+  address: string;
+  tel: string;
+  guide: string;
+  branch: string;
+}
+
+export interface KReg {
+  name: string;
+  regNo: string;
+  regDate: string | null;
+  status: string;
+  ministry: string;
+  org: string;
+  url: string | null;
+  summary: string;
+  grades: { name: string; duty: string; isPublic: boolean }[];
+  isPublic: boolean;
 }
 
 export interface CertMeta {
@@ -141,4 +179,8 @@ export const certApi = {
   discover: () => req<CertConfig>('/certs/discover', json('POST')),
   sync: () => req<CertConfig>('/certs/sync', json('POST')),
   stats: (id: string) => req<CertStats>(`/certs/${encodeURIComponent(id)}/stats`),
+  questions: (id: string) => req<{ items: OpenQst[]; note: string | null; url: string }>(`/certs/${encodeURIComponent(id)}/questions`),
+  registry: (id: string) => req<{ items: KReg[]; note: string | null }>(`/certs/${encodeURIComponent(id)}/registry`),
+  branches: () => req<{ code: string; name: string }[]>('/certs/places/branches'),
+  places: (brch: string) => req<{ branch: string; items: ExamArea[]; note: string | null }>(`/certs/places?brch=${brch}`),
 };
