@@ -271,10 +271,12 @@ model ApiPrice {
 /// 자격증 목록. 기본 목록은 고정 id(slug), 사용자가 추가한 건 custom=true
 model Certificate {
   id           String     @id
+  /// 자격증 번호 (종류별 대역, 한 번 주면 안 바뀜·재사용 X). 국가기술 1xxxxx, 국가전문 2xxxxx, 국가공인민간 3xxxxx, 등록민간 4xxxxx, 국제·어학 5xxxxx
+  no           Int?       @unique
   name         String
   /// 분야 (정보통신/IT 등)
   field        String
-  /// 국가기술 | 국가전문 | 국가공인민간 | 민간 | 어학
+  /// 국가기술 | 국가전문 | 국가공인민간 | 등록민간 | 국제·어학
   kind         String
   /// 등급 (기사, 1급 등)
   grade        String?
@@ -306,6 +308,8 @@ model Certificate {
   statsYears   Json?
   statsTotal   Int?
   statsAt      DateTime?
+  /// 상세 설명 [{label, text, items?, links?}]. 원본은 src/cert/details*.ts, 시작 때 덮어씀. 목록 조회에선 빼고 읽음
+  detail       Json?
   /// Q-net 종목 목록에서 새로 찾아 추가한 시각
   discoveredAt DateTime?
   starred      Boolean    @default(false)
@@ -316,6 +320,7 @@ model Certificate {
   exams        CertExam[]
 
   @@index([field])
+  @@index([kind])
 }
 
 /// 시험 회차 1개 (필기·실기 따로). Q-net 자동 수집 또는 직접 입력

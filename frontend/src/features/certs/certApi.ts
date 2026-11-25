@@ -17,6 +17,8 @@ export interface CertExam {
 
 export interface Cert {
   id: string;
+  /** 자격증 번호 (국가기술 100001~) */
+  no: number | null;
   name: string;
   field: string;
   kind: string;
@@ -38,11 +40,9 @@ export interface Cert {
   isNew: boolean;
   starred: boolean;
   custom: boolean;
-  /** 간단 설명 (「설명」 버튼) */
   /** 국가공인 받은 등급 ('등급 없음' = 단일 등급), 공인 만료일 */
   publicGrades: string | null;
   publicUntil: string | null;
-  detail: { label: string; text: string; items?: string[]; links?: { label: string; url: string }[] }[] | null;
   exams: CertExam[];
 }
 
@@ -55,6 +55,8 @@ export interface CertStats {
   totalLabel?: string;
   /** 응시 대비 취득 비율 (민간자격취득현황) */
   rate?: string | null;
+  /** 상세 설명 (「설명」 열 때만 받음) */
+  detail: { label: string; text: string; items?: string[]; links?: { label: string; url: string }[] }[] | null;
 }
 
 export interface CertMeta {

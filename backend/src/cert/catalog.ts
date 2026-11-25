@@ -26,7 +26,11 @@ export const CERT_FIELDS = [
   '기타',
 ] as const;
 
-export const CERT_KINDS = ['국가기술', '국가전문', '국가공인민간', '민간', '어학'] as const;
+export const CERT_KINDS = ['국가기술', '국가전문', '국가공인민간', '등록민간', '국제·어학'] as const;
+
+/** 해외 기관·기업 자격 (국내 민간자격 등록 대상 아님) → '국제·어학' */
+const INTL_ORG = /Amazon|Linux Foundation|Linux Professional|CFA Institute|Cisco|Microsoft|Google|ISC2|ISACA|EC-Council|Oracle|Red Hat|^PMI$|AICPA|^IMA$|GARP|Adobe/;
+export const kindOf = (kind: string, org: string): string => (kind === '등록민간' && INTL_ORG.test(org) ? '국제·어학' : kind);
 
 /** Q-net 정기 일정 묶음. 상시 = 수시 접수(회차 일정 없음) */
 export const SERIES_LABEL: Record<string, string> = {
@@ -97,8 +101,8 @@ const DATA: Record<string, Row[]> = {
     ['it-radio', '무선설비기사', '국가기술', '기사', '한국방송통신전파진흥원', CQ, null],
     ['it-linux', '리눅스마스터 2급', '국가공인민간', '2급', '한국정보통신진흥협회', 'https://www.ihd.or.kr', null],
     ['it-net', '네트워크관리사 2급', '국가공인민간', '2급', '한국정보통신자격협회', 'https://www.icqa.or.kr', null],
-    ['it-aws-saa', 'AWS Solutions Architect Associate', '민간', null, 'Amazon Web Services', 'https://aws.amazon.com/certification/', null, '클라우드 설계. 상시 응시(온라인·테스트센터)'],
-    ['it-cka', 'CKA (Kubernetes 관리자)', '민간', null, 'Linux Foundation', 'https://training.linuxfoundation.org', null, '상시 온라인 실기'],
+    ['it-aws-saa', 'AWS Solutions Architect Associate', '등록민간', null, 'Amazon Web Services', 'https://aws.amazon.com/certification/', null, '클라우드 설계. 상시 응시(온라인·테스트센터)'],
+    ['it-cka', 'CKA (Kubernetes 관리자)', '등록민간', null, 'Linux Foundation', 'https://training.linuxfoundation.org', null, '상시 온라인 실기'],
   ],
   '전기/전자': [
     q('el-ee', '전기기사', '기사', '전기 설계·시공·감리. 수요 많음'),
@@ -187,12 +191,12 @@ const DATA: Record<string, Row[]> = {
     ['ac-acc1', '회계관리 1급', '국가공인민간', '1급', '삼일회계법인', 'https://www.samilexam.com', null],
   ],
   '금융/부동산': [
-    ['fn-invest', '투자자산운용사', '민간', null, '금융투자협회', 'https://license.kofia.or.kr', null],
-    ['fn-fund', '펀드투자권유자문인력', '민간', null, '금융투자협회', 'https://license.kofia.or.kr', null],
-    ['fn-sec', '증권투자권유자문인력', '민간', null, '금융투자협회', 'https://license.kofia.or.kr', null],
+    ['fn-invest', '투자자산운용사', '등록민간', null, '금융투자협회', 'https://license.kofia.or.kr', null],
+    ['fn-fund', '펀드투자권유자문인력', '등록민간', null, '금융투자협회', 'https://license.kofia.or.kr', null],
+    ['fn-sec', '증권투자권유자문인력', '등록민간', null, '금융투자협회', 'https://license.kofia.or.kr', null],
     ['fn-credit', '신용분석사', '국가공인민간', null, '한국금융연수원', 'https://www.kbi.or.kr', null],
-    ['fn-afpk', 'AFPK', '민간', null, '한국FPSB', 'https://www.fpsbkorea.org', null],
-    ['fn-cfa', 'CFA', '민간', null, 'CFA Institute', 'https://www.cfainstitute.org', null],
+    ['fn-afpk', 'AFPK', '등록민간', null, '한국FPSB', 'https://www.fpsbkorea.org', null],
+    ['fn-cfa', 'CFA', '등록민간', null, 'CFA Institute', 'https://www.cfainstitute.org', null],
     qp('fn-realtor', '공인중개사', '부동산 중개. 1·2차 동시 응시 가능'),
     qp('fn-apprais', '감정평가사'),
   ],
@@ -246,7 +250,7 @@ const DATA: Record<string, Row[]> = {
     qa('bt-hair', '미용사(일반)'),
     qa('bt-skin', '미용사(피부)'),
     qa('bt-nail', '미용사(네일)'),
-    ['ck-barista', '바리스타 2급', '민간', '2급', '한국커피협회', 'https://www.kca-coffee.org', null],
+    ['ck-barista', '바리스타 2급', '등록민간', '2급', '한국커피협회', 'https://www.kca-coffee.org', null],
     qp('tr-guide', '관광통역안내사', '외국어 시험 성적 필요'),
     qp('tr-domestic', '국내여행안내사'),
     qp('tr-hotel', '호텔관리사'),
@@ -260,40 +264,40 @@ const DATA: Record<string, Row[]> = {
     q('ag-flower', '화훼장식기능사', '기능사'),
   ],
   어학: [
-    ['ln-toeic', 'TOEIC', '어학', null, 'YBM 한국TOEIC위원회', 'https://www.toeic.co.kr', null, '취업 영어 기본'],
-    ['ln-toeics', 'TOEIC Speaking', '어학', null, 'YBM 한국TOEIC위원회', 'https://www.toeic.co.kr', null],
-    ['ln-opic', 'OPIc', '어학', null, '멀티캠퍼스', 'https://www.opic.or.kr', null],
-    ['ln-teps', 'TEPS', '어학', null, '서울대 TEPS관리위원회', 'https://www.teps.or.kr', null],
-    ['ln-toefl', 'TOEFL iBT', '어학', null, 'ETS', 'https://www.ets.org/toefl', null, '유학'],
-    ['ln-ielts', 'IELTS', '어학', null, 'British Council·IDP', 'https://www.ielts.org', null, '유학·이민'],
-    ['ln-jlpt', 'JLPT (일본어능력시험)', '어학', 'N1~N5', '일본국제교류기금', 'https://www.jlpt.or.kr', null, '7월·12월 연 2회'],
-    ['ln-jpt', 'JPT', '어학', null, 'YBM', 'https://www.jpt.co.kr', null],
-    ['ln-hsk', 'HSK (중국어)', '어학', '1~6급', '중국 국가한반', 'https://www.hsk.or.kr', null],
-    ['ln-topik', 'TOPIK (한국어능력시험)', '어학', null, '국립국제교육원', 'https://www.topik.go.kr', null],
-    ['ln-toeicb', 'TOEIC Bridge', '어학', null, 'YBM 한국TOEIC위원회', 'https://www.toeic.co.kr', null, '입문 영어'],
-    ['ln-gtelp', 'G-TELP', '어학', 'Level 1~5', '한국 G-TELP 위원회', 'https://www.g-telp.co.kr', null, '공무원·군무원 영어 대체'],
-    ['ln-flex', 'FLEX (외국어능력시험)', '어학', null, '한국외국어대학교', 'https://flex.hufs.ac.kr', null, '영어·중국어·일본어·스페인어 등 다언어'],
-    ['ln-pte', 'PTE Academic', '어학', null, 'Pearson', 'https://www.pearsonpte.com', null, '유학·이민. 컴퓨터 시험'],
-    ['ln-det', 'Duolingo English Test', '어학', null, 'Duolingo', 'https://englishtest.duolingo.com', null, '온라인 응시'],
-    ['ln-cae', 'Cambridge C1 Advanced', '어학', 'C1', 'Cambridge English', 'https://www.cambridgeenglish.org', null],
-    ['ln-sjpt', 'SJPT (일본어 말하기)', '어학', null, 'YBM', 'https://www.ybmsisa.com', null],
-    ['ln-jtest', 'J.TEST (실용일본어검정)', '어학', null, 'J.TEST 한국위원회', 'https://www.jtest.or.kr', null],
-    ['ln-hskk', 'HSKK (중국어 말하기)', '어학', '초·중·고급', '중국 국가한반', 'https://www.hsk.or.kr', null],
-    ['ln-tsc', 'TSC (중국어 말하기)', '어학', null, 'YBM', 'https://www.ybmsisa.com', null],
-    ['ln-tocfl', 'TOCFL (대만 중국어)', '어학', null, '대만 화어문능력시험위원회', 'https://tocfl.edu.tw', null, '대만 유학·장학'],
-    ['ln-dele', 'DELE (스페인어)', '어학', 'A1~C2', '세르반테스 문화원', 'https://examenes.cervantes.es', null, '스페인 교육부 공인'],
-    ['ln-siele', 'SIELE (스페인어)', '어학', null, '세르반테스 문화원', 'https://siele.org', null, '컴퓨터 시험'],
-    ['ln-delf', 'DELF (프랑스어)', '어학', 'A1~B2', '프랑스 교육부 (FEI)', 'https://www.france-education-international.fr', null, '프랑스 교육부 공인'],
-    ['ln-dalf', 'DALF (프랑스어)', '어학', 'C1~C2', '프랑스 교육부 (FEI)', 'https://www.france-education-international.fr', null, '고급 프랑스어'],
-    ['ln-tcf', 'TCF (프랑스어)', '어학', null, '프랑스 교육부 (FEI)', 'https://www.france-education-international.fr', null],
-    ['ln-tef', 'TEF (프랑스어)', '어학', null, '파리 상공회의소', 'https://www.lefrancaisdesaffaires.fr', null, '캐나다 이민 등'],
-    ['ln-goethe', 'Goethe-Zertifikat (독일어)', '어학', 'A1~C2', '괴테 인스티투트', 'https://www.goethe.de/korea', null],
-    ['ln-testdaf', 'TestDaF (독일어)', '어학', null, 'TestDaF-Institut', 'https://www.testdaf.de', null, '독일 대학 입학'],
-    ['ln-torfl', 'TORFL (러시아어)', '어학', '1~4단계', '러시아 교육부', 'https://www.google.com/search?q=TORFL', null],
-    ['ln-cils', 'CILS (이탈리아어)', '어학', 'A1~C2', '시에나 외국인대학', 'https://cils.unistrasi.it', null],
-    ['ln-celi', 'CELI (이탈리아어)', '어학', 'A1~C2', '페루자 외국인대학', 'https://www.cvcl.it', null],
-    ['ln-plida', 'PLIDA (이탈리아어)', '어학', 'A1~C2', '단테 알리기에리 협회', 'https://plida.it', null],
-    ['ln-caple', 'CAPLE (포르투갈어)', '어학', 'A1~C2', '리스본 대학교', 'https://caple.letras.ulisboa.pt', null],
+    ['ln-toeic', 'TOEIC', '국제·어학', null, 'YBM 한국TOEIC위원회', 'https://www.toeic.co.kr', null, '취업 영어 기본'],
+    ['ln-toeics', 'TOEIC Speaking', '국제·어학', null, 'YBM 한국TOEIC위원회', 'https://www.toeic.co.kr', null],
+    ['ln-opic', 'OPIc', '국제·어학', null, '멀티캠퍼스', 'https://www.opic.or.kr', null],
+    ['ln-teps', 'TEPS', '국제·어학', null, '서울대 TEPS관리위원회', 'https://www.teps.or.kr', null],
+    ['ln-toefl', 'TOEFL iBT', '국제·어학', null, 'ETS', 'https://www.ets.org/toefl', null, '유학'],
+    ['ln-ielts', 'IELTS', '국제·어학', null, 'British Council·IDP', 'https://www.ielts.org', null, '유학·이민'],
+    ['ln-jlpt', 'JLPT (일본어능력시험)', '국제·어학', 'N1~N5', '일본국제교류기금', 'https://www.jlpt.or.kr', null, '7월·12월 연 2회'],
+    ['ln-jpt', 'JPT', '국제·어학', null, 'YBM', 'https://www.jpt.co.kr', null],
+    ['ln-hsk', 'HSK (중국어)', '국제·어학', '1~6급', '중국 국가한반', 'https://www.hsk.or.kr', null],
+    ['ln-topik', 'TOPIK (한국어능력시험)', '국제·어학', null, '국립국제교육원', 'https://www.topik.go.kr', null],
+    ['ln-toeicb', 'TOEIC Bridge', '국제·어학', null, 'YBM 한국TOEIC위원회', 'https://www.toeic.co.kr', null, '입문 영어'],
+    ['ln-gtelp', 'G-TELP', '국제·어학', 'Level 1~5', '한국 G-TELP 위원회', 'https://www.g-telp.co.kr', null, '공무원·군무원 영어 대체'],
+    ['ln-flex', 'FLEX (외국어능력시험)', '국제·어학', null, '한국외국어대학교', 'https://flex.hufs.ac.kr', null, '영어·중국어·일본어·스페인어 등 다언어'],
+    ['ln-pte', 'PTE Academic', '국제·어학', null, 'Pearson', 'https://www.pearsonpte.com', null, '유학·이민. 컴퓨터 시험'],
+    ['ln-det', 'Duolingo English Test', '국제·어학', null, 'Duolingo', 'https://englishtest.duolingo.com', null, '온라인 응시'],
+    ['ln-cae', 'Cambridge C1 Advanced', '국제·어학', 'C1', 'Cambridge English', 'https://www.cambridgeenglish.org', null],
+    ['ln-sjpt', 'SJPT (일본어 말하기)', '국제·어학', null, 'YBM', 'https://www.ybmsisa.com', null],
+    ['ln-jtest', 'J.TEST (실용일본어검정)', '국제·어학', null, 'J.TEST 한국위원회', 'https://www.jtest.or.kr', null],
+    ['ln-hskk', 'HSKK (중국어 말하기)', '국제·어학', '초·중·고급', '중국 국가한반', 'https://www.hsk.or.kr', null],
+    ['ln-tsc', 'TSC (중국어 말하기)', '국제·어학', null, 'YBM', 'https://www.ybmsisa.com', null],
+    ['ln-tocfl', 'TOCFL (대만 중국어)', '국제·어학', null, '대만 화어문능력시험위원회', 'https://tocfl.edu.tw', null, '대만 유학·장학'],
+    ['ln-dele', 'DELE (스페인어)', '국제·어학', 'A1~C2', '세르반테스 문화원', 'https://examenes.cervantes.es', null, '스페인 교육부 공인'],
+    ['ln-siele', 'SIELE (스페인어)', '국제·어학', null, '세르반테스 문화원', 'https://siele.org', null, '컴퓨터 시험'],
+    ['ln-delf', 'DELF (프랑스어)', '국제·어학', 'A1~B2', '프랑스 교육부 (FEI)', 'https://www.france-education-international.fr', null, '프랑스 교육부 공인'],
+    ['ln-dalf', 'DALF (프랑스어)', '국제·어학', 'C1~C2', '프랑스 교육부 (FEI)', 'https://www.france-education-international.fr', null, '고급 프랑스어'],
+    ['ln-tcf', 'TCF (프랑스어)', '국제·어학', null, '프랑스 교육부 (FEI)', 'https://www.france-education-international.fr', null],
+    ['ln-tef', 'TEF (프랑스어)', '국제·어학', null, '파리 상공회의소', 'https://www.lefrancaisdesaffaires.fr', null, '캐나다 이민 등'],
+    ['ln-goethe', 'Goethe-Zertifikat (독일어)', '국제·어학', 'A1~C2', '괴테 인스티투트', 'https://www.goethe.de/korea', null],
+    ['ln-testdaf', 'TestDaF (독일어)', '국제·어학', null, 'TestDaF-Institut', 'https://www.testdaf.de', null, '독일 대학 입학'],
+    ['ln-torfl', 'TORFL (러시아어)', '국제·어학', '1~4단계', '러시아 교육부', 'https://www.google.com/search?q=TORFL', null],
+    ['ln-cils', 'CILS (이탈리아어)', '국제·어학', 'A1~C2', '시에나 외국인대학', 'https://cils.unistrasi.it', null],
+    ['ln-celi', 'CELI (이탈리아어)', '국제·어학', 'A1~C2', '페루자 외국인대학', 'https://www.cvcl.it', null],
+    ['ln-plida', 'PLIDA (이탈리아어)', '국제·어학', 'A1~C2', '단테 알리기에리 협회', 'https://plida.it', null],
+    ['ln-caple', 'CAPLE (포르투갈어)', '국제·어학', 'A1~C2', '리스본 대학교', 'https://caple.letras.ulisboa.pt', null],
   ],
 };
 
@@ -306,8 +310,8 @@ function defaults(kind: string, grade: string | null, series: string | null): { 
     if (grade === '기능사') return { prep: '1~2개월', fee: '필기 14,500원 · 실기 종목별' };
     return { prep: '2~3개월', fee: '필기 19,400원 · 실기 종목별' };
   }
-  if (kind === '어학') return { prep: '1~3개월', fee: null };
-  if (kind === '국가공인민간' || kind === '민간') return { prep: '1~2개월', fee: null };
+  if (kind === '국제·어학') return { prep: '1~3개월', fee: null };
+  if (kind === '국가공인민간' || kind === '등록민간') return { prep: '1~2개월', fee: null };
   return { prep: null, fee: null };
 }
 
@@ -557,13 +561,13 @@ const ACQ: CatalogCert[] = (() => {
       id,
       name,
       field: acqFieldHint(r.name) ?? fieldOfPrivate(r.name, r.ministry),
-      kind: '민간',
+      kind: '등록민간',
       grade: acqGrade(r.grades),
       org: shortOrg(r.org),
       url: null,
       series: null,
       summary: acqSummary(r),
-      prep: defaults('민간', null, null).prep,
+      prep: defaults('등록민간', null, null).prep,
       fee: null,
       validity: null,
       ...stats,
@@ -572,7 +576,7 @@ const ACQ: CatalogCert[] = (() => {
   return out;
 })();
 
-export const CATALOG: CatalogCert[] = [...BASE, ...PRIVATE, ...BULK, ...ACQ];
+export const CATALOG: CatalogCert[] = [...BASE, ...PRIVATE, ...BULK, ...ACQ].map((c) => ({ ...c, kind: kindOf(c.kind, c.org) }));
 
 /** Q-net 직무분야 → 자격증 분야 */
 export function fieldOfQnet(obligfld: string): string {

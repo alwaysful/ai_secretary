@@ -41,7 +41,7 @@ const NAMED: Record<string, number> = {
 const NAMED_N = new Map(Object.entries(NAMED).map(([k, v]) => [norm(k), v]));
 
 const GRADE: Record<string, number> = { 기술사: 8.0, 기능장: 6.6, 기사: 7.0, 산업기사: 5.8, 기능사: 5.0 };
-const KIND: Record<string, number> = { 국가기술: 5.6, 국가전문: 6.6, 국가공인민간: 5.2, 민간: 4.0, 어학: 5.6 };
+const KIND: Record<string, number> = { 국가기술: 5.6, 국가전문: 6.6, 국가공인민간: 5.2, 등록민간: 4.0, '국제·어학': 5.6 };
 const FIELD: Record<string, number> = {
   '정보통신/IT': 0.5, '전기/전자': 0.5, '건설/건축': 0.3, '안전/환경/에너지': 0.5, '보건/의료/복지': 0.3,
   '금융/부동산': 0.2, '농림/조경': -0.3, '디자인/미디어': -0.2, 기타: -0.4,
@@ -59,6 +59,6 @@ export function scoreOf(c: { name: string; kind: string; grade: string | null; f
   else if (/^3급$/.test(g)) v -= 0.4;
   v += FIELD[c.field] ?? 0;
   // 민간: 5년 취득자 많을수록 조금 가산 (1천명 0, 1만 +0.5, 10만 +1.0)
-  if (c.kind === '민간' && c.statsTotal) v += Math.max(-0.5, Math.min(1.2, Math.log10(c.statsTotal / 1000) * 0.5));
+  if (c.kind === '등록민간' && c.statsTotal) v += Math.max(-0.5, Math.min(1.2, Math.log10(c.statsTotal / 1000) * 0.5));
   return round1(v);
 }

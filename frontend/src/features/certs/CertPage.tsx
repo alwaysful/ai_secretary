@@ -116,7 +116,7 @@ const searchUrl = (name: string) => `https://search.naver.com/search.naver?query
 
 /** 자격증 추가 (직접) */
 function CertForm(props: { meta: CertMeta; field: string; onDone: (c?: Cert) => void }) {
-  const [b, setB] = useState<CertInput & { name: string }>({ name: '', field: props.field || '기타', kind: '민간', org: '', url: '', grade: '', summary: '' });
+  const [b, setB] = useState<CertInput & { name: string }>({ name: '', field: props.field || '기타', kind: '등록민간', org: '', url: '', grade: '', summary: '' });
   const [error, setError] = useState('');
   const set = (k: keyof CertInput) => (e: { target: { value: string } }) => setB({ ...b, [k]: e.target.value });
   const save = () =>

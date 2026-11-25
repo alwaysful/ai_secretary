@@ -31,22 +31,22 @@ const KPC = ['한국생산성본부', 'https://license.kpc.or.kr'] as const;
 const PUBLIC: Record<string, P[]> = {
   '정보통신/IT': [
     ['pv-linux1', '리눅스마스터 1급', '1급', ...KAIT, { prep: '2~3개월' }],
-    ['pv-net1', '네트워크관리사 1급', '1급', ...ICQA, { kind: '민간', prep: '2~3개월' }],
+    ['pv-net1', '네트워크관리사 1급', '1급', ...ICQA, { kind: '등록민간', prep: '2~3개월' }],
     ['pv-pc', 'PC정비사', '1·2급', ...ICQA, { prep: '1개월' }],
-    ['pv-iim', '인터넷정보관리사', '전문가·1·2급', ...KAIT, { kind: '민간', prep: '1개월' }],
+    ['pv-iim', '인터넷정보관리사', '전문가·1·2급', ...KAIT, { kind: '등록민간', prep: '1개월' }],
     ['pv-diat', 'DIAT (디지털정보활용능력)', null, ...KAIT, { prep: '2~4주', summary: '한글·엑셀·PPT·인터넷 과목별' }],
     ['pv-itpm', '정보기술프로젝트관리전문가 (IT-PMP)', null, ...KAIT, { prep: '1~2개월' }],
     ['pv-isa', '정보시스템감리사', null, '한국지능정보사회진흥원', 'https://www.nia.or.kr', { prep: '6~12개월', summary: '정보시스템 감리 전문 인력' }],
     ['pv-dap', 'DAP (데이터아키텍처 전문가)', null, ...DATAQ, { prep: '3~6개월', fee: '필기·실기 각 100,000원', validity: '없음' }],
-    ['pv-dasp', 'DAsP (데이터아키텍처 준전문가)', null, ...DATAQ, { kind: '민간', prep: '1~2개월', fee: '50,000원', validity: '없음' }],
+    ['pv-dasp', 'DAsP (데이터아키텍처 준전문가)', null, ...DATAQ, { kind: '등록민간', prep: '1~2개월', fee: '50,000원', validity: '없음' }],
     ['pv-etest', 'e-Test Professionals', null, 'e-Test', 'https://www.e-test.co.kr', { prep: '2~4주' }],
   ],
   '경영/사무/OA': [
-    ['pv-trade', '국제무역사', '1급', '한국무역협회', 'https://www.tradecampus.com', { kind: '민간', prep: '2~3개월', summary: '무역 실무·법규' }],
+    ['pv-trade', '국제무역사', '1급', '한국무역협회', 'https://www.tradecampus.com', { kind: '등록민간', prep: '2~3개월', summary: '무역 실무·법규' }],
     ['pv-tradeeng', '무역영어', '1~3급', ...KORCHAM, { prep: '1~2개월' }],
-    ['pv-docs', '문서실무사', '1~3급', '한국정보관리협회', null, { kind: '민간', prep: '2~4주' }],
+    ['pv-docs', '문서실무사', '1~3급', '한국정보관리협회', null, { kind: '등록민간', prep: '2~4주' }],
     ['pv-admin', '행정관리사', '1~3급', '한국행정관리협회', null, { prep: '1~2개월' }],
-    ['pv-itq-ad', 'ITQ OA Master', null, ...KPC, { kind: '민간', prep: '1~2개월', summary: 'ITQ 3과목 A등급' }],
+    ['pv-itq-ad', 'ITQ OA Master', null, ...KPC, { kind: '등록민간', prep: '1~2개월', summary: 'ITQ 3과목 A등급' }],
     ['pv-erp1', 'ERP 정보관리사 1급', '1급', ...KPC, { prep: '1~2개월' }],
   ],
   '회계/세무': [
@@ -57,7 +57,7 @@ const PUBLIC: Record<string, P[]> = {
     ['pv-ca2', '전산회계 2급', '2급', '한국세무사회', 'https://license.kacpta.or.kr', { prep: '2~4주' }],
     ['pv-ct1', '전산세무 1급', '1급', '한국세무사회', 'https://license.kacpta.or.kr', { prep: '3~6개월' }],
     ['pv-acc2', '회계관리 2급', '2급', '삼일회계법인', 'https://www.samilexam.com', { prep: '2~4주' }],
-    ['pv-biz-acc', '기업회계', '1~3급', '한국세무사회', 'https://license.kacpta.or.kr', { kind: '민간', prep: '1~3개월' }],
+    ['pv-biz-acc', '기업회계', '1~3급', '한국세무사회', 'https://license.kacpta.or.kr', { kind: '등록민간', prep: '1~3개월' }],
     ['pv-tax-acc', '세무회계', '1~3급', '한국세무사회', 'https://license.kacpta.or.kr', { prep: '1~3개월' }],
   ],
   '금융/부동산': [
@@ -67,11 +67,11 @@ const PUBLIC: Record<string, P[]> = {
     ['pv-fx1', '외환전문역 1종', '1종', ...KBI, { prep: '1~2개월' }],
     ['pv-fx2', '외환전문역 2종', '2종', ...KBI, { prep: '1~2개월' }],
     ['pv-credit-mgr', '신용관리사', null, ...KBI, { prep: '1~2개월' }],
-    ['pv-deriv', '파생상품투자권유자문인력', null, ...KOFIA, { kind: '민간', prep: '1~2개월' }],
+    ['pv-deriv', '파생상품투자권유자문인력', null, ...KOFIA, { kind: '등록민간', prep: '1~2개월' }],
   ],
   '교육/상담/인문': [
     ['pv-kbs', 'KBS 한국어능력시험', '1~4급', 'KBS', null, { prep: '1~2개월', summary: '언론사·공기업 가산점', validity: '2년' }],
-    ['pv-tokl', '국어능력인증시험 (ToKL)', null, '한국언어문화연구원', null, { kind: '민간', prep: '1~2개월', validity: '2년' }],
+    ['pv-tokl', '국어능력인증시험 (ToKL)', null, '한국언어문화연구원', null, { kind: '등록민간', prep: '1~2개월', validity: '2년' }],
     ['pv-hanja-kh', '한자급수자격검정', '사범~8급', '대한검정회', null, { prep: '급수별 2주~3개월', validity: '없음' }],
   ],
 };
@@ -172,4 +172,4 @@ const build = (src: Record<string, P[]>, kind: string): PrivateCert[] =>
     rows.map(([id, name, grade, org, url, x]) => ({ id, name, field, kind, grade, org, url, ...(x ?? {}) })),
   );
 
-export const PRIVATE_CERTS: PrivateCert[] = [...build(PUBLIC, '국가공인민간'), ...build(POPULAR, '민간')];
+export const PRIVATE_CERTS: PrivateCert[] = [...build(PUBLIC, '국가공인민간'), ...build(POPULAR, '등록민간')];
