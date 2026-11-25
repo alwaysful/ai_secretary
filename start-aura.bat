@@ -9,7 +9,11 @@ if not exist node_modules\concurrently call npm run install:all
 docker info >nul 2>&1
 if errorlevel 1 (
   echo Docker Desktop 시작 중...
-  start "" "%ProgramFiles%\Docker\Docker\Docker Desktop.exe"
+  if exist "%ProgramFiles%\Docker\Docker\Docker Desktop.exe" (
+    start "" "%ProgramFiles%\Docker\Docker\Docker Desktop.exe"
+  ) else (
+    start "" "%LOCALAPPDATA%\Programs\DockerDesktop\Docker Desktop.exe"
+  )
   for /l %%i in (1,1,40) do (
     docker info >nul 2>&1 || timeout /t 3 /nobreak >nul
   )
