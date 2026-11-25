@@ -12,6 +12,12 @@ import { CERT_DETAILS, CertDetail } from './details';
 import { CertStats, KPrivate, KPro, kproUrl, parseKPro, kprivateUrl, norm, parseCertStats, parseJmList, parseKPrivate, parseQnet, QNET_PAGE, QnetGb, QnetJm, qnetJmUrl, QnetPhase, qnetStatUrl, qnetUrl, seriesOf } from './qnet';
 
 const DAY = 86_400_000;
+/** 자격증 번호 대역: 종류 × 100000 + 순번 (국가기술 100001~) */
+const NO_SPAN = 100_000;
+const KIND_BASE: Record<string, number> = { 국가기술: 1, 국가전문: 2, 국가공인민간: 3, 등록민간: 4, '국제·어학': 5 };
+/** 목록 조회에서 뺄 큰 열 */
+const LIST_OMIT = { detail: true, statsYears: true } as const;
+type CertRow = Omit<Certificate, keyof typeof LIST_OMIT>;
 const CATALOG_IDS = new Set(CATALOG.map((c) => c.id));
 /** 자동 수집 주기 */
 const SYNC_EVERY_MS = 24 * 3_600_000;
@@ -63,6 +69,8 @@ export interface ExamView {
 
 export interface CertView {
   id: string;
+  /** 자격증 번호 (국가기술 100001~ 등) */
+  no: number | null;
   name: string;
   field: string;
   kind: string;
@@ -89,14 +97,14 @@ export interface CertView {
   isNew: boolean;
   starred: boolean;
   custom: boolean;
-  /** 간단 설명 (없으면 null) */
-  detail: CertDetail | null;
   /** 국가공인 받은 등급 ('등급 없음' = 단일 등급), 공인 만료일 */
   publicGrades: string | null;
   publicUntil: string | null;
   /** 끝나지 않은 회차 (가까운 순) */
   exams: ExamView[];
 }
+
+type StatsView = { stats: CertStats | null; at: Date | null; note: string | null; totalLabel?: string; rate?: string | null };
 
 export interface CertConfigView {
   /** 화면에서 넣은 키 마스킹 */
@@ -167,6 +175,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.seed();
       await this.tidyDiscovered();
+      await this.number();
     } catch (e) {
       this.log.warn(`자격증 기본 목록 준비 실패: ${(e as Error).message}`);
     }
@@ -195,6 +204,43 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
         old.map(({ id, ...data }) => this.prisma.certificate.update({ where: { id }, data })),
       );
     }
+    // 상세 설명: 코드 파일이 원본 → DB에 복사
+    const details = Object.entries(CERT_DETAILS);
+    if (details.length) {
+      await this.prisma.$transaction(
+        details.map(([id, detail]) => this.prisma.certificate.updateMany({ where: { id }, data: { detail: detail as Prisma.InputJsonValue } })),
+      );
+    }
+  }
+
+  /**
+   * 번호 없는 자격증에 번호 주기. 종류별 대역(KIND_BASE) 안에서 지금 최대값 다음부터, 목록 순서대로.
+   * 준 번호는 종류가 바뀌어도 그대로. 중간 번호 지워도 빈자리 안 채움 (대역 맨 끝 번호 지운 경우만 다음에 다시 쓰일 수 있음).
+   */
+  private async number(): Promise<void> {
+    const rows = await this.prisma.certificate.findMany({
+      select: { id: true, no: true, kind: true },
+      orderBy: [{ position: 'asc' }, { name: 'asc' }],
+    });
+    const next = new Map<number, number>();
+    for (const r of rows) {
+      if (r.no === null) continue;
+      const base = Math.floor(r.no / NO_SPAN) * NO_SPAN;
+      next.set(base, Math.max(next.get(base) ?? base, r.no));
+    }
+    const ids: string[] = [];
+    const nos: number[] = [];
+    for (const r of rows) {
+      if (r.no !== null) continue;
+      const base = (KIND_BASE[r.kind] ?? 9) * NO_SPAN;
+      const n = (next.get(base) ?? base) + 1;
+      next.set(base, n);
+      ids.push(r.id);
+      nos.push(n);
+    }
+    if (!ids.length) return;
+    await this.prisma.$executeRaw`UPDATE "Certificate" c SET "no" = v.no FROM unnest(${ids}::text[], ${nos}::int[]) AS v(id, no) WHERE c.id = v.id`;
+    this.log.log(`자격증 번호 ${ids.length}개 부여`);
   }
 
   meta() {
@@ -218,9 +264,10 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private view(c: Certificate, exams: CertExam[]): CertView {
+  private view(c: CertRow, exams: CertExam[]): CertView {
     return {
       id: c.id,
+      no: c.no,
       name: c.name,
       field: c.field,
       kind: c.kind,
@@ -241,7 +288,6 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
       isNew: !!c.discoveredAt && Date.now() - c.discoveredAt.getTime() < NEW_FOR_MS,
       starred: c.starred,
       custom: c.custom,
-      detail: CERT_DETAILS[c.id] ?? null,
       publicGrades: c.publicGrades,
       publicUntil: c.publicUntil,
       exams: exams.map((e) => this.examView(e)),
@@ -249,7 +295,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** 끝나지 않은 회차 → 자격증별로 묶기 (자기 일정 + 묶음 일정) */
-  private async upcoming(certs: Certificate[]): Promise<Map<string, CertExam[]>> {
+  private async upcoming(certs: CertRow[]): Promise<Map<string, CertExam[]>> {
     const since = new Date(Date.now() - DAY);
     const ids = certs.map((c) => c.id);
     const series = [...new Set(certs.map((c) => c.series).filter((s): s is string => !!s))];
@@ -276,7 +322,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
     if (text) {
       where.OR = (['name', 'org', 'summary', 'grade', 'field'] as const).map((k) => ({ [k]: { contains: text, mode: 'insensitive' } }));
     }
-    const certs = await this.prisma.certificate.findMany({ where, orderBy: [{ starred: 'desc' }, { custom: 'desc' }, { position: 'asc' }, { name: 'asc' }] });
+    const certs = await this.prisma.certificate.findMany({ where, omit: LIST_OMIT, orderBy: [{ starred: 'desc' }, { custom: 'desc' }, { position: 'asc' }, { name: 'asc' }] });
     const exams = await this.upcoming(certs);
     return certs.map((c) => this.view(c, exams.get(c.id) ?? []));
   }
@@ -332,7 +378,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
         id: randomUUID(),
         name: b.name.trim(),
         field: b.field ?? '기타',
-        kind: b.kind ?? '민간',
+        kind: b.kind ?? '등록민간',
         grade: b.grade?.trim() || null,
         org: b.org?.trim() || '-',
         url: b.url?.trim() || null,
@@ -345,6 +391,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
         position: (max._max.position ?? 0) + 1,
       },
     });
+    await this.number();
     return this.one(c.id);
   }
 
@@ -532,7 +579,10 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
     if (list.length) await this.fillJmCd(list).catch((e: Error) => this.log.warn(`종목코드 채우기 실패: ${e.message}`));
     const fresh = await this.freshRows(list, priv, now, pro);
     if (priv.length) await this.markPublic(priv).catch((e: Error) => this.log.warn(`공인 등급 표시 실패: ${e.message}`));
-    if (fresh.length) await this.prisma.certificate.createMany({ data: fresh, skipDuplicates: true });
+    if (fresh.length) {
+      await this.prisma.certificate.createMany({ data: fresh, skipDuplicates: true });
+      await this.number();
+    }
     const error = errors.join(' / ') || null;
     await this.prisma.certConfig.update({ where: { id: 1 }, data: { lastCatalogAt: now, lastCatalogNew: fresh.length, lastCatalogError: error } });
     this.log.log(`새 자격증 ${fresh.length}개 추가 (Q-net 종목 ${list.length}개, 공인민간 ${priv.length}개, 국가전문 ${pro.length}개 확인)`);
@@ -541,7 +591,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 공인민간자격등록현황에 있는 자격 → 공인 등급·만료일 표시, '민간'으로 잘못 둔 건 '국가공인민간'으로.
+   * 공인민간자격등록현황에 있는 자격 → 공인 등급·만료일 표시, '등록민간'으로 잘못 둔 건 '국가공인민간'으로.
    * 목록에서 빠진(공인 만료) 자격은 공인 표시만 지움.
    */
   private async markPublic(priv: KPrivate[]): Promise<void> {
@@ -590,7 +640,7 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
       }
       if (grades) matched++;
       // 공인 목록과 이어졌는데 이 등급은 공인 아님 → 민간
-      const kind = isPublic && r.kind === '민간' ? '국가공인민간' : grades && !isPublic && r.kind === '국가공인민간' ? '민간' : r.kind;
+      const kind = isPublic && r.kind === '등록민간' ? '국가공인민간' : grades && !isPublic && r.kind === '국가공인민간' ? '등록민간' : r.kind;
       if (grades !== r.publicGrades || until !== r.publicUntil || kind !== r.kind) {
         ops.push(this.prisma.certificate.update({ where: { id: r.id }, data: { publicGrades: grades, publicUntil: until, kind } }));
       }
@@ -615,8 +665,13 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
    * 취득자 통계 (「설명」 열 때). Q-net 종목만, 종목마다 1회 호출 → DB에 30일 보관.
    * 키 없거나 한도 넘으면 저장된 값(없으면 null) + 이유.
    */
-  async stats(id: string): Promise<{ stats: CertStats | null; at: Date | null; note: string | null; totalLabel?: string; rate?: string | null }> {
+  async stats(id: string): Promise<StatsView & { detail: CertDetail | null }> {
     const c = await this.get(id);
+    return { ...(await this.statsOf(c)), detail: (c.detail as CertDetail | null) ?? null };
+  }
+
+  private async statsOf(c: Certificate): Promise<StatsView> {
+    const id = c.id;
     const saved = c.statsYears ? { years: c.statsYears as CertStats['years'], total: c.statsTotal ?? 0 } : null;
     const acq = ACQ_BY_ID.get(c.id);
     if (!c.jmCd && acq && saved) return { stats: saved, at: null, note: ACQ_SOURCE, totalLabel: '5년 합계', rate: acqRate(acq) };

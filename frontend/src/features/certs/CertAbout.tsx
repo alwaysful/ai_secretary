@@ -3,7 +3,7 @@ import { Cert, CertStats, certApi } from './certApi';
 
 const fmt = new Intl.NumberFormat('ko-KR');
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
-type Item = NonNullable<Cert['detail']>[number];
+type Item = NonNullable<CertStats['detail']>[number];
 
 /** 설명 항목 → 묶음. 목록에 없는 항목은 '개요'로 */
 const GROUPS: { title: string; icon: string; labels: string[] }[] = [
@@ -75,7 +75,7 @@ export function CertAbout({ cert }: { cert: Cert }) {
   }, [cert.id]);
   const s = st?.stats;
   const last = s?.years[s.years.length - 1];
-  const detail = cert.detail ?? [];
+  const detail = st?.detail ?? [];
   const passRate = detail.find((d) => d.label === '합격률')?.text ?? st?.rate ?? undefined;
   const links = detail.filter((d) => d.label === '링크').flatMap((d) => d.links ?? []);
   const chips: [string, string | null | undefined][] = [
@@ -85,6 +85,7 @@ export function CertAbout({ cert }: { cert: Cert }) {
     ['유효기간', cert.validity],
     ['주관', cert.org],
     ['국가공인', publicLabel(cert)],
+    ['번호', cert.no ? String(cert.no) : null],
   ];
 
   return (
