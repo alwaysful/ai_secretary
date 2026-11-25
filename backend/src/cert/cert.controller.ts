@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsDate, IsNotEmpty, IsNumber, IsOptional, IsString, IsUrl, Max, MaxLength, Min, ValidateIf } from 'class-validator';
+import { IsBoolean, IsDate, IsNotEmpty, IsNumber, IsOptional, IsString, IsUrl, Matches, Max, MaxLength, Min, ValidateIf } from 'class-validator';
 import { CertService } from './cert.service';
 
 const bool = ({ value }: { value: unknown }) => value === 'true' || value === '1' || value === true;
@@ -90,6 +90,11 @@ export class ExamDto {
   note?: string | null;
 }
 
+export class CertPlaceDto {
+  @IsString() @Matches(/^\d{2}$/)
+  brch!: string;
+}
+
 export class CertKeyDto {
   @IsOptional() @Transform(emptyNull) @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(300)
   key?: string | null;
@@ -129,6 +134,18 @@ export class CertController {
     return this.certs.setKey(b.key ?? null);
   }
 
+  /** 시험장소 지역 목록 */
+  @Get('places/branches')
+  branches() {
+    return this.certs.branches();
+  }
+
+  /** 시험장소 (지역 코드 01~24) */
+  @Get('places')
+  places(@Query() q: CertPlaceDto) {
+    return this.certs.places(q.brch);
+  }
+
   @Post('discover')
   discover() {
     return this.certs.discover();
@@ -166,6 +183,18 @@ export class CertController {
   @Get(':id/stats')
   stats(@Param('id') id: string) {
     return this.certs.stats(id);
+  }
+
+  /** 공개문제 목록 */
+  @Get(':id/questions')
+  questions(@Param('id') id: string) {
+    return this.certs.questions(id);
+  }
+
+  /** 민간자격 등록정보 */
+  @Get(':id/registry')
+  registry(@Param('id') id: string) {
+    return this.certs.registry(id);
   }
 
   @Post(':id/exams')

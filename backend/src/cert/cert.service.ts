@@ -8,6 +8,7 @@ import { ACQ_SOURCE, acqRate } from './catalog-acq';
 import { ACQ_BY_ID, aliasOf, baseOfVariant, findGrade, CATALOG, CERT_FIELDS, CERT_KINDS, defaultsOf, fieldOfName, fieldOfPrivate, fieldOfQnet, isTechGrade, joinTags, singleGradeIsPublic, SERIES_LABEL, seriesOfGrade } from './catalog';
 import { scoreOf } from './score';
 import { CERT_DETAILS, CertDetail } from './details';
+import { BRANCHES, ExamArea, examAreaUrl, EXAM_AREA_PAGE, KReg, kregUrl, OpenQst, openQstUrl, parseExamArea, parseKReg, parseOpenQst, parsePassYears, PassStats, passShort, passText, qnetPassUrl } from './qnet';
 import { CertStats, KPrivate, KPro, kproUrl, parseKPro, kprivateUrl, norm, parseCertStats, parseJmList, parseKPrivate, parseQnet, QNET_PAGE, QnetGb, QnetJm, qnetJmUrl, QnetPhase, qnetStatUrl, qnetUrl, seriesOf } from './qnet';
 
 const DAY = 86_400_000;
@@ -21,7 +22,7 @@ const NO_RANGE: Record<string, [number, number]> = {
 };
 const NO_OTHER: [number, number] = [900_000, 1_000_000];
 /** 목록 조회에서 뺄 큰 열 */
-const LIST_OMIT = { detail: true, statsYears: true } as const;
+const LIST_OMIT = { detail: true, statsYears: true, passYears: true } as const;
 type CertRow = Omit<Certificate, keyof typeof LIST_OMIT>;
 const CATALOG_IDS = new Set(CATALOG.map((c) => c.id));
 /** 자동 수집 주기 */
@@ -113,7 +114,11 @@ export interface CertView {
   exams: ExamView[];
 }
 
-type StatsView = { stats: CertStats | null; at: Date | null; note: string | null; totalLabel?: string; rate?: string | null };
+type StatsView = { stats: CertStats | null; at: Date | null; note: string | null; totalLabel?: string; rate?: string | null; pass?: PassStats | null };
+/** 시험장소 목록은 거의 안 바뀜 → 7일 캐시 */
+const AREA_CACHE_MS = 7 * DAY;
+/** API 오류 → 화면 문구 (활용신청 대기 등) */
+const apiNote = (msg: string, api: string) => (/SERVICE_KEY|SERVICE_ACCESS|등록되지|PERMISSION|401|403|Unauthorized/i.test(msg) ? `「${api}」 API 활용신청(승인) 필요` : msg);
 
 export interface CertConfigView {
   /** 화면에서 넣은 키 마스킹 */
@@ -687,7 +692,99 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
    */
   async stats(id: string): Promise<StatsView & { detail: CertDetail | null }> {
     const c = await this.get(id);
-    return { ...(await this.statsOf(c)), detail: (c.detail as CertDetail | null) ?? null };
+    const st = await this.statsOf(c);
+    if (!c.jmCd) return { ...st, detail: (c.detail as CertDetail | null) ?? null };
+    const pass = await this.passOf(c);
+    let detail = (c.detail as CertDetail | null) ?? null;
+    // 설명의 대략적인 합격률 문구 → 실제 숫자
+    const real = passText(pass);
+    if (real) {
+      detail = detail ?? [];
+      detail = detail.some((d) => d.label === '합격률') ? detail.map((d) => (d.label === '합격률' ? { ...d, text: real } : d)) : [...detail, { label: '합격률', text: real }];
+    }
+    return { ...st, pass, rate: passShort(pass) ?? st.rate ?? null, detail };
+  }
+
+  /**
+   * 합격률 (필기·실기 2회 호출). 취득자 통계와 같은 30일 주기로 DB 보관.
+   * 못 받으면(활용신청 대기 등) 저장값, 없으면 null.
+   */
+  private async passOf(c: Certificate): Promise<PassStats | null> {
+    const saved = (c.passYears as PassStats | null) ?? null;
+    if (!c.jmCd || (saved && c.statsAt && Date.now() - c.statsAt.getTime() < STATS_EVERY_MS)) return saved;
+    const key = await this.key();
+    if (!key) return saved;
+    const base = new Date().getFullYear() - 1;
+    const one = async (kind: 'Pi' | 'Si') => {
+      try {
+        return parsePassYears(await this.fetchText(qnetPassUrl(key, base, c.jmCd!, kind)), base);
+      } catch (e) {
+        this.log.warn(`합격률(${kind}) ${c.name}: ${errOf(e, '합격률')}`);
+        return null;
+      }
+    };
+    const [written, practical] = await Promise.all([one('Pi'), one('Si')]);
+    if (!written && !practical) return saved;
+    const pass: PassStats = { written: written ?? saved?.written ?? [], practical: practical ?? saved?.practical ?? [] };
+    await this.prisma.certificate.update({ where: { id: c.id }, data: { passYears: pass as unknown as Prisma.InputJsonValue } }).catch(() => undefined);
+    return pass;
+  }
+
+  /** 공개문제 목록 (국가기술 종목만, 「설명」에서 버튼 눌렀을 때) */
+  async questions(id: string): Promise<{ items: OpenQst[]; note: string | null; url: string }> {
+    const c = await this.get(id);
+    const url = `${QNET_HOME}/cst003.do?id=cst00309&gSite=Q&gId=`;
+    if (!c.jmCd) return { items: [], note: '공개문제는 Q-net 국가기술자격 종목만 제공', url };
+    const key = await this.key();
+    if (!key) return { items: [], note: 'Q-net 키 없음', url };
+    try {
+      const items = parseOpenQst(await this.fetchText(openQstUrl(key, c.jmCd)));
+      return { items, note: items.length ? null : '공개문제 없음', url };
+    } catch (e) {
+      return { items: [], note: apiNote(errOf(e, '공개문제'), '국가자격 공개문제 조회 서비스'), url };
+    }
+  }
+
+  /** 시험장소 (지사별). 7일 캐시 */
+  async places(brch: string): Promise<{ branch: string; items: ExamArea[]; note: string | null }> {
+    const branch = BRANCHES[brch];
+    if (!branch) throw new BadRequestException('모르는 지역 코드');
+    const key = await this.key();
+    if (!key) return { branch, items: [], note: 'Q-net 키 없음' };
+    try {
+      const items: ExamArea[] = [];
+      for (let page = 1; page <= 10; page++) {
+        const got = parseExamArea(await this.fetchText(examAreaUrl(key, brch, page), AREA_CACHE_MS));
+        items.push(...got);
+        if (got.length < EXAM_AREA_PAGE) break;
+      }
+      return { branch, items, note: items.length ? null : '시험장소 없음' };
+    } catch (e) {
+      return { branch, items: [], note: apiNote(errOf(e, '시험장소'), '국가자격시험 시험장소 정보') };
+    }
+  }
+
+  /** 지역 목록 */
+  branches(): { code: string; name: string }[] {
+    return Object.entries(BRANCHES).map(([code, name]) => ({ code, name }));
+  }
+
+  /** 민간자격 등록정보 (등록민간·국가공인민간, 「설명」 열 때) */
+  async registry(id: string): Promise<{ items: KReg[]; note: string | null }> {
+    const c = await this.get(id);
+    if (c.kind !== '등록민간' && c.kind !== '국가공인민간') return { items: [], note: '민간자격만 해당' };
+    const key = await this.key();
+    if (!key) return { items: [], note: 'Q-net 키 없음' };
+    // '네트워크관리사 2급' → '네트워크관리사'
+    const q = baseOfVariant(c.name).base.replace(/\s*(\d|준\d)\s*급$/, '').trim() || c.name;
+    try {
+      const all = parseKReg(await this.fetchText(kregUrl(key, q)));
+      const k = norm(q);
+      const items = all.filter((r) => norm(r.name) === k || norm(r.name).includes(k) || k.includes(norm(r.name))).slice(0, 5);
+      return { items, note: items.length ? null : '등록정보에서 못 찾음' };
+    } catch (e) {
+      return { items: [], note: apiNote(errOf(e, '민간자격등록정보'), '한국직업능력연구원_민간자격등록정보') };
+    }
   }
 
   private async statsOf(c: Certificate): Promise<StatsView> {
