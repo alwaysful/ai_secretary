@@ -15,7 +15,7 @@ const json = (v: unknown) => (v === null || v === undefined ? Prisma.DbNull : (v
  */
 export async function importLegacy(prisma: PrismaService, log: Logger): Promise<void> {
   if ((await prisma.certificate.count()) > 0) return;
-  const url = process.env.CERT_LEGACY_DATABASE_URL || process.env.DATABASE_URL;
+  const url = process.env.CERT_LEGACY_DATABASE_URL;
   if (!url) return;
   const db = new Client({ connectionString: url.replace(/\?schema=\w+$/, '') });
   try {

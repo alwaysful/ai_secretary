@@ -13,8 +13,8 @@ class HealthController {
 }
 
 @Module({
-  // 자기 .env 먼저, 없는 값은 AURA backend/.env (QNET_API_KEY, 옛 DB 주소)
-  imports: [ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env', '../../backend/.env'] }), PrismaModule, CertModule, UserModule],
+  // 설정은 이 폴더 .env 만 (AURA와 독립)
+  imports: [ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env'] }), PrismaModule, CertModule, UserModule],
   controllers: [HealthController],
 })
 export class AppModule {}

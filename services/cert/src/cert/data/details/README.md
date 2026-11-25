@@ -33,7 +33,7 @@
 
 ## 검사
 ```
-cd backend
+# 자격증 서비스 폴더(레포 루트)에서
 npm run check:details            # 형식·중복·모르는 id 검사
 npm run check:details -- --missing   # 설명 없는 자격증 목록
 ```

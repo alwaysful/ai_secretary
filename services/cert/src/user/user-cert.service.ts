@@ -90,7 +90,7 @@ const lastT = (e: ExamView) => [e.resultAt, e.examEnd, e.examStart, e.regEnd, e.
 const firstT = (e: ExamView) => [e.regStart, e.regEnd, e.examStart, e.examEnd, e.resultAt].map(time).find((t) => t !== null) ?? null;
 
 /**
- * 단독 실행 화면용 (AURA 쪽 backend/src/cert/cert.service.ts 와 같은 동작). 사용자 값은 이 서비스 DB.
+ * 단독 실행 화면용 (AURA 쪽 자격증 탭 서버 코드와 같은 동작). 사용자 값은 이 서비스 DB.
  * 별표·고친 값·직접 추가·직접 일정만 AURA DB에 둠.
  */
 @Injectable()

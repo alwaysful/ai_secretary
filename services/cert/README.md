@@ -33,4 +33,4 @@ AURA 비서는 이 서비스의 `/certs` API를 호출해 자기 자격증 탭�
 | GET | /health | 상태 |
 | * | /app/certs/... | 단독 화면용 (AURA 화면 API와 같은 모양, 사용자 값 포함) |
 
-첫 실행 때 DB가 비어 있으면 옛 AURA DB(`../../backend/.env` DATABASE_URL 또는 `CERT_LEGACY_DATABASE_URL`)에서 자격증 자료를 가져옴.
+`CERT_LEGACY_DATABASE_URL` 을 넣으면 첫 실행 때(DB 비어 있을 때) 옛 AURA DB에서 자격증 자료를 가져옴.
