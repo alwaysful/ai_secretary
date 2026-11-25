@@ -5,7 +5,8 @@ import { Prisma } from '@prisma/client';
 import type { CertExam, Certificate } from '@prisma/client';
 import { EnvVars } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
-import { aliasOf, baseOfVariant, findGrade, CATALOG, CERT_FIELDS, CERT_KINDS, defaultsOf, fieldOfName, fieldOfPrivate, fieldOfQnet, isTechGrade, joinTags, singleGradeIsPublic, SERIES_LABEL, seriesOfGrade } from './catalog';
+import { ACQ_SOURCE, acqRate } from './catalog-acq';
+import { ACQ_BY_ID, aliasOf, baseOfVariant, findGrade, CATALOG, CERT_FIELDS, CERT_KINDS, defaultsOf, fieldOfName, fieldOfPrivate, fieldOfQnet, isTechGrade, joinTags, singleGradeIsPublic, SERIES_LABEL, seriesOfGrade } from './catalog';
 import { scoreOf } from './score';
 import { CERT_DETAILS, CertDetail } from './details';
 import { CertStats, KPrivate, KPro, kproUrl, parseKPro, kprivateUrl, norm, parseCertStats, parseJmList, parseKPrivate, parseQnet, QNET_PAGE, QnetGb, QnetJm, qnetJmUrl, QnetPhase, qnetStatUrl, qnetUrl, seriesOf } from './qnet';
@@ -614,9 +615,11 @@ export class CertService implements OnModuleInit, OnModuleDestroy {
    * 취득자 통계 (「설명」 열 때). Q-net 종목만, 종목마다 1회 호출 → DB에 30일 보관.
    * 키 없거나 한도 넘으면 저장된 값(없으면 null) + 이유.
    */
-  async stats(id: string): Promise<{ stats: CertStats | null; at: Date | null; note: string | null }> {
+  async stats(id: string): Promise<{ stats: CertStats | null; at: Date | null; note: string | null; totalLabel?: string; rate?: string | null }> {
     const c = await this.get(id);
     const saved = c.statsYears ? { years: c.statsYears as CertStats['years'], total: c.statsTotal ?? 0 } : null;
+    const acq = ACQ_BY_ID.get(c.id);
+    if (!c.jmCd && acq && saved) return { stats: saved, at: null, note: ACQ_SOURCE, totalLabel: '5년 합계', rate: acqRate(acq) };
     if (!c.jmCd) return { stats: null, at: null, note: c.org === '한국산업인력공단' ? '새 자격증 확인(🔎) 한 번 돌면 연결됨' : '취득자 통계는 Q-net(한국산업인력공단) 시행 자격만 제공' };
     if (c.statsAt && Date.now() - c.statsAt.getTime() < STATS_EVERY_MS) return { stats: saved, at: c.statsAt, note: saved ? null : '통계 없음' };
     const key = await this.key();

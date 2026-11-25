@@ -76,7 +76,7 @@ export function CertAbout({ cert }: { cert: Cert }) {
   const s = st?.stats;
   const last = s?.years[s.years.length - 1];
   const detail = cert.detail ?? [];
-  const passRate = detail.find((d) => d.label === '합격률')?.text;
+  const passRate = detail.find((d) => d.label === '합격률')?.text ?? st?.rate ?? undefined;
   const links = detail.filter((d) => d.label === '링크').flatMap((d) => d.links ?? []);
   const chips: [string, string | null | undefined][] = [
     ['유용도', `${cert.score.toFixed(1)} / 10`],
@@ -113,7 +113,7 @@ export function CertAbout({ cert }: { cert: Cert }) {
                 <b>{fmt.format(last.count)}명</b>
               </div>
               <div>
-                <small>누적</small>
+                <small>{st?.totalLabel ?? '누적'}</small>
                 <b>{fmt.format(s.total)}명</b>
               </div>
               {passRate && (
