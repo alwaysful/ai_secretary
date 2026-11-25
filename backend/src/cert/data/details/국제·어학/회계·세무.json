@@ -1,0 +1,54 @@
+{
+  "mp-aicpa": {
+    "tpl": "국제",
+    "what": "미국 공인회계사 시험.",
+    "eligible": "주별 학점 요건 (회계·경영 학점).",
+    "exam": "FAR·AUD·REG + 선택 1과목 (각 4시간).",
+    "score": "과목마다 75점 이상.",
+    "valid": "면허 주별 상이",
+    "use": "외국계·회계법인·글로벌 재무.",
+    "sched": "상시 (과목별).",
+    "study": "과목 하나씩 집중. 학원·인강 활용.",
+    "orgName": "AICPA·NASBA",
+    "orgUrl": "https://nasba.org"
+  },
+  "mp-cma": {
+    "tpl": "국제",
+    "what": "미국 관리회계사 자격.",
+    "eligible": "학사 + 실무 2년 (인증 시).",
+    "exam": "Part 1·Part 2 (각 4시간, 객관식+에세이).",
+    "score": "500점 만점 중 360점 이상.",
+    "valid": "평생 (CPE 유지)",
+    "use": "기업 재무·관리회계.",
+    "sched": "정기 시행 기간.",
+    "study": "파트별 문제은행 반복.",
+    "orgName": "IMA",
+    "orgUrl": "https://www.imanet.org"
+  },
+  "ac-acca": {
+    "tpl": "국제",
+    "what": "영국 공인회계사 자격.",
+    "eligible": "학력별 면제 상이.",
+    "exam": "최대 13과목 (Applied Knowledge·Skills·Strategic).",
+    "score": "과목마다 50점 이상.",
+    "valid": "평생 (회원 유지)",
+    "use": "글로벌 회계·감사.",
+    "sched": "해마다 4회 (과목별).",
+    "study": "과목 순서대로. 학위로 면제 가능.",
+    "orgName": "ACCA",
+    "orgUrl": "https://www.accaglobal.com"
+  },
+  "ac-cia": {
+    "tpl": "국제",
+    "what": "국제 내부감사 자격.",
+    "eligible": "학사 + 감사 실무 (인증 시).",
+    "exam": "Part 1~3 (객관식).",
+    "score": "600점 이상 (250~750 척도).",
+    "valid": "평생 (CPE 유지)",
+    "use": "내부감사·리스크 관리.",
+    "sched": "상시.",
+    "study": "파트별 문제은행.",
+    "orgName": "IIA",
+    "orgUrl": "https://www.theiia.org"
+  }
+}

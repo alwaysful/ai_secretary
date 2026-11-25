@@ -175,4 +175,30 @@ const 공인민간: Template = {
   build: (p) => 국가전문.build({ eligible: '제한 없음. 누구나 응시.', ...p }),
 };
 
-export const TEMPLATES: Record<string, Template> = { 기술사, 기사, 산업기사, 기능장, 기능사, 서비스, 상공회의소, 국가전문, 공인민간 };
+/** 국제 자격·어학 시험. 점수제·등급제 공통 */
+const 국제: Template = {
+  required: ['what', 'exam', 'score', 'use', 'orgName'],
+  optional: ['sched', 'valid', 'eligible', 'study', 'orgUrl', 'books'],
+  build: (p) => {
+    const org = s(p, 'orgName');
+    const books = Array.isArray(p.books) ? (p.books as string[]) : null;
+    return [
+      { label: '무엇', text: s(p, 'what') },
+      { label: '시행', text: `${org}. ${p.sched ? s(p, 'sched') : '일정은 공식 사이트 확인.'}` },
+      { label: '응시자격', text: p.eligible ? s(p, 'eligible') : '제한 없음. 누구나 응시.' },
+      { label: '시험', text: s(p, 'exam') },
+      { label: '점수·합격', text: s(p, 'score') },
+      ...(p.valid ? [{ label: '유효기간', text: s(p, 'valid') }] : []),
+      { label: '쓰임', text: s(p, 'use') },
+      ...(books ? [{ label: '준비 도서', text: '한 권만 골라 끝까지.', items: books }] : []),
+      { label: '공부법', text: p.study ? s(p, 'study') : '공식 샘플·기출 유형 먼저. 실전 모의고사로 시간 배분 연습.' },
+      {
+        label: '링크',
+        text: `접수·일정은 ${org}.`,
+        ...(p.orgUrl ? { links: [{ label: org, url: s(p, 'orgUrl') }] } : {}),
+      },
+    ];
+  },
+};
+
+export const TEMPLATES: Record<string, Template> = { 기술사, 기사, 산업기사, 기능장, 기능사, 서비스, 상공회의소, 국가전문, 공인민간, 국제 };

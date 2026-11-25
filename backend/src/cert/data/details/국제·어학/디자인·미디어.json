@@ -1,0 +1,14 @@
+{
+  "mp-acp": {
+    "tpl": "국제",
+    "what": "어도비 툴 공인 자격.",
+    "exam": "실기형 (포토샵·일러스트·프리미어 등 과목별, 50분).",
+    "score": "1000점 중 700점 이상.",
+    "valid": "3년",
+    "use": "디자인 입문 스펙.",
+    "sched": "상시.",
+    "study": "과목별 실습.",
+    "orgName": "Adobe",
+    "orgUrl": "https://certifiedprofessional.adobe.com"
+  }
+}
