@@ -1,0 +1,152 @@
+// 자격증 서비스 자체 DB. 사용자 자료(별표·직접 수정·직접 추가·직접 일정)는 AURA DB에 있음
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CERT_DATABASE_URL")
+}
+
+/// 자격증 목록 (기본 목록 + 공공데이터에서 찾은 것). 고정 id(slug)
+model Certificate {
+  id           String     @id
+  /// 자격증 번호 (종류별 대역, 한 번 주면 안 바뀜). 국가기술 1xxxxx, 국가전문 2xxxxx, 국가공인민간 3xxxxx, 등록민간 4xxxxx~5xxxxx, 국제·어학 6xxxxx
+  no           Int?       @unique
+  name         String
+  field        String
+  /// 국가기술 | 국가전문 | 국가공인민간 | 등록민간 | 국제·어학
+  kind         String
+  grade        String?
+  org          String
+  url          String?
+  summary      String?
+  /// 일정 묶음 (qnet-기사 등)
+  series       String?
+  prep         String?
+  fee          String?
+  validity     String?
+  /// Q-net 종목코드
+  jmCd         String?
+  publicGrades String?
+  publicUntil  String?
+  /// 취득자 통계 [{year, count}] + 누적 (배치 30일 주기)
+  statsYears   Json?
+  statsTotal   Int?
+  statsAt      DateTime?
+  statsError   String?
+  /// 합격률 {written, practical: [{year, applied, passed}]}
+  passYears    Json?
+  /// 상세 설명. 원본 src/cert/data/details, 시작 때 덮어씀
+  detail       Json?
+  discoveredAt DateTime?
+  position     Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  exams        CertExam[]
+
+  @@index([field])
+  @@index([kind])
+  @@index([jmCd])
+}
+
+/// 시험 회차 (Q-net 자동 수집)
+model CertExam {
+  id          String       @id @default(uuid()) @db.Uuid
+  certId      String?
+  cert        Certificate? @relation(fields: [certId], references: [id], onDelete: Cascade)
+  series      String?
+  source      String       @default("qnet")
+  externalKey String?      @unique
+  title       String
+  phase       String?
+  regStart    DateTime?
+  regEnd      DateTime?
+  examStart   DateTime?
+  examEnd     DateTime?
+  resultAt    DateTime?
+  note        String?
+  createdAt   DateTime     @default(now())
+
+  @@index([certId])
+  @@index([series])
+}
+
+/// 설정 (화면에서 넣은 공공데이터 키)
+model CertConfig {
+  id      Int     @id @default(1)
+  qnetKey String?
+}
+
+/// 배치 작업 상태 (schedule, catalog, stats, questions, places, registry)
+model CertJob {
+  name      String    @id
+  lastAt    DateTime?
+  lastOkAt  DateTime?
+  lastError String?
+  lastCount Int       @default(0)
+}
+
+/// API별 호출 수 (KST 날짜/월). api = 서비스 이름
+model CertApiUsage {
+  api        String @id
+  day        String
+  dayCount   Int    @default(0)
+  month      String
+  monthCount Int    @default(0)
+}
+
+/// 공공데이터 API 응답 캐시 (주소 해시 → 응답)
+model CertApiCache {
+  key  String   @id
+  body String
+  at   DateTime @default(now())
+
+  @@index([at])
+}
+
+/// 국가자격 공개문제 (국가기술, 주 1회 전체 수집)
+model CertQuestion {
+  id     String  @id
+  jmCd   String
+  jmNm   String
+  title  String
+  series String
+  date   String?
+
+  @@index([jmCd])
+}
+
+/// 국가자격시험 시험장소 (지사별, 주 1회)
+model CertPlace {
+  id      Int    @id @default(autoincrement())
+  brchCd  String
+  branch  String
+  name    String
+  type    String
+  address String
+  tel     String
+  guide   String
+
+  @@index([brchCd])
+}
+
+/// 한국직업능력연구원 민간자격 등록정보 (반기 갱신 자료, 30일마다 전체 수집)
+model CertRegistry {
+  /// 등록번호 (없으면 이름 키)
+  id       String  @id
+  name     String
+  /// 이름 비교 키 (한글·영숫자만)
+  normName String
+  regDate  String?
+  status   String
+  ministry String
+  org      String
+  url      String?
+  summary  String
+  /// [{name, duty, isPublic}]
+  grades   Json
+  isPublic Boolean @default(false)
+
+  @@index([normName])
+}

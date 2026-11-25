@@ -34,11 +34,11 @@ export function CertKeyBox(props: { onSynced?: () => void }) {
   return (
     <div className="cert-key">
       <p className="muted">
-        시험 일정 자동 수집: 공공데이터포털{' '}
-        <a href="https://www.data.go.kr/tcs/dss/selectDataSetList.do?keyword=%EA%B5%AD%EA%B0%80%EC%9E%90%EA%B2%A9%20%EC%8B%9C%ED%97%98%EC%9D%BC%EC%A0%95" target="_blank" rel="noreferrer">
-          한국산업인력공단_국가자격 시험일정 조회 ↗
+        공공데이터포털{' '}
+        <a href="https://www.data.go.kr/tcs/dss/selectDataSetList.do?keyword=%ED%95%9C%EA%B5%AD%EC%82%B0%EC%97%85%EC%9D%B8%EB%A0%A5%EA%B3%B5%EB%8B%A8" target="_blank" rel="noreferrer">
+          한국산업인력공단·한국직업능력연구원 API ↗
         </a>{' '}
-        활용신청 → 일반 인증키 붙여넣기. Q-net 회차 일정 하루 1번 수집. 자격증 목록은 DB에 저장해 두고, 새 종목만 주 1번 확인(같은 키로 「국가자격 종목 목록 정보」·「공인민간자격등록현황」도 활용신청, 국가공인 민간자격 전체 자동 추가).
+        활용신청 → 일반 인증키 붙여넣기. 자격증 서비스가 정해진 주기로만 수집해 DB에 저장 (일정 하루 1번, 새 자격증·공개문제·시험장소 주 1번, 취득자·합격률 매시간 조금씩, 민간자격 등록정보 30일). 화면은 저장된 값만 읽음.
       </p>
       <div className="cert-key-row">
         <input
@@ -48,8 +48,8 @@ export function CertKeyBox(props: { onSynced?: () => void }) {
           onChange={(e) => setKey(e.target.value)}
           autoComplete="off"
         />
-        <button disabled={busy || !key.trim()} onClick={() => void run(() => certApi.setKey(key.trim()).then(() => certApi.sync()).then((c) => certApi.discover().catch(() => c)), () => { setKey(''); props.onSynced?.(); })}>
-          저장·수집
+        <button disabled={busy || !key.trim()} onClick={() => void run(() => certApi.setKey(key.trim()), () => { setKey(''); props.onSynced?.(); })}>
+          저장
         </button>
         {cfg?.key && (
           <button className="ghost" disabled={busy} onClick={() => void run(() => certApi.setKey(null))}>
@@ -62,23 +62,26 @@ export function CertKeyBox(props: { onSynced?: () => void }) {
         <button className="ghost" disabled={busy || !hasKey} onClick={() => void run(() => certApi.discover(), props.onSynced)} title="Q-net 국가자격 종목 목록과 비교해 없는 것만 추가">
           🔎 새 자격증 확인
         </button>
+        <button className="ghost" disabled={busy || !hasKey} onClick={() => void run(() => certApi.collect(), props.onSynced)} title="주기 기다리지 않고 전부 수집 (시간 걸림)">
+          ⏬ 전부 수집
+        </button>
       </div>
-      {cfg?.lastSyncAt && (
-        <small className="muted">
-          마지막 수집 {when.format(new Date(cfg.lastSyncAt))} · {cfg.lastError ? '실패' : `${cfg.lastCount}건`}
-        </small>
-      )}
-      {cfg?.lastCatalogAt && (
-        <small className="muted">
-          새 자격증 확인 {when.format(new Date(cfg.lastCatalogAt))} · {`${cfg.lastCatalogNew}개 추가${cfg.lastCatalogError ? ' · 일부 실패' : ''}`} (주 1회 자동)
-        </small>
+      {cfg?.jobs && hasKey && (
+        <ul className="cert-jobs">
+          {cfg.jobs.map((j) => (
+            <li key={j.name} className={j.lastError ? 'error' : 'muted'}>
+              {j.label}: {j.lastAt ? `${when.format(new Date(j.lastAt))} ${j.lastError ? `실패 (${j.lastError})` : `${j.lastCount}건`}` : '대기'}
+              {j.nextAt && ` · 다음 ${when.format(new Date(j.nextAt))}`}
+            </li>
+          ))}
+        </ul>
       )}
       {cfg && hasKey && (
         <small className="muted">
-          API 호출 오늘 {cfg.apiDayCount}/{cfg.apiDayLimit} · 이번 달 {cfg.apiMonthCount}/{cfg.apiMonthLimit}회. 목록·일정은 DB에 저장해 두고, 일정은 하루 1번·새 자격증은 주 1번만 호출. 10분 안 재수집은 저장된 값 사용.
+          API 호출 오늘 최대 {cfg.apiDayCount}/{cfg.apiDayLimit}(API별) · 이번 달 전체 {cfg.apiMonthCount}회.
         </small>
       )}
-      {(error || cfg?.lastError || cfg?.lastCatalogError) && <p className="error">{error || cfg?.lastError || cfg?.lastCatalogError}</p>}
+      {error && <p className="error">{error}</p>}
     </div>
   );
 }

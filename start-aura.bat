@@ -51,6 +51,12 @@ if errorlevel 1 (
   start "" /min ollama serve
 )
 
+rem 자격증 서비스는 별도 앱 (services\cert, 자체 DB·실행파일). 안 떠 있으면 따로 창으로 실행. 끄려면 set AURA_NO_CERT=1
+if not defined AURA_NO_CERT if exist services\cert\start-cert.bat (
+  curl -s -o nul http://127.0.0.1:3100/health
+  if errorlevel 1 start "AURA 자격증 서비스" /min cmd /c "services\cert\start-cert.bat"
+)
+
 start "" /min cmd /c "timeout /t 10 /nobreak >nul & start http://127.0.0.1:5173"
 call npm run dev
 rem 관리자 재시작이면 이 창은 닫음 (새 창이 이어서 실행)

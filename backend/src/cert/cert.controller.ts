@@ -156,6 +156,12 @@ export class CertController {
     return this.certs.sync();
   }
 
+  /** 지금 전부 수집 (취득자·공개문제·시험장소·등록정보 포함) */
+  @Post('collect')
+  collect() {
+    return this.certs.collect();
+  }
+
   @Post()
   create(@Body() b: CertUpdateDto) {
     if (!b.name?.trim()) throw new BadRequestException('이름 필요');
@@ -179,22 +185,10 @@ export class CertController {
     return this.certs.remove(id);
   }
 
-  /** 취득자 통계 (「설명」 열 때, 30일 캐시) */
+  /** 「설명」 자료: 설명·취득자·합격률·공개문제·민간 등록정보 (자격증 서비스 DB 값) */
   @Get(':id/stats')
   stats(@Param('id') id: string) {
     return this.certs.stats(id);
-  }
-
-  /** 공개문제 목록 */
-  @Get(':id/questions')
-  questions(@Param('id') id: string) {
-    return this.certs.questions(id);
-  }
-
-  /** 민간자격 등록정보 */
-  @Get(':id/registry')
-  registry(@Param('id') id: string) {
-    return this.certs.registry(id);
   }
 
   @Post(':id/exams')

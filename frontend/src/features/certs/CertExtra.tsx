@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Cert, CertStats, ExamArea, KReg, OpenQst, PassYear, certApi } from './certApi';
+import { CertStats, ExamArea, PassYear, certApi } from './certApi';
 
 const fmt = new Intl.NumberFormat('ko-KR');
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -48,31 +48,15 @@ export function PassTable({ pass }: { pass: NonNullable<CertStats['pass']> }) {
   );
 }
 
-/** 공개문제 (버튼 눌러야 호출 → API 한도 절약) */
-export function OpenQuestions({ cert }: { cert: Cert }) {
-  const [res, setRes] = useState<{ items: OpenQst[]; note: string | null; url: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-  const load = () => {
-    setBusy(true);
-    certApi
-      .questions(cert.id)
-      .then(setRes, (e: unknown) => setErr(errMsg(e)))
-      .finally(() => setBusy(false));
-  };
+/** 공개문제 (자격증 서비스가 주 1회 수집한 목록) */
+export function OpenQuestions({ data }: { data: NonNullable<CertStats['questions']> }) {
   return (
     <section className="ca-card">
       <h4>📄 공개문제</h4>
-      {!res && !err && (
-        <button type="button" className="ca-link" onClick={load} disabled={busy}>
-          {busy ? '불러오는 중…' : '목록 보기'}
-        </button>
-      )}
-      {err && <p className="muted">{err}</p>}
-      {res?.note && <p className="muted">{res.note}</p>}
-      {res && res.items.length > 0 && (
+      {data.note && <p className="muted">{data.note}</p>}
+      {data.items.length > 0 && (
         <ul className="ca-list">
-          {res.items.slice(0, 10).map((q) => (
+          {data.items.slice(0, 10).map((q) => (
             <li key={q.id || q.title}>
               {q.title}
               {q.date && <small className="muted"> · {q.date}</small>}
@@ -80,11 +64,9 @@ export function OpenQuestions({ cert }: { cert: Cert }) {
           ))}
         </ul>
       )}
-      {res && (
-        <a href={res.url} target="_blank" rel="noreferrer" className="ca-link">
-          Q-net 공개문제 ↗
-        </a>
-      )}
+      <a href={data.url} target="_blank" rel="noreferrer" className="ca-link">
+        Q-net 공개문제 ↗
+      </a>
     </section>
   );
 }
@@ -143,20 +125,14 @@ export function ExamPlaces() {
   );
 }
 
-/** 민간자격 등록정보 (등록민간·국가공인민간) */
-export function PrivateRegistry({ cert }: { cert: Cert }) {
-  const [res, setRes] = useState<{ items: KReg[]; note: string | null } | null>(null);
-  const [err, setErr] = useState('');
-  useEffect(() => {
-    certApi.registry(cert.id).then(setRes, (e: unknown) => setErr(errMsg(e)));
-  }, [cert.id]);
+/** 민간자격 등록정보 (등록민간·국가공인민간, 30일마다 전체 수집) */
+export function PrivateRegistry({ data }: { data: NonNullable<CertStats['registry']> }) {
+  const res = data;
   return (
     <section className="ca-card">
       <h4>🏷️ 민간자격 등록정보</h4>
-      {!res && !err && <p className="muted">불러오는 중…</p>}
-      {err && <p className="muted">{err}</p>}
-      {res?.note && <p className="muted">{res.note}</p>}
-      {res?.items.map((r) => (
+      {res.note && <p className="muted">{res.note}</p>}
+      {res.items.map((r) => (
         <div key={r.regNo || r.name} className="ca-item">
           <span className="ca-label">
             {r.name} {r.status && <small className="muted">({r.status})</small>}

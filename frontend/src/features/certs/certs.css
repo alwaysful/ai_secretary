@@ -101,3 +101,4 @@
 .ca-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
 .ca-row select, .ca-row input { min-width: 0; flex: 1; }
 button.ca-link { background: none; cursor: pointer; }
+.cert-jobs { margin: 4px 0; padding-left: 18px; font-size: 12px; display: flex; flex-direction: column; gap: 2px; }
