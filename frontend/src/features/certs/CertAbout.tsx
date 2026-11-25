@@ -80,7 +80,6 @@ export function CertAbout({ cert }: { cert: Cert }) {
   // 실제 통계(짧은 문구) 우선, 없으면 설명 문구
   const passRate = st?.rate ?? detail.find((d) => d.label === '합격률')?.text ?? undefined;
   const qnet = cert.org === '한국산업인력공단' || cert.kind === '국가기술';
-  const priv = cert.kind === '등록민간' || cert.kind === '국가공인민간';
   const links = detail.filter((d) => d.label === '링크').flatMap((d) => d.links ?? []);
   const chips: [string, string | null | undefined][] = [
     ['유용도', `${cert.score.toFixed(1)} / 10`],
@@ -159,10 +158,10 @@ export function CertAbout({ cert }: { cert: Cert }) {
         ))}
       </div>
 
-      {(qnet || priv) && (
+      {(qnet || st?.questions || st?.registry) && (
         <div className="ca-grid">
-          {priv && <PrivateRegistry cert={cert} />}
-          {qnet && <OpenQuestions cert={cert} />}
+          {st?.registry && <PrivateRegistry data={st.registry} />}
+          {st?.questions && <OpenQuestions data={st.questions} />}
           {qnet && <ExamPlaces />}
         </div>
       )}

@@ -358,8 +358,16 @@ export function openQstUrl(key: string, jmCd: string, rows = 20): string {
   return `${OPEN_QST_URL}?serviceKey=${enc(key)}&numOfRows=${rows}&pageNo=1&dataFormat=json&qualgbCd=T&jmCd=${encodeURIComponent(jmCd)}`;
 }
 
+/** 전체 수집용: 100개씩 페이지 */
+export const OPEN_QST_PAGE = 100;
+
+export function openQstPageUrl(key: string, page: number): string {
+  return `${OPEN_QST_URL}?serviceKey=${enc(key)}&numOfRows=${OPEN_QST_PAGE}&pageNo=${page}&dataFormat=json&qualgbCd=T`;
+}
+
 export interface OpenQst {
   id: string;
+  jmCd: string;
   title: string;
   /** YYYY-MM-DD */
   date: string | null;
@@ -377,6 +385,7 @@ export function parseOpenQst(text: string): OpenQst[] {
   return parseItems(text)
     .map((o) => ({
       id: String(pick(o, 'artlSeq') ?? '').trim(),
+      jmCd: String(pick(o, 'jmCd') ?? '').trim(),
       title: String(pick(o, 'title') ?? '').trim(),
       date: dt(pick(o, 'modDttm')) ?? dt(pick(o, 'regDttm')),
       series: String(pick(o, 'seriesNm') ?? '').trim(),
@@ -429,6 +438,13 @@ export const KREG_URL = 'https://api.odcloud.kr/api/15075600/v1/uddi:6f36844c-a6
 
 export function kregUrl(key: string, name: string): string {
   return `${KREG_URL}?page=1&perPage=20&returnType=JSON&serviceKey=${enc(key)}&${encodeURIComponent('cond[자격명::LIKE]')}=${encodeURIComponent(name)}`;
+}
+
+/** 전체 수집용: 1,000줄씩 페이지 */
+export const KREG_PAGE = 1000;
+
+export function kregPageUrl(key: string, page: number): string {
+  return `${KREG_URL}?page=${page}&perPage=${KREG_PAGE}&returnType=JSON&serviceKey=${enc(key)}`;
 }
 
 /** 민간자격 등록 1건 (등급별 줄 묶음) */

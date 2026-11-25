@@ -268,105 +268,48 @@ model ApiPrice {
   updatedAt DateTime @updatedAt
 }
 
-/// 자격증 목록. 기본 목록은 고정 id(slug), 사용자가 추가한 건 custom=true
-model Certificate {
-  id           String     @id
-  /// 자격증 번호 (종류별 대역, 한 번 주면 안 바뀜·재사용 X). 국가기술 1xxxxx, 국가전문 2xxxxx, 국가공인민간 3xxxxx, 등록민간 4xxxxx~5xxxxx, 국제·어학 6xxxxx
-  no           Int?       @unique
-  name         String
-  /// 분야 (정보통신/IT 등)
-  field        String
-  /// 국가기술 | 국가전문 | 국가공인민간 | 등록민간 | 국제·어학
-  kind         String
-  /// 등급 (기사, 1급 등)
-  grade        String?
-  /// 시행기관
-  org          String
-  url          String?
-  summary      String?
-  /// 일정 묶음 (qnet-기사 등). 같은 묶음은 같은 회차 일정 공유
-  series       String?
-  /// 평균 준비기간 (참고값)
-  prep         String?
-  /// 응시료 (참고값)
-  fee          String?
-  /// 사용자가 고친 준비기간·응시료 (기본값보다 우선)
+/// 자격증 사용자 값 (별표·고친 준비기간/응시료/유효기간/유용도). 자격증 정보는 자격증 서비스(services/cert)
+model CertPref {
+  /// 자격증 서비스 id 또는 CertCustom id
+  certId       String   @id
+  starred      Boolean  @default(false)
   userPrep     String?
   userFee      String?
-  /// 유효기간 (참고값)
-  validity     String?
   userValidity String?
-  /// 사용자가 매긴 유용도 0~10 (없으면 참고값 계산)
   userScore    Float?
-  /// Q-net 종목코드 (취득자 통계 조회용, 종목 목록 확인 때 이름으로 채움)
-  jmCd         String?
-  /// 국가공인 받은 등급 (공인민간자격등록현황 기준, 일부 등급만 공인이면 그 등급만). '등급 없음' = 단일 등급 공인
-  publicGrades String?
-  /// 공인 유효기간 만료일
-  publicUntil  String?
-  /// 취득자 통계: 연도별 [{year, count}] + 누적, 받은 시각 (30일마다 갱신)
-  statsYears   Json?
-  statsTotal   Int?
-  statsAt      DateTime?
-  /// 합격률: {written, practical: [{year, applied, passed}]} (산업인력 국가기술자격 통계, statsAt 주기로 갱신)
-  passYears    Json?
-  /// 상세 설명 [{label, text, items?, links?}]. 원본은 src/cert/data/details 폴더 JSON, 시작 때 덮어씀. 목록 조회에선 빼고 읽음
-  detail       Json?
-  /// Q-net 종목 목록에서 새로 찾아 추가한 시각
-  discoveredAt DateTime?
-  starred      Boolean    @default(false)
-  custom       Boolean    @default(false)
-  position     Int        @default(0)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  exams        CertExam[]
-
-  @@index([field])
-  @@index([kind])
+  updatedAt    DateTime @updatedAt
 }
 
-/// 시험 회차 1개 (필기·실기 따로). Q-net 자동 수집 또는 직접 입력
-model CertExam {
-  id          String       @id @default(uuid()) @db.Uuid
-  certId      String?
-  cert        Certificate? @relation(fields: [certId], references: [id], onDelete: Cascade)
-  /// certId 없을 때 묶음 전체 적용
-  series      String?
-  /// qnet | manual
-  source      String       @default("manual")
-  /// 자동 수집 중복 방지 키
-  externalKey String?      @unique
-  title       String
-  /// 필기 | 실기 | null
-  phase       String?
-  regStart    DateTime?
-  regEnd      DateTime?
-  examStart   DateTime?
-  examEnd     DateTime?
-  resultAt    DateTime?
-  note        String?
-  createdAt   DateTime     @default(now())
+/// 사용자가 직접 추가한 자격증
+model CertCustom {
+  id        String   @id
+  no        Int?
+  name      String
+  field     String
+  kind      String
+  grade     String?
+  org       String
+  url       String?
+  summary   String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+/// 사용자가 직접 넣은 시험 일정
+model CertUserExam {
+  id        String    @id @default(uuid()) @db.Uuid
+  certId    String
+  title     String
+  phase     String?
+  regStart  DateTime?
+  regEnd    DateTime?
+  examStart DateTime?
+  examEnd   DateTime?
+  resultAt  DateTime?
+  note      String?
+  createdAt DateTime  @default(now())
 
   @@index([certId])
-  @@index([series])
-}
-
-/// 자격증 일정 연동 설정 (공공데이터포털 Q-net API 키)
-model CertConfig {
-  id               Int       @id @default(1)
-  qnetKey          String?
-  lastSyncAt       DateTime?
-  lastError        String?
-  lastCount        Int       @default(0)
-  /// 새 자격증 확인 (Q-net 종목 목록, 주 1회)
-  lastCatalogAt    DateTime?
-  lastCatalogNew   Int       @default(0)
-  lastCatalogError String?
-  /// 공공데이터 API 호출 수 (일·월 한도 관리). 날짜는 KST YYYY-MM-DD / YYYY-MM
-  apiDay           String?
-  apiDayCount      Int       @default(0)
-  apiMonth         String?
-  apiMonthCount    Int       @default(0)
 }
 
 /// 단어장 (사용자가 JSON 업로드). 간격 반복 복습 + 회독 + 퀴즈
@@ -441,15 +384,5 @@ model VocabReview {
   correct Boolean
 
   @@index([deckId, at])
-  @@index([at])
-}
-
-/// 공공데이터 API 응답 캐시 (주소 해시 → 응답). 호출 한도 절약
-model CertApiCache {
-  /// 요청 주소 sha256
-  key  String   @id
-  body String
-  at   DateTime @default(now())
-
   @@index([at])
 }

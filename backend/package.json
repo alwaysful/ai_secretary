@@ -10,7 +10,6 @@
     "postinstall": "prisma generate",
     "prebuild": "prisma generate",
     "build": "nest build",
-    "check:details": "ts-node -T scripts/check-details.ts",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",

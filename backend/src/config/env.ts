@@ -63,9 +63,13 @@ export class EnvVars {
   @IsString()
   TIMEZONE: string = 'Asia/Seoul';
 
-  /** 자격증 탭: 공공데이터포털 Q-net 시험일정 API 키. 화면에서 넣은 키가 우선 */
+  /** 자격증 탭: 공공데이터포털 키. 자격증 서비스(services/cert)가 이 값도 읽음. 화면에서 넣은 키가 우선 */
   @Transform(emptyToUndefined) @IsOptional() @IsString()
   QNET_API_KEY?: string;
+
+  /** 자격증 서비스 주소 (services/cert). 기본 http://127.0.0.1:3100 */
+  @Transform(emptyToUndefined) @IsOptional() @IsString()
+  CERT_API_URL?: string;
 
   /** Outlook(Microsoft Graph) 연동. 비우면 메일 기능 비활성. */
   @Transform(emptyToUndefined) @IsOptional() @IsString()
