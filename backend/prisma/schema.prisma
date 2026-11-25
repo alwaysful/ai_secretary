@@ -308,7 +308,7 @@ model Certificate {
   statsYears   Json?
   statsTotal   Int?
   statsAt      DateTime?
-  /// 상세 설명 [{label, text, items?, links?}]. 원본은 src/cert/details*.ts, 시작 때 덮어씀. 목록 조회에선 빼고 읽음
+  /// 상세 설명 [{label, text, items?, links?}]. 원본은 src/cert/data/details 폴더 JSON, 시작 때 덮어씀. 목록 조회에선 빼고 읽음
   detail       Json?
   /// Q-net 종목 목록에서 새로 찾아 추가한 시각
   discoveredAt DateTime?
