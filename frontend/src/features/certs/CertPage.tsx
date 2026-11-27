@@ -501,7 +501,7 @@ export function CertPage(props: { onBack: () => void }) {
                     </td>
                   </tr>
                   {about === c.id && (
-                    <tr className="ca-row">
+                    <tr className="ca-tr">
                       <td colSpan={8}>
                         <CertAbout cert={c} />
                       </td>

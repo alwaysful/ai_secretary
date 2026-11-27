@@ -33,7 +33,7 @@
   .cert-table td.nt-main { display: flex; flex-direction: column; gap: 5px; }
   .cert-table .nt-period:not(:has(.muted:only-child))::before { content: attr(data-label) ' '; color: var(--muted); font-size: 12px; }
   .cert-table .nt-period:has(> .muted:only-child) { display: none; }
-  .cert-table tr.ca-row { border-top: 0; padding-top: 0; }
+  .cert-table tr.ca-tr { border-top: 0; padding-top: 0; }
   .cert-score::before { content: attr(data-label) ' '; color: var(--muted); font-size: 12px; }
   .cert-info { max-width: none; }
   .cert-info::before { content: attr(data-label) ' '; color: var(--muted); font-size: 12px; }
@@ -91,8 +91,8 @@
   .ca-grid { grid-template-columns: 1fr; }
   .ca-bars { max-width: none; }
 }
-.cert-table tr.ca-row td { border-top: 0; padding-top: 0; }
-.cert-table tr.ca-row .ca { margin-top: 0; }
+.cert-table tr.ca-tr td { border-top: 0; padding-top: 0; }
+.cert-table tr.ca-tr .ca { margin-top: 0; }
 .cert-public { color: #2e9d5b; font-weight: 600; }
 .ca-pass { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
 .ca-pass th, .ca-pass td { padding: 4px 6px; text-align: center; border-top: 1px solid var(--line); }
@@ -102,3 +102,12 @@
 .ca-row select, .ca-row input { min-width: 0; flex: 1; }
 button.ca-link { background: none; cursor: pointer; }
 .cert-jobs { margin: 4px 0; padding-left: 18px; font-size: 12px; display: flex; flex-direction: column; gap: 2px; }
+/* 설명 펼침: 넓은 화면은 왼쪽(요약·취득자) | 오른쪽(설명·고용24) */
+@media (min-width: 1000px) {
+  .ca { display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); align-items: start; gap: 12px 16px; }
+  .ca-side, .ca-main { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .ca-side { position: sticky; top: 8px; }
+}
+@media (max-width: 999px) {
+  .ca-side, .ca-main { display: contents; }
+}
