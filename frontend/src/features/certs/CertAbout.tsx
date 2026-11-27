@@ -93,6 +93,7 @@ export function CertAbout({ cert }: { cert: Cert }) {
 
   return (
     <div className="ca">
+      <div className="ca-side">
       <div className="ca-chips">
         {chips
           .filter(([, v]) => v)
@@ -133,7 +134,9 @@ export function CertAbout({ cert }: { cert: Cert }) {
         {st?.pass && <PassTable pass={st.pass} />}
         {st?.note && s && <small className="muted">{st.note}</small>}
       </section>
+      </div>
 
+      <div className="ca-main">
       {detail.length === 0 && <p className="muted">아직 설명 없음. 공식 사이트 참고.</p>}
       <div className="ca-grid">
         {group(detail).map((g) => (
@@ -176,6 +179,7 @@ export function CertAbout({ cert }: { cert: Cert }) {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }
